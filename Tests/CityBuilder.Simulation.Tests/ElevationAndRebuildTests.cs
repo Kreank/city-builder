@@ -66,7 +66,8 @@ namespace CityBuilder.Simulation.Tests
             for (int i = 0; i < 10; i++) world.Step();
             Assert.Equal(0f, world.Environment.Noise.Sample(new Vector2(0, -120)), 3); // nur Tunnel in der Nähe
 
-            // Verkehr fährt durch den Tunnel
+            // Verkehr fährt durch den Tunnel (Sackgassen als Außenanschluss, seit G2 nötig – s. TrafficTests.CrossroadWorld)
+            world.Traffic.DeadEndsAreExternal = true;
             for (int i = 0; i < 3000; i++) world.Step();
             var st = world.Traffic.Stats;
             Assert.True(st.Arrived > st.Spawned * 0.6f, $"{st.Arrived}/{st.Spawned}");

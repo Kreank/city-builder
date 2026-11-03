@@ -24,6 +24,9 @@ namespace CityBuilder.Simulation.Tests
         static SimulationWorld CrossroadWorld()
         {
             var world = SimulationWorld.CreateDefault();
+            // Seit G2 entstehen Fahrten nur noch an Außenanschlüssen (Kartenrand) bzw. aus Gebäuden.
+            // Diese Tests prüfen das Fahrverhalten, deshalb gelten die Sackgassen hier als Außenanschluss.
+            world.Traffic.DeadEndsAreExternal = true;
             Road(world.Roads, new Vector2(-300, 0), new Vector2(300, 0));
             Road(world.Roads, new Vector2(0, -300), new Vector2(0, 300));
             world.Traffic.Lanes.Update();
@@ -215,6 +218,7 @@ namespace CityBuilder.Simulation.Tests
         public void Traffic_FlowsOverCloverleaf()
         {
             var world = SimulationWorld.CreateDefault();
+            world.Traffic.DeadEndsAreExternal = true; // offene Enden der Vorlage = Außenanschlüsse (s. CrossroadWorld)
             RoadTemplates.Build(world.Roads, RoadTemplates.Plan(world.Roads, RoadTemplateKind.Cloverleaf, Vector2.Zero, 0f));
             Run(world, 6000);
             var s = world.Traffic.Stats;

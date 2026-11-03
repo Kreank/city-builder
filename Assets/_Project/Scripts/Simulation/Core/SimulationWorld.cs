@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Traffic;
@@ -101,6 +102,10 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Traffic);
             world.City = new CitySystem(world.Roads, world.Terrain, world.Min, world.Settings.SizeMeters, seed);
             world.AddSystem(world.City);
+            // G2 Bürger (nach Verkehr und Stadt: Ankünfte und neue Gebäude sind im selben Tick schon bekannt)
+            world.Citizens = new CitizenSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
+            world.AddSystem(world.Citizens);
+
             // --- G3 Strom & Wasser (nach Lärm und Stadt: stempelt nach dem Neuzeichnen des Lärms, liest fertige Gebäude)
             world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Utilities);
@@ -110,6 +115,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Zonen und Gebäude. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public CitySystem City { get; private set; }
+
+        /// <summary>Bürger, Haushalte, Jobs, Pendeln (G2). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public CitizenSystem Citizens { get; private set; }
 
         /// <summary>Strom &amp; Wasser (G3). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public UtilitySystem Utilities { get; private set; }

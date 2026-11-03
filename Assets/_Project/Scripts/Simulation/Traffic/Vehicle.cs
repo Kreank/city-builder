@@ -28,6 +28,14 @@ namespace CityBuilder.Simulation.Traffic
         public RoadNode Destination { get; internal set; }
         internal LaneConnection Planned;
 
+        /// <summary>Fahrt eines Bürgers (0 = Hintergrund-/Durchgangsverkehr). Wird bei <see cref="TrafficSystem.TripEnded"/> zurückgemeldet.</summary>
+        public int TripId { get; internal set; }
+        /// <summary>Ziel mitten auf einem Segment (Gebäudezufahrt); -1 = Ziel ist <see cref="Destination"/>.</summary>
+        public int DestinationSegmentId { get; internal set; } = -1;
+        /// <summary>Segment-Parameter t der Zufahrt.</summary>
+        public float DestinationT { get; internal set; }
+        public bool HasSegmentDestination => DestinationSegmentId >= 0;
+
         /// <summary>Wartezeit am Stück (s) – für Deadlock-Auflösung und Umleitung.</summary>
         public float WaitTime { get; internal set; }
         internal float StopLineWait;

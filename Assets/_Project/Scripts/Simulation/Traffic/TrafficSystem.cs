@@ -16,10 +16,17 @@ namespace CityBuilder.Simulation.Traffic
         public int Despawned;
         public float AverageSpeedKmh;
         public int Waiting;
+        /// <summary>Davon Fahrten von Bürgern (aus Gebäuden bzw. Pendler).</summary>
+        public int CitizenVehicles;
+        public int CitizenTripsStarted;
+        public int CitizenTripsArrived;
+        /// <summary>Bürgerfahrten, die abgebrochen wurden (Stau, Straße weg) – der Bürger gilt trotzdem als angekommen.</summary>
+        public int CitizenTripsFailed;
     }
 
     /// <summary>
-    /// Verkehrssimulation: erzeugt Fahrten zwischen Verkehrsquellen, bewegt Fahrzeuge spurgenau
+    /// Verkehrssimulation: Bürgerfahrten zwischen Gebäudezufahrten/Außenanschlüssen (<see cref="RequestTrip"/>)
+    /// und Durchgangsverkehr zwischen Außenanschlüssen am Kartenrand; bewegt Fahrzeuge spurgenau
     /// (Fahrzeugfolgemodell IDM), wählt Spuren/Spurwechsel, beachtet Vorfahrt, Schilder und Ampeln.
     /// Verkehrszeit ist von der Kalenderzeit entkoppelt: 1 Tick = <see cref="Dt"/> Sekunden Fahrzeit.
     /// </summary>
@@ -45,8 +52,27 @@ namespace CityBuilder.Simulation.Traffic
         public readonly List<Vehicle> Vehicles = new List<Vehicle>();
         readonly HashSet<Vehicle> removed = new HashSet<Vehicle>();
 
-        /// <summary>Verkehrsaufkommen (0 = aus, 1 = normal, 3 = sehr viel).</summary>
+        /// <summary>
+        /// Verkehrsaufkommen (0 = aus, 1 = normal, 3 = sehr viel): skaliert den Durchgangsverkehr und
+        /// (über das Bürgersystem) den Anteil der Bürgerfahrten, die als sichtbares Auto fahren.
+        /// </summary>
         public float Demand = 1f;
+        /// <summary>Durchgangsverkehr je Außenanschluss und Tick (bei Demand 1).</summary>
+        public float ThroughTrafficRate = 0.02f;
+
+        /// <summary>Bürgerfahrt beendet: (Fahrzeug, angekommen?). Wird während des Ticks ausgelöst – Empfänger dürfen keine Fahrten starten.</summary>
+        public event Action<Vehicle, bool> TripEnded;
+
+        bool deadEndsAreExternal;
+        /// <summary>
+        /// Sackgassen zählen als Außenanschluss (Testszenarien/Sandkasten ohne Kartenrand).
+        /// Normal sind nur Straßenenden am Kartenrand Außenanschlüsse.
+        /// </summary>
+        public bool DeadEndsAreExternal
+        {
+            get => deadEndsAreExternal;
+            set { deadEndsAreExternal = value; endpointsVersion = -1; }
+        }
         public int MaxVehicles = 1500;
         /// <summary>Simulierte Verkehrszeit in Sekunden.</summary>
         public float Time { get; private set; }
@@ -87,6 +113,25 @@ namespace CityBuilder.Simulation.Traffic
                     foreach (var v in c.Vehicles.ToList()) Remove(v, despawned: false);
                 foreach (var v in Vehicles)
                     if (v.Planned != null && set.Contains(v.Planned)) v.Planned = null;
+            };
+            // Zielsegment zerteilt/umgebaut → Ziel auf das passende Teilstück umhängen
+            network.SegmentReplaced += (old, parts) =>
+            {
+                foreach (var v in Vehicles)
+                {
+                    if (v.DestinationSegmentId != old.Id) continue;
+                    var p = old.Evaluate(v.DestinationT);
+                    RoadSegment bestSeg = null;
+                    float bestD = float.MaxValue;
+                    foreach (var part in parts)
+                    {
+                        float d = part.DistanceTo(p);
+                        if (d < bestD) { bestD = d; bestSeg = part; }
+                    }
+                    if (bestSeg == null) continue;
+                    v.DestinationSegmentId = bestSeg.Id;
+                    v.DestinationT = bestSeg.ClosestT(p);
+                }
             };
         }
 
@@ -216,17 +261,16 @@ namespace CityBuilder.Simulation.Traffic
             else if (v.Speed > 2f) v.StopLineWait = 0f;
             if (v.LaneChangeCooldown > 0f) v.LaneChangeCooldown -= Dt;
 
-            if (v.S >= length)
-            {
-                if (v.IsOnFinalEdge) { Arrive(v); return; }
-                if (mayExit && exit != null) { EnterConnection(v, exit, v.S - length); return; }
-                v.S = length;
-                v.Speed = 0f;
-            }
-            else if (v.IsOnFinalEdge && v.S >= length - 1f)
+            if (v.IsOnFinalEdge && v.S >= ArrivalS(v, lane) - 1f)
             {
                 Arrive(v);
                 return;
+            }
+            if (v.S >= length)
+            {
+                if (mayExit && exit != null) { EnterConnection(v, exit, v.S - length); return; }
+                v.S = length;
+                v.Speed = 0f;
             }
 
             if (!v.IsOnFinalEdge && v.LaneChangeCooldown <= 0f) TryLaneChange(v, lane);
@@ -277,6 +321,14 @@ namespace CityBuilder.Simulation.Traffic
                 }
             }
             if (v.WaitTime > 90f) Remove(v, despawned: true);
+        }
+
+        /// <summary>Strecke auf der letzten Kante, an der das Fahrzeug ankommt (Zufahrt oder Spurende).</summary>
+        static float ArrivalS(Vehicle v, Lane lane)
+        {
+            if (!v.HasSegmentDestination || lane.Segment.Id != v.DestinationSegmentId) return lane.Length;
+            float s = lane.Along ? v.DestinationT * lane.Length : (1f - v.DestinationT) * lane.Length;
+            return Math.Clamp(s, 1.5f, lane.Length);
         }
 
         static void Advance(Vehicle v, float desired, float gap, float leaderSpeed, Vehicle leader)
@@ -355,8 +407,14 @@ namespace CityBuilder.Simulation.Traffic
                 var e = v.Route[i];
                 if (network.GetSegment(e.SegmentId) == null || !Rules.IsSegmentAllowed(e.SegmentId, v.Class)) return false;
             }
+            if (v.HasSegmentDestination) return network.GetSegment(v.DestinationSegmentId) != null;
             return v.Destination != null && network.Contains(v.Destination);
         }
+
+        List<EdgeKey> FindRoute(Vehicle v, EdgeKey from, float s, Lane fromLane) =>
+            v.HasSegmentDestination
+                ? Paths.FindPathToSegment(from, s, v.DestinationSegmentId, v.DestinationT, v.Class, fromLane)
+                : Paths.FindPath(from, v.Destination, v.Class, fromLane);
 
         /// <summary>Wechselt auf eine Nachbarspur, wenn nur von dort die nächste Abbiegung möglich ist.</summary>
         void TryLaneChange(Vehicle v, Lane lane)
@@ -400,8 +458,13 @@ namespace CityBuilder.Simulation.Traffic
         {
             if (v.Lane == null || v.InJunction) return;
             v.Reroutes++;
-            var path = Paths.FindPath(v.Lane.Edge, v.Destination, v.Class, v.Lane) ??
-                       Paths.FindPath(v.Lane.Edge, v.Destination, v.Class);
+            var path = FindRoute(v, v.Lane.Edge, v.S, v.Lane) ?? FindRoute(v, v.Lane.Edge, v.S, null);
+            if (path == null && v.TripId != 0)
+            {
+                // Bürgerfahrt: Ziel nicht mehr erreichbar → abbrechen, das Bürgersystem lässt den Bürger trotzdem ankommen
+                Remove(v, despawned: true);
+                return;
+            }
             if (path == null)
             {
                 // Ziel nicht mehr erreichbar → neues Ziel
@@ -478,27 +541,48 @@ namespace CityBuilder.Simulation.Traffic
             if (endpointsVersion == Lanes.Version) return;
             endpointsVersion = Lanes.Version;
             endpoints.Clear();
+            externals.Clear();
             foreach (var node in network.Nodes)
             {
+                // Außenanschluss: Straßenende (Grad 1) am Kartenrand – optional jede Sackgasse
                 bool edge = node.Position.X < worldMin.X + 40f || node.Position.Y < worldMin.Y + 40f ||
                             node.Position.X > worldMax.X - 40f || node.Position.Y > worldMax.Y - 40f;
-                if (node.SegmentIds.Count != 1 && !edge) continue;
+                if (node.SegmentIds.Count != 1 || !(edge || deadEndsAreExternal)) continue;
                 var ep = new Endpoint { Node = node };
                 ep.Out.AddRange(Lanes.OutgoingLanes(node));
                 ep.In.AddRange(Lanes.IncomingLanes(node));
                 foreach (int id in node.SegmentIds) if (network.GetSegment(id).Type.IsHighway) ep.Highway = true;
-                if (ep.Out.Count > 0 || ep.In.Count > 0) endpoints.Add(ep);
+                if (ep.Out.Count > 0 || ep.In.Count > 0)
+                {
+                    endpoints.Add(ep);
+                    externals.Add(node);
+                }
             }
         }
 
-        /// <summary>Anzahl der Verkehrsquellen (Sackgassen und Kartenrand).</summary>
+        readonly List<RoadNode> externals = new List<RoadNode>();
+
+        /// <summary>Außenanschlüsse: Straßenenden am Kartenrand (Verbindung zur Außenwelt).</summary>
+        public IReadOnlyList<RoadNode> ExternalConnections { get { RefreshEndpoints(); return externals; } }
+
+        /// <summary>Anzahl der Außenanschlüsse.</summary>
         public int EndpointCount { get { RefreshEndpoints(); return endpoints.Count; } }
 
+        /// <summary>Kann von diesem Außenanschluss aus losgefahren (outgoing) bzw. dort angekommen werden?</summary>
+        public bool IsExternalUsable(RoadNode node, bool outgoing)
+        {
+            RefreshEndpoints();
+            foreach (var e in endpoints)
+                if (e.Node == node) return outgoing ? e.Out.Count > 0 : e.In.Count > 0;
+            return false;
+        }
+
+        /// <summary>Durchgangsverkehr zwischen Außenanschlüssen.</summary>
         void Spawn()
         {
             RefreshEndpoints();
             if (endpoints.Count < 2) return;
-            float expected = Demand * endpoints.Count * 0.02f;
+            float expected = Demand * endpoints.Count * ThroughTrafficRate;
             int count = (int)expected + (rng.NextDouble() < expected - (int)expected ? 1 : 0);
             for (int i = 0; i < count && Vehicles.Count < MaxVehicles; i++) TrySpawnOne();
         }
@@ -575,10 +659,10 @@ namespace CityBuilder.Simulation.Traffic
         void Arrive(Vehicle v)
         {
             Stats.Arrived++;
-            Remove(v, despawned: false);
+            Remove(v, despawned: false, arrived: true);
         }
 
-        void Remove(Vehicle v, bool despawned)
+        void Remove(Vehicle v, bool despawned, bool arrived = false)
         {
             if (!removed.Add(v)) return;
             v.Lane?.Vehicles.Remove(v);
@@ -586,6 +670,116 @@ namespace CityBuilder.Simulation.Traffic
             v.Lane = null;
             v.Connection = null;
             if (despawned) Stats.Despawned++;
+            if (v.TripId != 0)
+            {
+                if (arrived) Stats.CitizenTripsArrived++; else Stats.CitizenTripsFailed++;
+                TripEnded?.Invoke(v, arrived);
+            }
+        }
+
+        // ------------------------------------------------------------ Bürgerfahrten
+
+        /// <summary>
+        /// Startet eine Fahrt von einer Gebäudezufahrt bzw. einem Außenanschluss zu einem anderen.
+        /// Liefert null, wenn kein Weg existiert, das Fahrzeuglimit erreicht ist oder am Start kein Platz ist –
+        /// der Aufrufer behandelt die Fahrt dann als „nicht sichtbar“ (zu Fuß/ÖPNV-Platzhalter).
+        /// </summary>
+        public Vehicle RequestTrip(TripEnd from, TripEnd to, VehicleClass cls, int tripId)
+        {
+            if (tripId == 0) throw new ArgumentException("tripId muss != 0 sein.", nameof(tripId));
+            Lanes.Update();
+            if (Vehicles.Count >= MaxVehicles) return null;
+            if (!to.IsNode && network.GetSegment(to.SegmentId) == null) return null;
+            if (to.IsNode && !network.Contains(to.Node)) return null;
+
+            // Mögliche Startspuren mit Startposition
+            var starts = new List<(Lane lane, float s)>();
+            if (from.IsNode)
+            {
+                if (!network.Contains(from.Node)) return null;
+                foreach (var l in Lanes.OutgoingLanes(from.Node)) starts.Add((l, 0f));
+            }
+            else
+            {
+                var seg = network.GetSegment(from.SegmentId);
+                if (seg == null) return null;
+                foreach (var l in Lanes.GetLanes(seg.Id)) starts.Add((l, l.Along ? from.T * l.Length : (1f - from.T) * l.Length));
+            }
+            starts.RemoveAll(x => (x.lane.Allowed & cls) == 0 || !Rules.IsSegmentAllowed(x.lane.Segment.Id, cls));
+            if (starts.Count == 0) return null;
+
+            // Günstigste Fahrtrichtung (aus der Einfahrt darf links und rechts abgebogen werden)
+            List<EdgeKey> bestPath = null;
+            float bestCost = float.MaxValue, bestS = 0f;
+            EdgeKey bestEdge = default;
+            foreach (var group in starts.GroupBy(x => x.lane.Edge))
+            {
+                float s = group.First().s;
+                var path = to.IsNode
+                    ? Paths.FindPath(group.Key, to.Node, cls)
+                    : Paths.FindPathToSegment(group.Key, s, to.SegmentId, to.T, cls);
+                if (path == null || Paths.LastCost >= bestCost) continue;
+                bestCost = Paths.LastCost;
+                bestPath = path;
+                bestEdge = group.Key;
+                bestS = s;
+            }
+            if (bestPath == null) return null;
+
+            // Spur mit Platz an der Startstelle, bevorzugt eine, von der die erste Abbiegung ohne Spurwechsel geht
+            float length = VehicleClasses.Length(cls);
+            Lane lane = null;
+            float startS = 0f;
+            foreach (var (l, _) in starts)
+            {
+                if (!l.Edge.Equals(bestEdge)) continue;
+                float s = Math.Clamp(bestS, MathF.Min(length, l.Length), l.Length);
+                if (!HasRoomAt(l, s, length)) continue;
+                if (lane == null || (bestPath.Count > 1 && HasConnection(l, bestPath[1], cls) && !HasConnection(lane, bestPath[1], cls)))
+                {
+                    lane = l;
+                    startS = s;
+                }
+            }
+            if (lane == null) return null;
+
+            var v = new Vehicle
+            {
+                Id = nextId++,
+                Class = cls,
+                Length = length,
+                MaxSpeed = VehicleClasses.MaxSpeed(cls) * (0.9f + (float)rng.NextDouble() * 0.15f),
+                Acceleration = VehicleClasses.Acceleration(cls),
+                Variant = rng.Next(8),
+                Lane = lane,
+                Destination = to.IsNode ? to.Node : null,
+                DestinationSegmentId = to.IsNode ? -1 : to.SegmentId,
+                DestinationT = to.T,
+                Route = bestPath,
+                TripId = tripId,
+            };
+            v.S = startS;
+            v.Speed = from.IsNode ? MathF.Min(8f, LaneSpeed(lane, v)) : 0f; // aus der Einfahrt: aus dem Stand
+            lane.Insert(v);
+            SamplePosition(v);
+            v.PrevPosition = v.Position;
+            v.PrevHeight = v.Height;
+            v.PrevDirection = v.Direction;
+            Vehicles.Add(v);
+            Stats.Spawned++;
+            Stats.CitizenTripsStarted++;
+            return v;
+        }
+
+        /// <summary>Ist auf der Spur an Stelle s (Front) Platz für ein Fahrzeug der Länge <paramref name="length"/>?</summary>
+        static bool HasRoomAt(Lane lane, float s, float length)
+        {
+            foreach (var o in lane.Vehicles)
+            {
+                // Belegt: [o.S - o.Length, o.S] gegen [s - length, s] mit Sicherheitsabstand
+                if (o.S - o.Length < s + 4f && o.S > s - length - 4f) return false;
+            }
+            return true;
         }
 
         // ------------------------------------------------------------ Darstellung / Statistik
@@ -593,10 +787,11 @@ namespace CityBuilder.Simulation.Traffic
         void UpdatePositionsAndStats()
         {
             float speedSum = 0f;
-            int active = 0, waiting = 0;
+            int active = 0, waiting = 0, citizens = 0;
             foreach (var v in Vehicles)
             {
                 if (removed.Contains(v)) continue;
+                if (v.TripId != 0) citizens++;
                 v.PrevPosition = v.Position;
                 v.PrevHeight = v.Height;
                 v.PrevDirection = v.Direction;
@@ -610,6 +805,7 @@ namespace CityBuilder.Simulation.Traffic
             }
             Stats.Active = active;
             Stats.Waiting = waiting;
+            Stats.CitizenVehicles = citizens;
             Stats.AverageSpeedKmh = active > 0 ? speedSum / active * 3.6f : 0f;
 
             // Stauindex je Spur (gleitender Mittelwert)
