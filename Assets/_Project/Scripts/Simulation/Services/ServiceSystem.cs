@@ -681,6 +681,12 @@ namespace CityBuilder.Simulation.Services
             return links[c].TryGetValue(b.Id, out var bl) ? bl.Assigned : null;
         }
 
+        // --- Sicherheit (Brände, Kriminalität)
+        /// <summary>Fahrzeit (Verkehrssekunden, Dijkstra-Schätzung) vom Dienst zur Zufahrt des Gebäudes; ∞ = nicht erreichbar.</summary>
+        public float ResponseSeconds(ServiceFacility f, Building b) =>
+            f?.Reach == null || b == null ? float.PositiveInfinity : f.Reach.SecondsTo(roads.GetSegment(b.FrontSegmentId), b.FrontT);
+        // --- Ende Sicherheit
+
         /// <summary>Müllwagen am Gebäude: nimmt bis zu <paramref name="max"/> t mit. Liefert die Menge.</summary>
         public float CollectGarbage(Building b, float max)
         {

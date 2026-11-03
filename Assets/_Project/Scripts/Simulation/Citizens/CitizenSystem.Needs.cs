@@ -175,6 +175,7 @@ namespace CityBuilder.Simulation.Citizens
                 float nuclearCalm = ctx.Nuclear > 0f ? NuclearCalmPenalty * ctx.Nuclear * p.Anxious : 0f;
                 Approach(n, NeedKind.Calm, calm - nuclearCalm, 0.35f);
                 float safety = SafetyTarget(ctx);
+                safety = SafetyAdjust(c, home, safety); // Sicherheit: Kriminalität am Wohnort, Einbruch-/Brand-Erinnerungen
                 Approach(n, NeedKind.Safety, safety, 0.25f);
                 Approach(n, NeedKind.Education, EducationTarget(c, ctx), 0.25f);
                 // G3 erweitert: schlechtes Trinkwasser (verschmutzter Fluss an der Pumpe) senkt die Gesundheit

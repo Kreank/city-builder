@@ -206,6 +206,10 @@ namespace CityBuilder.Game.Roads
             }
             Ensure<CityBuilder.Game.Services.ServicePanel>().Init(this, serviceOverlay);
             // --- Ende G4
+            // --- Sicherheit: Flammen/Rauch, Ruinen/Gerüste, Blaulicht; Meldungen zu Bränden und Kriminalität
+            if (litBase != null) Ensure<CityBuilder.Game.Services.SafetyView>().Init(runner, litBase, previewMaterial);
+            Ensure<CityBuilder.Game.Services.SafetyAlerts>().Init(runner);
+            // --- Ende Sicherheit
 
             // --- Wohnhäuser setzen (Anno-Stil): Werkzeug (Modus House, Taste 6) mit Anforderungs-Vorschau
             Ensure<CityBuilder.Game.Zoning.HouseTool>().Init(this, previewMaterial);

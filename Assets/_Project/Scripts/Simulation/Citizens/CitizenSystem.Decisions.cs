@@ -260,6 +260,7 @@ namespace CityBuilder.Simulation.Citizens
                 smog += mem.Strength(MemoryKind.Smog);
                 outage += mem.Strength(MemoryKind.PowerOutage) + mem.Strength(MemoryKind.WaterOutage);
                 unsafeMem += mem.Strength(MemoryKind.FeelsUnsafe);
+                unsafeMem += mem.Strength(MemoryKind.Burglary) + 0.5f * mem.Strength(MemoryKind.Fire); // Sicherheit: Einbruch, Brand
                 if (m.Age < Citizen.AdultAge) continue;
                 adults++;
                 thrifty += m.Personality.Thrifty;

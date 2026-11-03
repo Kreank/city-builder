@@ -131,6 +131,9 @@ namespace CityBuilder.Game.Zoning
 
             foreach (var b in city.Buildings)
             {
+                // --- Sicherheit: Brandruine/Sanierung zeichnet die SafetyView (verkohlte Reste bzw. Gerüst); hier nichts, kein Dauer-Neubau
+                if (b.OutOfService) { visualHeights[b.Id] = 4f; continue; }
+                // --- Ende Sicherheit
                 if (!b.IsConstructed) anyUnderConstruction = true;
                 float grow = Mathf.Clamp(b.Construction, 0.08f, 1f);
                 var front = new Vector3(b.Front.X, 0f, b.Front.Y);

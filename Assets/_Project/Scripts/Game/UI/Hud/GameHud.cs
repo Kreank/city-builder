@@ -674,6 +674,14 @@ namespace CityBuilder.Game.UI.Hud
                 () => serviceOverlay?.Toggle(CityBuilder.Simulation.Services.ServiceKinds.Media),
                 () => serviceOverlay != null && serviceOverlay.Selected == CityBuilder.Simulation.Services.ServiceKinds.Media);
             // --- Ende
+            // --- Sicherheit: Brandgefahr und Kriminalität (Dienste-Ansicht mit eigenen Kennungen, ohne neue Tasten)
+            RailButton(HudIconKind.Flame, "Brandgefahr – rot hoch (Industrie, alte/vermüllte Gebäude, ohne Feuerwehr), brennende Gebäude groß rot",
+                () => serviceOverlay?.Toggle(CityBuilder.Simulation.Safety.SafetyOverlays.FireRisk),
+                () => serviceOverlay != null && serviceOverlay.Selected == CityBuilder.Simulation.Safety.SafetyOverlays.FireRisk);
+            RailButton(HudIconKind.Shield, "Kriminalität – rot hoch (Arbeitslosigkeit, Unzufriedenheit, ohne Polizei/Streife), Tatorte der letzten Stunden groß rot",
+                () => serviceOverlay?.Toggle(CityBuilder.Simulation.Safety.SafetyOverlays.Crime),
+                () => serviceOverlay != null && serviceOverlay.Selected == CityBuilder.Simulation.Safety.SafetyOverlays.Crime);
+            // --- Ende Sicherheit
             rail.Add(Container("cb-rail-sep"));
             RailButton(HudIconKind.Underground, "Unterirdisch (X) – Boden durchsichtig, Tunnel und Rohre sichtbar",
                 () => tool.ToggleUndergroundView(), () => tool.UndergroundView);
@@ -707,7 +715,9 @@ namespace CityBuilder.Game.UI.Hud
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Abwasser"); // G3 erw.
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.WaterQuality, "Wasserqualität"); // G3 erw.
                 Add(serviceOverlay != null && serviceOverlay.Current != null,
-                    serviceOverlay != null && serviceOverlay.Current != null ? "Abdeckung " + CityBuilder.Simulation.Services.ServiceKinds.DisplayName(serviceOverlay.Current) : null); // G4
+                    serviceOverlay != null && serviceOverlay.Current != null
+                        ? (CityBuilder.Simulation.Safety.SafetyOverlays.IsSafety(serviceOverlay.Current) ? CityBuilder.Simulation.Safety.SafetyOverlays.DisplayName(serviceOverlay.Current) // Sicherheit
+                           : "Abdeckung " + CityBuilder.Simulation.Services.ServiceKinds.DisplayName(serviceOverlay.Current)) : null); // G4
                 Add(tool.UndergroundView, "Unterirdisch");
                 overlayName.EnableInClassList("cb-hidden", s == null);
                 if (s != null) overlayNameValue.text = s;

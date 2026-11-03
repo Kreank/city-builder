@@ -41,6 +41,7 @@ namespace CityBuilder.Game
         // --- Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung) im Verkehr – im Spiel an, in Tests aus
         [Tooltip("Dienste schicken echte Fahrzeuge über das Straßennetz (Müllabfuhr hängt teilweise an deren Ankunft).")]
         [SerializeField] bool serviceVehicles = true;
+        [SerializeField] bool safetyEvents = true; // Sicherheit: Brände und Kriminalität
         /// <summary>Erster Start ohne Spielstand: läuft eine Platzhalterwelt, bis der Spieler im Neues-Spiel-Fenster startet.</summary>
         public bool AwaitingNewGame { get; private set; }
         // --- Ende Spielstart
@@ -105,6 +106,7 @@ namespace CityBuilder.Game
             // --- Ende Spielstart
             World = SimulationWorld.CreateDefault(CreateSettings());
             World.ServiceVehicles.Enabled = serviceVehicles; // Eigene Assets 2
+            if (World.Safety != null) World.Safety.Enabled = safetyEvents; // Sicherheit
             if (World.Planet != null)
                 Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
                           $"{World.Planet.GenerationMilliseconds:0} ms. Start: {World.StartRegion.Name} ({World.Planet.PlayerCountry.Name})");
@@ -168,6 +170,7 @@ namespace CityBuilder.Game
         {
             World = world ?? throw new System.ArgumentNullException(nameof(world));
             if (serviceVehicles && world.ServiceVehicles != null) world.ServiceVehicles.Enabled = true; // Eigene Assets 2: auch alte Stände/neues Spiel
+            if (safetyEvents && world.Safety != null) world.Safety.Enabled = true; // Sicherheit: auch alte Stände/neues Spiel
             accumulator = 0.0;
             WorldGeneration++;
             WorldReplaced?.Invoke();

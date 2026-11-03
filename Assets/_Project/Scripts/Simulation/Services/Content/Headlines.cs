@@ -30,6 +30,11 @@ namespace CityBuilder.Simulation.Services.Content
         TradeDeal,
         Embargo,
         TariffRaise,
+        // --- Sicherheit (Brände, Kriminalität)
+        Fire,
+        FireRuin,
+        CrimeWave,
+        Arrest,
     }
 
     /// <summary>
@@ -172,6 +177,29 @@ namespace CityBuilder.Simulation.Services.Content
                 ("Zollstreit mit {Land}", "Neue Zölle von {Satz} %: {Land} antwortet auf unsere Handelspolitik."),
             },
             // --- Ende Etappe 8
+            // --- Sicherheit (Brände, Kriminalität)
+            /* Fire */ new[]
+            {
+                ("Feuer an der {Straße}", "{Name} brennt – die Feuerwehr ist im Einsatz. Anwohner sollen Fenster geschlossen halten."),
+                ("Brand in der {Straße}", "Dichter Rauch über dem Viertel: {Name} steht in Flammen. {Medium} berichtet live."),
+                ("Großeinsatz der Feuerwehr", "An der {Straße} brennt {Name}. {Anzahl} Löschfahrzeuge sind unterwegs."),
+            },
+            /* FireRuin */ new[]
+            {
+                ("{Name} ausgebrannt", "Von {Name} an der {Straße} ist nur eine Ruine geblieben. Die Bewohner kommen bei Freunden unter."),
+                ("Totalschaden nach Brand", "Das Feuer an der {Straße} war nicht mehr zu stoppen. {Medium} fragt: Kam die Feuerwehr zu spät?"),
+            },
+            /* CrimeWave */ new[]
+            {
+                ("Einbruchserie im Viertel", "{Anzahl} Einbrüche und Diebstähle seit gestern, besonders rund um die {Straße}. Anwohner fordern mehr Streifen."),
+                ("Unsicheres Pflaster", "Rund um die {Straße} häufen sich Diebstähle und Vandalismus – {Anzahl} Fälle an einem Tag."),
+            },
+            /* Arrest */ new[]
+            {
+                ("Festnahme an der {Straße}", "Die Polizei hat nach einem Einbruch an der {Straße} einen Verdächtigen gefasst."),
+                ("Polizei fasst Täter", "Schneller Einsatz: an der {Straße} klickten die Handschellen. Aufklärungsquote zuletzt {Prozent} %."),
+            },
+            // --- Ende Sicherheit
         };
 
         public static int TopicCount => ByTopic.Length;
@@ -206,6 +234,10 @@ namespace CityBuilder.Simulation.Services.Content
                 case HeadlineTopic.TradeDeal: return 0.4f;      // Etappe 8
                 case HeadlineTopic.Embargo: return -0.7f;       // Etappe 8
                 case HeadlineTopic.TariffRaise: return -0.35f;  // Etappe 8
+                case HeadlineTopic.Fire: return -0.6f;          // Sicherheit
+                case HeadlineTopic.FireRuin: return -0.8f;
+                case HeadlineTopic.CrimeWave: return -0.6f;
+                case HeadlineTopic.Arrest: return 0.3f;
                 default: return 0.5f; // Eröffnungen
             }
         }
