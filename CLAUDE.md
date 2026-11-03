@@ -76,7 +76,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -103,6 +103,21 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Unterirdisch-Ansicht (X, automatisch beim Bauen unter 0 m) macht den Boden durchsichtig.
 - `RoadTemplates`: Raute, Kleeblatt, Dreieck – Quadrant 4 wird beschrieben und um 90° gedreht (A↔B tauschen).
 - `RoadNetwork.SegmentReplaced` (Zerteilen/Umbau/Umdrehen) → Verkehrsregeln wandern mit.
+- **Bauwerks-Sperre (UX-Runde)** `Simulation/Roads/StructureRules.cs`: Straßen reißen Dienste, Versorger und Busdepots
+  **nicht** mehr ab. Bauwerksarten melden sich mit einer Zeile an: `roads.RegisterStructures(() => blocks)` (je Bauwerk ein
+  `StructureBlock` = Art, Id, Name, `Footprint`, Höhe; angemeldet: `ServiceSystem` „service“, `UtilitySystem` „utility“,
+  `TransitSystem` „depot“ – Haltestellen nicht). `RoadBuilder.Plan` (damit auch Kurve, Doppelbau, Kreisverkehr, Vorlagen)
+  prüft am Ende von `Validate` per `RoadFront.FindBlocking` (Fahrbahn inkl. Gehweg, ebenerdig; Brücken/Tunnel > 3 m
+  Elevation gehen drüber/drunter, 0,25 m Toleranz) → `RoadBuildError.OverlapsStructure` + `RoadPlan.BlockedBy`
+  (ebenso `RoundaboutPlan`/`TemplatePlan`/`DualCarriagewayPlan.BlockedBy`). Ausbau auf breiteren Typ: `CheckReplace` →
+  `ReplaceBlocker`. Werkzeug: Vorschau rot, Bauwerk rot hervorgehoben, Hinweis „Straße überschneidet <Name> – anders führen
+  oder Gebäude verschieben“. **Zonen bleiben wie bisher** (Straße entfernt Zone + Gebäude), Strommasten werden weiter
+  umgelegt, Wasserrohre unter Straßen unverändert.
+- **Front-Ausrichtung** (`RoadFront`): `FindAccess(roads, footprint, reach)` = Zufahrt an der **Mitte der Vorderseite**
+  (ebenerdige Stadtstraße vor ihr – Kegel ±60° um `Front` –, Rand ≤ reach); `TryAlign(roads, cursor, w, d, drehung, radius)`
+  dreht die Vorderseite zur nächsten Stadtstraße (Normale der Tangente, auch in Kurven), Vorderkante 0,5 m vor dem Gehweg
+  (`SnapGap`), Mitte folgt dem Cursor entlang der Straße; Zusatzdrehung rückt das Bauwerk so weit ab, dass die Ecken frei
+  bleiben. Neue Bauwerksarten nutzen beides mit einer Zeile.
 - **Knoten-Geometrie** rein in der Simulation (`JunctionGeometry`, getestet in `JunctionGeometryTests`):
   `Classify` → `Junction` (ab 3 Straßen oder Typwechsel: Kreuzungsfläche), `Bend` (Grad 2, gleicher Typ, Knick
   > 0,5°: Eckstück mit vollem Querschnitt als Bézier, Innenradius ≥ halbe Breite + 1 m), `None` (gerade Fortsetzung,
@@ -201,10 +216,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
 - Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
+  Fußgänger (Platzhalter-Fahrten, Park, Laden, Haustür) zeichnet `PeopleView` (s. „Fußgänger“).
 - Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
   Mitglieder abgeleitet, nicht gespeichert. Familienstand je Bürger: `Citizen.Relationship`/`PartnerId` (Bedürfnismodell).
 - Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
-  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
+  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`, `BusyUntilTick` (Ende der Tätigkeit); `Vehicle.StartTime` (Verkehrszeit beim Start).
 
 ## Bürgerverhalten (Bedürfnisse)
 - Dateien in `Simulation/Citizens`: `Needs.cs` (Bedürfnisse, Gewichte je Lebensphase, `ServiceIds`), `Personality.cs`,
@@ -270,6 +286,59 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter ✅ (s. „ÖPNV“: Stau → eher Bus). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
   für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
 
+## Fußgänger (sichtbare Bürger)
+- **Simulation** `Simulation/People` (rein, getestet in `PedestrianTests`): `SidewalkGraph` = ungerichtetes Gehwegnetz aus dem
+  Straßennetz (nur Typen mit Gehweg beidseits; neu gebaut bei `RoadNetwork.Version`). Knoten = Gehweg-Enden je Arm (links/
+  rechts vom Knoten weg), Kanten = Gehweg entlang des Segments (`SampledCurve.OffsetAt` mit dem `Offset` der Gehweg-Spur =
+  Fahrbahnrand + halbe Gehwegbreite, zwischen den Trimm-Abständen), Gehwegecke (Mitte zwischen Bordstein und Außenkante aus
+  `JunctionGeometry.Layout`, im Knick entlang des versetzten Eckstücks), **Querung** (Zebrastreifen am Armende quer über die
+  Fahrbahn, Bordstein → Fahrbahnhöhe) nur an Kreuzungsflächen (`NodeShape.Junction`) und Sackgassen-Enden, +6 m Zuschlag.
+  Wegfindung A* (Luftlinie). Zugang: `TryAccessAtT` (Seite aus der Lage des Gebäudes), `TryNearestAccess`, `TryAccessAtNode`.
+  `PedestrianRoute` = Linienzug mit Höhe (Gehweg +0,2 m, Fahrbahn +0,05 m) und Belag je Punkt.
+- `PedestrianPlanner` (je Welt): Endpunkte (Haustür = Zufahrt − 1 m, Park = Tor an der Straßenseite + Luftlinie zur Parkmitte,
+  Außenanschluss, freier Punkt), Routen-Cache je Start/Ziel (geleert bei Netzänderung, max. 30 000), `RouteBudget` (neue
+  Routen je Frame). `Pose(citizen, time, activitySince)` → `PedestrianPose` (Hidden/Walking/Standing/Waiting, Ort, Höhe,
+  Richtung, m/Tick): Platzhalter-Fahrt (kein Auto) linear über die Route zwischen `TripStartTick` und `PlannedArrivalTick`
+  (Tempo = Routenlänge / Fahrzeit → Ankunft passt immer zur Simulation); Park: Hinweg (wenn der Beginn beobachtet wurde),
+  Platz je Bürger auf der Parkfläche mit kleiner Runde, Rückweg in den letzten `ParkWalkTicks` vor `Citizen.BusyUntilTick`
+  (gleiche Formel wie das Bürgersystem); Spaziergang im Viertel = 40 m auf dem eigenen Gehweg hin und her; Einkauf = die
+  letzten 3 Ticks vor dem Laden; Ankunft zu Hause = 2 Ticks vor der Haustür. Neu lesend: `Citizen.BusyUntilTick`.
+- **ÖPNV-Erweiterungsstelle:** `PedestrianPlanner.Transit` bzw. in Unity `PeopleView.TransitHook`
+  (`Func<Citizen, double, TransitPose>`): `TransitPose.WaitingAt(stop, h, facing)` (steht am Haltestellenpunkt),
+  `InVehicle` (unsichtbar), `Walk(from, fromPoint, to, toPoint, start, end)` (Fußweg über die Gehwege, Place.None = Punkt).
+  **Verbunden** über `TransitPedestrians` (Simulation/People, liest nur `CitizenSystem.RideOf`/`TransitSystem`; `PeopleView`
+  nimmt sie, wenn `TransitHook` null ist): Fahrgast wartet → zuerst Fußweg Tür → Haltestelle in **Verkehrszeit** ab
+  `Passenger.StartTime` (Gehweglänge ÷ `TransitRules.WalkSpeed` 1,3 m/s, 1 Tick = `TrafficSystem.Dt` 0,25 s → echtes
+  Gehtempo), dann Stehen auf dem Gehweg der Halteseite (`WaitPoint`: 0,6 m zum Bordstein, ±2,5 m gestreut, Blick zur Straße;
+  `StopSide.Both` → Seite nach Id). Im Bus → unsichtbar. Nach dem Aussteigen Fußweg vom Gehweg des Ziel-Halts zum Ziel in den
+  letzten Ticks vor `PlannedArrivalTick` (Formel wie `CitizenSystem.OnRideEnded`: Luftlinie ÷ 1 500 m/Tick, + 3 außerhalb).
+  Die Fahrt entfernt das Bürgersystem beim Aussteigen – `TransitPedestrians.Observe` merkt sie sich je Frame. Statistische
+  Fahrgäste (`TransitRealShare`) und unbeobachtete Fahrten: unsichtbar.
+  **Zeitbasis im Bürgersystem** (nur dokumentiert, nicht umgebaut): `TransitSystem.StartRide` lässt sofort warten (Fußweg zur
+  Haltestelle ohne Dauer; die Planung `TransitOption.AccessMeters`/`PerceivedSeconds` rechnet ihn aber in Verkehrszeit) – die
+  Darstellung zeigt ihn trotzdem in Verkehrszeit; wer einsteigt, bevor er sichtbar ankommt, verschwindet unterwegs. Dauer in
+  Spielticks (Zeitraffer) haben: Platzhalter-Fußwege (`CitizenSystem.StartTrip`: `dist / OtherMetersPerTick`), Fußweg vom
+  Ziel-Halt (`OnRideEnded`: `rest / OtherMetersPerTick`) und Parkwege (`TryLeisure`: `walk`). Für echtes Gehtempo müssten diese
+  drei Stellen in Verkehrszeit rechnen (z. B. Ankunft über `traffic.Time` + Strecke ÷ 1,3 m/s statt `ArriveTick`), bzw.
+  `StartRide` erst nach dem Zugangsweg in die Warteschlange stellen.
+- **Darstellung** `Game/People/PeopleView` (Begleiter am RoadTool): je Frame alle Bürger mit billiger Vorprüfung (Start/Ziel
+  in Reichweite), dann Pose, Sichtkegel, bis `FarDistance` 520 m (Kamera höher → nichts), höchstens `MaxVisible` 3 000 (nächste
+  zuerst); bis `NearDistance` 170 m volle Figur (Beine/Arme schwingen um Hüfte/Schulter, Wippen, Senioren gebeugt, Schatten),
+  darüber 2 Quader ohne Schatten. Neue Routen höchstens 24 je Frame. `Graphics.RenderMeshInstanced`, ein Material je Farbe.
+  Seitliche Streuung ±0,85 m (auf Zebrastreifen ±0,5 m), Schrittfrequenz in Echtzeit. Freizeitbeginn beobachtet die View
+  (Wechsel in `Activity.Leisure`), die Simulation speichert ihn nicht.
+- **Figuren** `PeopleFigures`: Platzhalter aus Quadern, 1,75 m (Kleinkind 0,55×, Kind 0,74×, Jugendliche 0,93×, Kopf relativ
+  größer), Farben nach Bürger-Id (Haut 5, Haare 5 bzw. grau/weiß bei Senioren, Oberteil 12 / Kinder kräftig / Senioren gedeckt,
+  Hose 6). Eigene Modelle (`OwnModelCatalog.People`, s. „Eigene Assets“) ersetzen die Platzhalter: je Gruppe zufällig nach Id,
+  fehlt die Gruppe, Erwachsene skaliert.
+- **Inspektor:** Fußgänger anklickbar (`InspectorPicking`: Kugel um die zuletzt gezeichnete Körpermitte, Vorrang wie Fahrzeuge)
+  → Bürger; Ring um die Person und Verfolgen (`PeopleView.TryGetPosition`).
+- **Zeitverzerrung:** 1 Tick = 6 Spielminuten = 0,1 s Echtzeit bei Tempo 1. Platzhalter-Fußwege dauern meist 1–2 Ticks →
+  Fußgänger laufen sichtbar im Zeitraffer (z. B. 600 m in 0,2 s). Deutlich länger sichtbar sind Park, Spaziergang, Laden, Tür.
+  Echt wirkende Gehgeschwindigkeit bräuchte Fußwege in Verkehrszeit (wie Autos) im Bürgersystem – offen.
+- Leistung (Testprojekt, Info): Raster 13×13 Straßen (312 Segmente) → Gehwegnetz 17 ms, 500 Routen 75 ms (inkl. JIT).
+  Unity noch nicht gestartet (Optik, Frame-Zeiten ungeprüft).
+
 ## Spiel-UI (UI Toolkit, Phase 1)
 - `Game/UI/Hud/GameHud` (+ `GameHud.BuildBar.cs`), Begleiter am `RoadTool` (zuletzt angehängt). Erzeugt zur Laufzeit
   `PanelSettings` (ScaleWithScreenSize, Referenz 1920×1080, Match 0,5) + `UIDocument`; lädt
@@ -277,9 +346,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
-  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
-  Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
+  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien → Werkzeugzeile + Kacheln + Infozeile;
+  aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
+  Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
 - Icons: `HudIcon` zeichnet per Painter2D (24er-Raster, Farbe = `color`), keine Bilddateien.
@@ -324,11 +394,33 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Baukasten: `Ui.Image(texture, w, h, onClick, onHover)`, `GameWindow.FrameClass` (z. B. `cb-window--wide`).
 - Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
-## Inspektor (Info-Modus, Taste C)
+## Auswählen-Modus & Verschieben (UX-Runde)
+- **Standard = Auswählen** (`RoadTool.SelectMode` = der vorhandene `Mode.Inspect`; bewusst kein neuer Enum-Wert, damit
+  Inspektor/Picking/Views und Werkzeuge anderer Agenten unverändert passen). Start in diesem Modus, keine Bauvorschau,
+  Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst, Versorger, Haltestelle/Depot.
+- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5) →
+  Auswählen (`RoadTool.ToggleMode`); R bleibt Gerade ↔ Kurve. Aktive Kategorie in der Bauleiste erneut anklicken → Auswählen.
+  In Zonen/Gelände hat Rechtsklick eigene Bedeutung, dort nur Esc. Laufende Vorgänge melden Begleiter mit
+  `RoadTool.RegisterOperation(busy, esc, rechtsklick)` (Leitungskette, Buslinie zeichnen, Verschieben): dann bricht Esc/RMB
+  nur diesen Vorgang ab. Esc, das ein Fenster verbraucht (`WindowHost.EscapeConsumedFrame`), wirkt nicht zusätzlich.
+  Hinweiszeile: `RoadTool.ReturnHint` („Esc/Rechtsklick: zurück zum Auswählen“).
+- **Bauleiste:** Knopf „Auswählen“ (Icon `HudIconKind.Cursor`) ganz links, aktiv im Auswählen-Modus; dort ist keine
+  Kategorie offen. **Inspektor-Panel** öffnet sich erst mit einer Auswahl (`InspectorPanel.WantsPanel`); Stadtübersicht
+  nur über Info-Knopf oben bzw. C (`RoadTool.ToggleCityInfo` → `InspectorPanel.ShowOverview`); × schließt, Modus bleibt.
+  Zonen kräftig: Zonen-Werkzeug oder Stadtübersicht.
+- **Verschieben** `Game/Inspect/FacilityMover` (Begleiter): Dienst/Versorger/Busdepot auswählen → „Verschieben (Y)“ im
+  Inspektor oder Taste **Y** (einziger freier Buchstabe, gedrucktes Zeichen der Belegung) → Geist mit Vorderseiten-Pfeil folgt der
+  Maus mit denselben Platzregeln inkl. Ausrichtung, `,`/`.` drehen, Klick setzt (Stadtkasse 10 %), Esc/RMB bricht ab.
+  Depots: `TransitSystem.SnapDepot` + `PlanMoveDepot`/`MoveDepot`.
+- **Vorschau:** `Game/UI/PlacementGhost` (Quader + Streifen an der Vorderkante + Pfeil zur Zufahrt) in Dienst-, Versorgungs- und
+  Verschieben-Werkzeug; auch als rote Hervorhebung des Bauwerks, das eine geplante Straße blockiert.
+
+## Inspektor (Auswählen-Modus, Übersicht Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
   Liest nur. Klick = Strahl gegen Gebäude (Grundstück × `VisualHeight`), Versorgungsbauwerke (Fläche × grobe
-  Platzhalterhöhe) und Fahrzeuge (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
-  Geländepunkt unter der Maus. Rechtsklick/„Übersicht“ hebt auf, „← Zurück“ geht den Verlauf zurück.
+  Platzhalterhöhe), Fahrzeuge und Fußgänger (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
+  Geländepunkt unter der Maus. Rechtsklick/Klick ins Leere hebt auf (Panel schließt, außer die Stadtübersicht ist offen),
+  „← Zurück“ geht den Verlauf zurück.
 - Auswahl = Art + Id (`Selection`), jedes Frame neu nachgeschlagen; verschwundenes Fahrzeug → Auswahl springt zum
   Fahrer (Bürger). Hervorhebung: gelber Umriss (Boden + Dach) bzw. Ring ums Fahrzeug; bei Bürgern zusätzlich
   Wohnung (grün) und Arbeitsplatz/Ziel (blau). **Verfolgen** (F oder Häkchen) für Fahrzeug/Bürger über
@@ -353,8 +445,16 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
   Leistung Strom kW / Wasser m³/h, Baukosten/Unterhalt bucht die Stadtkasse ab, s. u.), `UtilitySystem` (alle 30 min).
 - Bauwerke frei platziert und gedreht (`PlanFacility` → `BuildFacility`): nicht auf Straßen/Wasser/anderen Bauwerken,
-  Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen,
-  Straße durchs Bauwerk reißt es ab. Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
+  Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen.
+  **Straßen dürfen Bauwerke nicht überbauen** (Bauwerks-Sperre, s. Straßen). Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
+  **Straßenfront (UX):** `UtilityFacilityType.NeedsRoadFront` für Kohle-/Gaskraftwerk, Wasserturm, Kläranlage
+  (Brennstoff/Personal/Schlamm). Steht so ein Bauwerk an einer Stadtstraße (Rand ≤ 8 m = Netzanschluss über die Straße),
+  muss die Vorderseite zu ihr zeigen, sonst `UtilityBuildError.NoRoadAccess`; Überland ohne Straße in der Nähe (Anschluss per
+  Leitung) bleibt erlaubt, weil Brennstoff/Personal noch nicht simuliert sind. **Ausnahmen** ohne Front: Windrad, Solarpark
+  (niemand fährt im Alltag hin), Pumpe, Atomkraftwerk, Abwasser-Auslass (richten sich nach dem Wasser). Der Netzanschluss
+  selbst bleibt „Straße ≤ 8 m an irgendeinem Rand“ (Kabel, keine Zufahrt). `PlanFacilityAligned(type, cursor, drehung)`
+  richtet aus; `PlanMove(id, pos, front)`/`MoveFacility(plan)` verschiebt (Id/Leistung bleiben, 10 % Umzugspreis
+  `MoveCostShare`, Masten auf der neuen Fläche werden umgelegt, Event `FacilityMoved`).
 - **Netze**: Stadtstraßen tragen Leitung und Rohr automatisch mit (wie Cities: Skylines – spart Kleinarbeit, Straßen
   liegen ohnehin an jedem Gebäude); Autobahnen/Rampen nicht. Lücken schließen frei verlegte gerade Leitungen/Rohre
   (`PlanLine` → `BuildLine`); Enden verbinden sich im Umkreis 3 m mit Leitungen (auch mittendrin), Bauwerken, Stadtstraßen,
@@ -453,8 +553,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Education` = Mittel aus `EducationPrimary`/`EducationSecondary` (auch einzeln abfragbar). Unbekannte Art → 0.
   Weitere: `GarbageAt/GarbageLevel(b)`, `FireRisk(b)`, `AverageCoverage(kind)`, `DemandOf(b, channel)`;
   `DemandProvider` (Func) erlaubt echten Bedarf (z. B. Schülerzahlen aus dem Bürgersystem) statt Schätzung.
-- **Reichweite über das Straßennetz**: Dijkstra über Fahrzeit vom Anschlusspunkt (nächste ebenerdige Stadtstraße, Rand
-  ≤ 8 m von der Grundfläche – sonst `NoRoadAccess`); Tempolimit × 0,8, +5 s je Kreuzung (≥ 3 Straßen), Einbahnstraßen nur
+- **Reichweite über das Straßennetz**: Dijkstra über Fahrzeit vom Anschlusspunkt (**Mitte der Vorderseite**, ebenerdige
+  Stadtstraße vor ihr, Rand ≤ 8 m – sonst `NoRoadAccess` „Keine Zufahrt an der Vorderseite“; früher zählte jeder Rand); Tempolimit × 0,8, +5 s je Kreuzung (≥ 3 Straßen), Einbahnstraßen nur
   in Fahrtrichtung, Autobahnen/Rampen befahrbar. Gebäude werden an ihrer Zufahrt (`FrontSegmentId`/`FrontT`) erreicht.
   Wirkung 1 bis 40 % der Reichweite, dann linear auf 0. Ohne Straßenverbindung (z. B. Fluss ohne Brücke) keine Wirkung.
   **Parks** wirken über Fußweg-Radius (Luftlinie zur Parkfläche): Spaziergänger kürzen über Wege/Grundstücke ab, die das
@@ -468,7 +568,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abdeckung × höchstens 4× die laufende Menge (Rückstau baut sich ab); Müllhalde läuft voll (25 000 t → wirkt nicht mehr).
   `FireRisk` = Grundrisiko je Zone × (1 − 0,8 × Feuerwehr) + 0,2 × Müllstand – noch ohne Brände.
 - Platzregeln wie G3: nicht auf Straße/Wasser/anderen Bauwerken/Strommasten, max. 8 m Gefälle (wird eingeebnet), Gebäude
-  darunter werden abgerissen, Straße durchs Dienstgebäude reißt es ab. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
+  darunter werden abgerissen. **Straßen durchs Dienstgebäude sind gesperrt** (Bauwerks-Sperre, `OnSegmentAdded` reißt nichts
+  mehr ab). **Ausrichtung (UX):** `ServiceType.NeedsRoadFront` (= nicht `Walking`; Parks nicht) – `PlanAligned(type, cursor,
+  drehung, movingId)` dreht die Vorderseite zur Straße (Cursor ≤ Tiefe + 16 m vom Straßenrand), `,`/`.` drehen zusätzlich, solange
+  die Vorderseite Zufahrt hat. **Verschieben:** `PlanMove(id, pos, front)` / `MoveFacility(plan)` – gleiche Platzregeln (eigene
+  alte Fläche zählt nicht), 10 % der Baukosten (`MoveCostShare`, Kategorie „Bau Dienste“), Id/Lager/Last/Statistik bleiben,
+  Anschluss + Reichweite neu, Event `FacilityMoved`. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
   G3) und Terraforming (`TerrainMap.LockQuery`, verkettet) sind auf Dienstflächen gesperrt. Versorger/Masten dürfen nicht
   auf Dienstflächen (Hooks `UtilitySystem.OtherStructureOverlaps/-At`).
 - **Kosten (Stadtkasse)**: `ServiceSystem` ist `IUpkeepSource` (`Name` „Dienste“, `WeeklyUpkeep()` = Summe der
@@ -817,6 +922,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
   (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
   `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
+  **Personen** (Fußgänger): alle `People/*.fbx` (Ordner anlegen, wenn das erste Modell kommt) → `OwnModelCatalog.People`,
+  Id = Dateiname; Gruppe nach Präfix `Toddler*`, `Child*`/`Kid*`, `Teen*`, `Senior*`, sonst Erwachsene. Konvention: Ursprung =
+  Mitte zwischen den Füßen, Front +Z, 1 Einheit = 1 m (~1,75 m groß; grobe Einheitenfehler werden korrigiert), Paletten-Material;
+  optionale Kindobjekte `LegL`, `LegR`, `ArmL`, `ArmR` schwingen beim Gehen um ihren eigenen Ursprung (= Hüft-/Schultergelenk,
+  Drehachse X). Gezeichnet per Instancing (ein Teil je MeshFilter), keine Farbvariation (mehrere Modelle je Gruppe verwenden).
   Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
   zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
   Transport/*, Nature/Bush_*/Rock_*, übrige Props.
@@ -864,7 +974,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - **Busdepot** (Bauwerk wie G4: 40 × 30 m, 45 000 €, 1 500 €/Woche, 16 Busse; `PlanDepot`/`BuildDepot`/`DemolishDepot` 25 %
   zurück; Sperren für Grundstücke/Terraforming/Versorger/Dienste über verkettete Hooks, neu `ServiceSystem.OtherStructureOverlaps`).
   `SnapDepot` richtet die Vorderseite zur nächsten Stadtstraße aus und rastet am Rand ein (Spielerregel). **Straßenbau reißt
-  Depots nicht ab** – für den Straßenblocker gibt es `BlocksRoad(segment)` / `BlocksPoint(p)` (noch nicht angehängt).
+  Depots nicht ab** – Depots hängen an der Bauwerks-Sperre (`RoadNetwork.RegisterStructures`, Art „depot“; Plan ungültig);
+  `BlocksRoad(segment)` / `BlocksPoint(p)` bleiben als Abfragen. Verschieben: `PlanMoveDepot`/`MoveDepot` (10 %).
 - **Busbetrieb:** fehlen einer Linie Busse, setzt das nächste Depot mit freiem Fahrzeug alle 4 s einen ein, der i-te beginnt am
   Halt i·n/Ziel (Takt durch Verteilung). Busse sind echte Fahrzeuge (`VehicleClass.Bus`, `Vehicle.IsScheduled`/`TransitId`):
   bremsen bis zur Haltestelle, stehen (`HoldAtStopFor`, Haltezeit 4 s + 1,2 s je Einsteiger + 0,8 s je Aussteiger, zählt nicht als
@@ -900,7 +1011,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
 - Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
-  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie, sichtbare Wartende.
+  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
 
 ## Roadmap
 1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
@@ -926,7 +1037,11 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
      ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
-     Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
+     Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
+     ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
+     Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
+     (im Editor noch nicht visuell abgenommen). Später: Fußwege in Verkehrszeit (echtes Gehtempo), Abkürzungen durch Parks,
+     freie Fußwege/Plätze, Ampelphasen an Zebrastreifen, inkrementeller Gehweg-Neubau (✅ ÖPNV verbunden: Wartende, Fußwege zur/von der Haltestelle)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
      ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,

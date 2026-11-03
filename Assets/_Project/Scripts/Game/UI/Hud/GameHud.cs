@@ -458,9 +458,11 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
 
             // Info-Modus (C)
-            var info = Btn(null, () => tool.SetMode(tool.CurrentMode == RoadTool.Mode.Inspect ? RoadTool.Mode.Straight : RoadTool.Mode.Inspect),
-                () => tool.CurrentMode == RoadTool.Mode.Inspect,
-                "Info-Modus (C): Gebäude, Bürger, Fahrzeuge und Versorger anklicken · Rechtsklick hebt auf", null, "cb-icon-btn");
+            // UX: Info = Stadtübersicht ein/aus (wechselt ins Auswählen); Auswahl selbst geht immer per Linksklick
+            var inspectorPanel = tool.GetComponent<CityBuilder.Game.Inspect.InspectorPanel>();
+            var info = Btn(null, tool.ToggleCityInfo,
+                () => tool.IsSelectMode && inspectorPanel != null && inspectorPanel.ShowOverview,
+                "Stadtübersicht (C) · Gebäude, Bürger, Fahrzeuge, Dienste und Versorger wählt man im Auswählen-Modus per Linksklick", null, "cb-icon-btn");
             info.Add(Icon(HudIconKind.Info));
             topBar.Add(info);
 

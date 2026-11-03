@@ -564,6 +564,7 @@ namespace CityBuilder.Game.Inspect
                 if (t.NoiseLevel > 0f) ui.Field("Lärm", $"{t.NoiseLevel * 100f:0} % im Umkreis {t.NoiseRadius:0} m");
                 if (t.Pollution > 0f) ui.Field("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
                 if (t.NeedsWater) ui.Field("Standort", "braucht Wasser in Reichweite");
+                ui.Field("Vorderseite", t.NeedsRoadFront ? "braucht Zufahrt zur Straße (Pfeil in der Vorschau)" : "beliebig (keine Zufahrt nötig)", Tone.Muted); // UX
                 // --- G3 erweitert: Abwasser, Pumpe, Atom
                 var wq = world.WaterQuality;
                 if (wq != null && t.Kind == UtilityKind.Sewage)
@@ -586,6 +587,7 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Zustand", "— (Verschleiß/Wartung später)", Tone.Muted);
             }
             DepositsSection(ui, world, f.Position, "am Standort");
+            MoveAction(ui, SelectionKind.Facility, f.Id, t.Cost); // UX: Verschieben
             if (utilityOverlay != null)
             {
                 var overlay = f.Kind == UtilityKind.Power ? UtilityOverlayView.Overlay.Power : f.Kind == UtilityKind.Sewage ? UtilityOverlayView.Overlay.Sewage : UtilityOverlayView.Overlay.Water;
@@ -636,6 +638,7 @@ namespace CityBuilder.Game.Inspect
                 if (t.NoiseLevel > 0f) ui.Field("Lärm", $"{t.NoiseLevel * 100f:0} % im Umkreis {t.NoiseRadius:0} m");
                 if (t.Pollution > 0f) ui.Field("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
             }
+            MoveAction(ui, SelectionKind.Service, f.Id, t.Cost); // UX: Verschieben
             if (serviceOverlay != null)
             {
                 string kind = f.Kind;

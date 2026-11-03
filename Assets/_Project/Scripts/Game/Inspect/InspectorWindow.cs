@@ -33,17 +33,35 @@ namespace CityBuilder.Game.Inspect
 
         public InspectorWindow(InspectorPanel panel) : base(WindowSlot.Right) { this.panel = panel; }
 
-        public override float OpenScore => panel != null && panel.Active ? 100f : 0f;
+        /// <summary>UX: nur offen, wenn etwas ausgewählt ist oder die Stadtübersicht angefordert wurde (Info-Knopf/C).</summary>
+        public override float OpenScore => panel != null && panel.WantsPanel ? 100f : 0f;
 
-        /// <summary>× verlässt den Info-Modus.</summary>
+        /// <summary>× schließt das Panel (Auswahl und Übersicht weg), der Auswählen-Modus bleibt.</summary>
         public override void Close() => panel.Close();
 
-        /// <summary>Esc: erst die Auswahl aufheben (Stadtübersicht), dann den Info-Modus verlassen.</summary>
+        /// <summary>Esc: Verschieben abbrechen, sonst Auswahl aufheben, sonst Übersicht schließen.</summary>
         public override bool HandleEscape()
         {
+            var mover = Tool.GetComponent<FacilityMover>();
+            if (mover != null && mover.Moving) { mover.Cancel(); return true; }
             if (!panel.Current.IsNone) panel.ClearSelection();
             else panel.Close();
             return true;
+        }
+
+        /// <summary>UX: Knopf „Verschieben“ für Dienste, Versorger und Depots (Taste Y).</summary>
+        void MoveAction(Ui ui, SelectionKind kind, int id, float buildCost, string note = null)
+        {
+            var mover = Tool.GetComponent<FacilityMover>();
+            if (mover == null) return;
+            bool moving = mover.Moving && mover.MovingId == id && mover.MovingKind == kind;
+            using (ui.Actions())
+                ui.ActionButton(moving ? "Verschieben abbrechen" : "Verschieben (Y)", () =>
+                {
+                    if (moving) mover.Cancel(); else mover.Begin(kind, id);
+                }, ActionStyle.Secondary, moving, true,
+                    $"Gebäude mit allem Zustand an einen neuen Platz setzen · Umzug {BuildLabels.Money(buildCost * FacilityMover.CostShare)} · Esc bricht ab");
+            if (note != null) ui.Note(note);
         }
 
         public override void Tick()
@@ -123,7 +141,7 @@ namespace CityBuilder.Game.Inspect
             }
             if (TransitHead(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
             // Keine (gültige) Auswahl: Stadtübersicht
-            Head(ui, "Info-Modus (C)", Tone.Accent, GameHud.CityName, "Stadtübersicht · Klick auf Gebäude, Fahrzeug oder Bauwerk");
+            Head(ui, "Stadtübersicht (C)", Tone.Accent, GameHud.CityName, "Klick auf Gebäude, Fahrzeug, Dienst oder Versorger wählt aus · × schließt");
         }
 
         void StandardHead(Ui ui, string chip, Tone tone, string title, string subtitle, bool canFollow, Color? dot = null,
