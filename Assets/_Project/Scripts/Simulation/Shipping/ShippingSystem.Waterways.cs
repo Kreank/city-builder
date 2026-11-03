@@ -294,12 +294,22 @@ namespace CityBuilder.Simulation.Shipping
         WaterwayCrossing CrossSegment(Waterway w, Vector2 p0, Vector2 c, Vector2 p2, float length, Func<float, float> heightAt, bool rail)
         {
             int n = Math.Clamp((int)MathF.Ceiling(length / 3f), 8, 256);
+            // nur Rinnen-Abschnitte, deren Rechteck die Kurve berührt (schnell bei vielen Straßen)
+            Bezier.Bounds(p0, c, p2, out var clo, out var chi);
+            var candidates = new List<int>();
+            for (int j = 0; j + 1 < w.Points.Length; j++)
+            {
+                var a = w.Points[j]; var b = w.Points[j + 1];
+                if (MathF.Max(a.X, b.X) < clo.X - 1f || MathF.Min(a.X, b.X) > chi.X + 1f || MathF.Max(a.Y, b.Y) < clo.Y - 1f || MathF.Min(a.Y, b.Y) > chi.Y + 1f) continue;
+                candidates.Add(j);
+            }
+            if (candidates.Count == 0) return null;
             var prev = p0;
             WaterwayCrossing result = null;
             for (int i = 1; i <= n && result == null; i++)
             {
                 var cur = Bezier.Evaluate(p0, c, p2, i / (float)n);
-                for (int j = 0; j + 1 < w.Points.Length; j++)
+                foreach (int j in candidates)
                 {
                     var a = w.Points[j]; var b = w.Points[j + 1];
                     if (MathF.Max(prev.X, cur.X) < MathF.Min(a.X, b.X) || MathF.Min(prev.X, cur.X) > MathF.Max(a.X, b.X)) continue;
