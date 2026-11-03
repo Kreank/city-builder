@@ -29,6 +29,8 @@ namespace CityBuilder.Game.Utilities
         GameObject ghost;
         MeshRenderer ghostRenderer;
         LineRenderer lineRenderer;
+        /// <summary>Vorschau der geplanten Masten (grün/blau = gültig, rot = kein zulässiger Standort).</summary>
+        readonly System.Collections.Generic.List<GameObject> poleGhosts = new System.Collections.Generic.List<GameObject>();
         GUIStyle infoStyle, labelStyle;
 
         bool placingLine;
@@ -132,6 +134,40 @@ namespace CityBuilder.Game.Utilities
         {
             if (ghost != null) ghost.SetActive(false);
             if (lineRenderer != null) lineRenderer.enabled = false;
+            HidePoles();
+        }
+
+        void HidePoles(int from = 0)
+        {
+            for (int i = from; i < poleGhosts.Count; i++) if (poleGhosts[i] != null) poleGhosts[i].SetActive(false);
+        }
+
+        /// <summary>Zeigt die von der Simulation geplanten Masten; ungültige rot.</summary>
+        void ShowPoles(LinePlan plan)
+        {
+            int n = plan.Kind == UtilityKind.Power ? plan.Poles.Count : 0;
+            while (poleGhosts.Count < n)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = "Pole Preview";
+                Destroy(go.GetComponent<Collider>());
+                go.transform.SetParent(transform, false);
+                go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                poleGhosts.Add(go);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                var pole = plan.Poles[i];
+                var go = poleGhosts[i];
+                go.SetActive(true);
+                float baseH = Mathf.Max(Ground(pole.Position), tool.Runner.World.Terrain.WaterLevel);
+                go.transform.SetPositionAndRotation(SimConvert.ToWorld(pole.Position, baseH + WireHeight * 0.5f), Quaternion.identity);
+                // Grundfläche des Masts (inkl. Rand) – so viel Platz belegt er
+                float foot = UtilitySystem.PoleFootprintHalf * 2f;
+                go.transform.localScale = new Vector3(foot, WireHeight, foot);
+                go.GetComponent<MeshRenderer>().sharedMaterial = pole.IsValid ? okMaterial : badMaterial;
+            }
+            HidePoles(n);
         }
 
         float Ground(SimVector2 p) => tool.Runner.World.Terrain.HeightAt(p);
@@ -139,6 +175,7 @@ namespace CityBuilder.Game.Utilities
         void UpdateFacility(SimVector2 p, bool clicked)
         {
             lineRenderer.enabled = false;
+            HidePoles();
             var plan = Utilities.PlanFacility(SelectedType, p, Rotation);
             ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid);
             var t = SelectedType;
@@ -155,29 +192,50 @@ namespace CityBuilder.Game.Utilities
             float offset = kind == UtilityKind.Power ? WireHeight : -PipeDepth;
             if (!placingLine)
             {
+                HidePoles();
                 // Nur Markierung am Cursor
                 lineRenderer.enabled = true;
                 lineRenderer.sharedMaterial = okMaterial;
                 lineRenderer.positionCount = 2;
                 lineRenderer.SetPosition(0, SimConvert.ToWorld(p, Ground(p)));
                 lineRenderer.SetPosition(1, SimConvert.ToWorld(p, Ground(p) + offset));
-                SetLabel($"{UtilityCatalog.LineName(kind)}: Startpunkt wählen{SnapText(snap)}", false, SimConvert.ToWorld(p, Ground(p) + WireHeight));
+                string hint = kind == UtilityKind.Power
+                    ? " · Stadtstraßen führen Strom schon mit – Leitung nur für Lücken/Überland"
+                    : " · Stadtstraßen führen Wasser schon mit – Rohr nur für Lücken";
+                SetLabel($"{UtilityCatalog.LineName(kind)}: Startpunkt wählen{SnapText(snap)}{hint}", false, SimConvert.ToWorld(p, Ground(p) + WireHeight));
                 if (clicked) { lineStart = p; placingLine = true; }
                 return;
             }
 
             var plan = Utilities.PlanLine(kind, lineStart, p);
-            const int n = 16;
             lineRenderer.enabled = true;
             lineRenderer.sharedMaterial = plan.IsValid ? okMaterial : badMaterial;
-            lineRenderer.positionCount = n + 1;
-            for (int i = 0; i <= n; i++)
+            ShowPoles(plan);
+            if (kind == UtilityKind.Power && plan.Poles.Count > 0)
             {
-                var q = SimVector2.Lerp(lineStart, p, i / (float)n);
-                lineRenderer.SetPosition(i, SimConvert.ToWorld(q, Ground(q) + offset));
+                // Seilverlauf über die geplanten Masten (Enden = Anschlusspunkte)
+                lineRenderer.positionCount = plan.Poles.Count + 2;
+                lineRenderer.SetPosition(0, SimConvert.ToWorld(lineStart, Ground(lineStart) + offset));
+                for (int i = 0; i < plan.Poles.Count; i++)
+                {
+                    var q = plan.Poles[i].Position;
+                    lineRenderer.SetPosition(i + 1, SimConvert.ToWorld(q, Ground(q) + offset));
+                }
+                lineRenderer.SetPosition(plan.Poles.Count + 1, SimConvert.ToWorld(p, Ground(p) + offset));
             }
+            else
+            {
+                const int n = 16;
+                lineRenderer.positionCount = n + 1;
+                for (int i = 0; i <= n; i++)
+                {
+                    var q = SimVector2.Lerp(lineStart, p, i / (float)n);
+                    lineRenderer.SetPosition(i, SimConvert.ToWorld(q, Ground(q) + offset));
+                }
+            }
+            string poles = kind == UtilityKind.Power ? $" · {plan.Poles.Count} Masten" : "";
             string text = plan.IsValid
-                ? $"{UtilityCatalog.LineName(kind)} · {plan.Length:0} m · {plan.Cost:0} €{SnapText(snap)} · RMB beenden"
+                ? $"{UtilityCatalog.LineName(kind)} · {plan.Length:0} m{poles} · {plan.Cost:0} €{SnapText(snap)} · RMB beenden"
                 : ErrorText(plan.Error);
             SetLabel(text, !plan.IsValid, SimConvert.ToWorld(p, Ground(p) + WireHeight));
             if (clicked && plan.IsValid)
@@ -189,6 +247,7 @@ namespace CityBuilder.Game.Utilities
 
         void UpdateRemove(SimVector2 p, bool clicked)
         {
+            HidePoles();
             var f = Utilities.FacilityAt(p, 2f);
             if (f != null)
             {
@@ -252,6 +311,11 @@ namespace CityBuilder.Game.Utilities
                 case UtilityBuildError.TooSteep: return $"Zu steil (max. {UtilitySystem.MaxFacilitySlope:0} m Höhenunterschied)";
                 case UtilityBuildError.TooShort: return "Zu kurz";
                 case UtilityBuildError.Duplicate: return "Diese Leitung gibt es schon";
+                case UtilityBuildError.PoleOnRoad:
+                    return $"Kein Maststandort: Masten nie auf Fahrbahn/Gehweg, Straße überspannen geht nur bis {UtilitySystem.MaxPoleSpan:0} m";
+                case UtilityBuildError.PoleOnWater: return $"Kein Maststandort: Wasser breiter als {UtilitySystem.MaxPoleSpan:0} m Spannweite";
+                case UtilityBuildError.PoleOnFacility: return "Kein Maststandort: Bauwerk im Weg";
+                case UtilityBuildError.PoleOnBuilding: return "Kein Maststandort: Gebäude im Weg (wird nicht abgerissen) – andere Trasse wählen";
                 default: return null;
             }
         }
@@ -303,7 +367,8 @@ namespace CityBuilder.Game.Utilities
                 return $"<color={c}>{UtilityCatalog.KindName(k)} {prod:0}/{dem:0} {UtilityCatalog.Unit(k)}</color>";
             }
             GUILayout.Label($"{Balance(UtilityKind.Power)}  ·  {Balance(UtilityKind.Water)}  ·  Unterhalt {u.TotalUpkeepPerDay:0} €/Tag  ·  " +
-                            "Stadtstraßen tragen Strom + Wasser mit · Leitungen schließen Lücken · Rohre liegen unterirdisch", infoStyle);
+                            "Stadtstraßen führen Strom + Wasser automatisch mit · freie Leitungen nur für Lücken/Überland " +
+                            $"(Masten neben der Straße, ≤ {UtilitySystem.MaxPoleSpan:0} m Abstand, belegen Platz) · Rohre liegen unterirdisch", infoStyle);
         }
 
         static string ShortName(UtilityFacilityType t)
