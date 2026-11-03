@@ -13,7 +13,7 @@ namespace CityBuilder.Simulation.Goods
     public sealed partial class GoodsSystem : ISaveable
     {
         public string SaveId => "goods";
-        public int SaveVersion => 2; // v2: Zeitmodell – Lkw-Startzeit (Verkehrszeit) double
+        public int SaveVersion => 3; // v2: Zeitmodell – Lkw-Startzeit (Verkehrszeit) double; v3: Förderung (Produktion lenken)
 
         public void Write(SaveWriter w)
         {
@@ -76,6 +76,7 @@ namespace CityBuilder.Simulation.Goods
             w.Int(st.DeliveredYesterday); w.Int(st.TruckFailedYesterday); w.Int(st.PlaceholderYesterday); w.Int(st.LostShipments);
             w.Int(st.Bankruptcies); w.Int(st.PurchasesYesterday); w.Int(st.SuccessfulPurchasesYesterday);
             w.Floats(st.TierWantedYesterday); w.Floats(st.TierBoughtYesterday); w.Double(st.TotalProfitYesterday);
+            w.Double(st.SubsidiesYesterday); // v3
             WriteTrade(w, TradeYesterday);
             WriteTrade(w, TradeTotal);
         }
@@ -131,8 +132,8 @@ namespace CityBuilder.Simulation.Goods
                 for (int k = 0; k < values.Length && k < mc; k++) if (savedIndex[k] >= 0) f.InputValue[savedIndex[k]] = values[k];
                 f.Productivity = r.Float(); f.SkillCoverage = r.Float(); f.DepositQuality = r.Float();
                 f.Cash = r.Double();
-                ReadLedger(r, f.Today);
-                ReadLedger(r, f.Yesterday);
+                ReadLedger(r, f.Today, version);
+                ReadLedger(r, f.Yesterday, version);
                 f.ProfitEma = r.Double(); f.RevenueEma = r.Double(); f.LossDays = r.Int();
                 if (byBuilding.ContainsKey(bid)) throw new SaveFormatException($"Firma {bid} doppelt.");
                 firms.Add(f);
@@ -169,6 +170,7 @@ namespace CityBuilder.Simulation.Goods
             st.DeliveredYesterday = r.Int(); st.TruckFailedYesterday = r.Int(); st.PlaceholderYesterday = r.Int(); st.LostShipments = r.Int();
             st.Bankruptcies = r.Int(); st.PurchasesYesterday = r.Int(); st.SuccessfulPurchasesYesterday = r.Int();
             r.FloatsInto(st.TierWantedYesterday); r.FloatsInto(st.TierBoughtYesterday); st.TotalProfitYesterday = r.Double();
+            st.SubsidiesYesterday = version >= 3 ? r.Double() : 0;
             ReadTrade(r, TradeYesterday);
             ReadTrade(r, TradeTotal);
         }
@@ -198,12 +200,14 @@ namespace CityBuilder.Simulation.Goods
         {
             w.Double(l.Revenue); w.Double(l.InputCost); w.Double(l.Wages); w.Double(l.Transport); w.Double(l.Purchases);
             w.Float(l.Produced); w.Float(l.Sold); w.Float(l.Exported); w.Float(l.Imported);
+            w.Double(l.Subsidy); // v3
         }
 
-        static void ReadLedger(SaveReader r, FirmLedger l)
+        static void ReadLedger(SaveReader r, FirmLedger l, int version)
         {
             l.Revenue = r.Double(); l.InputCost = r.Double(); l.Wages = r.Double(); l.Transport = r.Double(); l.Purchases = r.Double();
             l.Produced = r.Float(); l.Sold = r.Float(); l.Exported = r.Float(); l.Imported = r.Float();
+            l.Subsidy = version >= 3 ? r.Double() : 0; // v3: Förderung (Produktion lenken)
         }
 
         static void WriteTrade(SaveWriter w, TradeBalance t)

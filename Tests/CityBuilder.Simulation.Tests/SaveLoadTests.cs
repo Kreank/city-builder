@@ -111,6 +111,10 @@ namespace CityBuilder.Simulation.Tests
             w.Terrain.Terraform(new TerraformBrush(TerraformMode.Raise, new Vector2(-800, -600), 40f, 2f));
             w.Economy.SetTaxRate(TaxKind.Residential, 0.12f);
             w.Economy.SetTaxRate(TaxKind.Industry, 0.08f);
+            // Produktion lenken: Schwerpunkt + Förderung (Betriebswechsel, Förderbuchung im Determinismus-Test)
+            w.Policy.Paint(new Vector2(250, -40), 120f, Simulation.Goods.IndustryFocus.Processing);
+            w.Policy.SetSubsidy(Simulation.Goods.IndustryFocus.Processing, 2);
+            w.Policy.SetSubsidy(Simulation.Goods.IndustryFocus.ConsumerGoods, 1);
             Run(w, SimulationClock.TicksPerDay * (days - 1));
             return w;
         }
@@ -267,7 +271,7 @@ namespace CityBuilder.Simulation.Tests
             // Jeder Abschnitt bitgleich (alle registrierten Systeme)
             var ids = SaveRegistry.Collect(a).Select(s => s.SaveId).ToList();
             foreach (var id in new[] { "terrain", "environment", "resources", "roads", "rules", "city", "traffic", "citizens", "utilities",
-                                       "waterquality", "services", "media", "transit", "landvalue", "goods", "economy" })
+                                       "waterquality", "services", "media", "transit", "landvalue", "goods", "policy", "economy" })
                 Assert.Contains(id, ids);
             var sb = SaveRegistry.Collect(b).ToDictionary(s => s.SaveId);
             foreach (var s in SaveRegistry.Collect(a))

@@ -32,8 +32,20 @@ namespace CityBuilder.Simulation.Goods
             if (value > 0f) need /= value;
             // Kleine, stabile Streuung je Grundstück und Rezept (kein Zufallsstrom → unabhängig von der Reihenfolge)
             float jitter = (SimRandom.Hash(b.Id * 131 + seed, r.Index) & 0xFFFF) / 65535f * 0.25f;
-            return need * depositFactor + depositBonus + jitter;
+            float score = need * depositFactor + depositBonus + jitter;
+            return SiteModifier != null ? SiteModifier(b, r, score) : score; // Produktion lenken: Schwerpunkt + Förderung
         }
+
+        // --- Produktion lenken (Hook, gesetzt in SimulationWorld.CreateDefault → ProductionPolicy.SiteAdjust)
+        /// <summary>
+        /// Passt den Standort-Score eines Rezepts an (Schwerpunkt-Gebiet, Förderung). Wird nur für mögliche Rezepte gerufen
+        /// (Vorkommen unter der Mindestgüte bleibt −∞). null = unverändert.
+        /// </summary>
+        public Func<Building, Recipe, float, float> SiteModifier { get; set; }
+
+        /// <summary>Bester Betrieb für ein Grundstück nach aktueller Standortwahl (ohne <paramref name="exclude"/>) – für die Lenkung.</summary>
+        public Recipe SuggestIndustry(Building b, Recipe exclude = null) => ChooseIndustry(b, exclude);
+        // --- Ende Produktion lenken
 
         /// <summary>Wie dringend die Stadt mehr von diesem Gut herstellen sollte.</summary>
         static float NeedOf(GoodMarket m)

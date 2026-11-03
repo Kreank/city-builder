@@ -80,5 +80,7 @@ namespace CityBuilder.Simulation.Goods
         public readonly float[] TierBoughtYesterday = new float[4];
         /// <summary>Summe Gewinne/Verluste aller Firmen gestern.</summary>
         public double TotalProfitYesterday;
+        /// <summary>Produktion lenken: gestern an Firmen gezahlte Förderung (bucht die Stadtkasse als „Wirtschaftsförderung“).</summary>
+        public double SubsidiesYesterday;
     }
 }

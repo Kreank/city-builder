@@ -54,6 +54,11 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: eigene Vertragsstrafen und Kündigungsgebühren.</summary>
         PenaltiesPaid,
         // --- Ende Etappe 8
+
+        // --- Produktion lenken (hinten angefügt)
+        /// <summary>Ausgabe: Wirtschaftsförderung je Branche (Geld je Beschäftigtem an geförderte Firmen).</summary>
+        IndustrySubsidies,
+        // --- Ende Produktion lenken
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -67,7 +72,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.PenaltiesPaid + 1; // letzte Kategorie (Etappe 8 hinter ÖPNV)
+        public const int Count = (int)BudgetCategory.IndustrySubsidies + 1; // letzte Kategorie (Produktion lenken hinter Etappe 8)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -113,6 +118,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.TradePurchases: return "Handel: Einkauf";
                 case BudgetCategory.PenaltiesPaid: return "Vertragsstrafen (gezahlt)";
                 // --- Ende Etappe 8
+                case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
                 default: return c.ToString();
             }
         }

@@ -41,6 +41,7 @@ namespace CityBuilder.Simulation.Persistence
             Add(w.Transit);                 // ÖPNV: Haltestellen, Linien, Busse, Fahrgäste (nach Verkehr und Bürgern)
             Add(w.LandValue);               // Bodenwert, Stufen
             Add(w.Goods);                   // Firmen, Märkte, Lieferungen
+            Add(w.Policy);                  // Produktion lenken: Schwerpunkt-Raster, Förderstufen
             Add(w.Economy);                 // Stadtkasse
             Add(w.Trade);                   // Handel zwischen Ländern (nur mit Weltkarte), Grenzlager
             Add(w.Gateways);                // Außenanbindungen: Anschlüsse, Autobahn/Zubringer, Bahnkorridor, Zählungen
