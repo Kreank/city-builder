@@ -34,8 +34,11 @@ namespace CityBuilder.Simulation.Gateways
         /// </summary>
         public const float ThroughBase = 1f, ThroughPerImportance = 0.4f, ThroughMax = 5f;
 
-        /// <summary>Verkehrszählung am Anschluss: alle so viele Ticks.</summary>
-        public const int CountInterval = 4;
+        /// <summary>
+        /// Verkehrszählung am Anschluss: alle so viele Verkehrsschritte (2 s Verkehrszeit; ein Autobahn-Fahrzeug braucht für das
+        /// erste/letzte Stück ≥ 5 s, wird also sicher gesehen).
+        /// </summary>
+        public const int CountEverySteps = (int)(2f / Core.TimeModel.TrafficStepSeconds);
 
         /// <summary>Himmelsrichtung eines Vektors (x = Ost, y = Nord).</summary>
         public static string Compass(Vector2 d)

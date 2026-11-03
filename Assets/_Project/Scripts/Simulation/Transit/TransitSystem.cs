@@ -24,7 +24,7 @@ namespace CityBuilder.Simulation.Transit
     /// </para>
     /// Zeiten in Sekunden Verkehrszeit (<see cref="TrafficSystem.Time"/>). Deterministisch: Listen nach Id, kein Zufall.
     /// </summary>
-    public sealed partial class TransitSystem : ISimulationSystem, Economy.IUpkeepSource
+    public sealed partial class TransitSystem : ISimulationSystem, ISubstepSystem, Economy.IUpkeepSource
     {
         public int TickInterval => 1;
 
@@ -425,7 +425,7 @@ namespace CityBuilder.Simulation.Transit
             EnsureRoutes();
             CountVehicles();
             SpawnBuses();
-            if (now % 10 == 0) CheckWaiting();
+            CheckWaiting(); // Zeitmodell: jeden Tick (30 s Verkehrszeit), Geduld ≥ 150 s
             if (now % 20 == 0) SampleLoad();
             if (now % 5 == 0 && pendingFares > 0)
             {
@@ -434,6 +434,17 @@ namespace CityBuilder.Simulation.Transit
                 pendingFares = 0;
             }
             if (now % SimulationClock.TicksPerDay == 0) Daily();
+        }
+
+        /// <summary>
+        /// Zeitmodell: Busse werden auch zwischen den Kalender-Ticks eingesetzt (Abstand 4 s Verkehrszeit), solange die Routen
+        /// aktuell sind – sonst wartet das bis zum nächsten Tick (<see cref="EnsureRoutes"/>).
+        /// </summary>
+        public void Substep(SimulationWorld world)
+        {
+            if (lines.Count == 0 || routesDirty || orphansPending || routeRoadVersion != roads.Version) return;
+            CountVehicles();
+            SpawnBuses();
         }
 
         /// <summary>Routen neu berechnen, wenn sich Straßen oder Linien geändert haben.</summary>

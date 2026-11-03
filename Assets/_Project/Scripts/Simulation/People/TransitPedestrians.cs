@@ -12,22 +12,18 @@ namespace CityBuilder.Simulation.People
     /// Verbindet den ÖPNV mit der Fußgänger-Darstellung (<see cref="PedestrianPlanner.Transit"/>), liest nur:
     /// <list type="bullet">
     /// <item>Fahrgast wartet (<see cref="Passenger.WaitingAtStop"/>): zuerst der Fußweg zur Einstiegshaltestelle in
-    /// <b>Verkehrszeit</b> (ab <see cref="Passenger.StartTime"/>, Gehweglänge ÷ <see cref="TransitRules.WalkSpeed"/>, wie die
-    /// Planung im ÖPNV), danach steht er am Haltestellenpunkt auf dem Gehweg (leicht gestreut, Blick zur Straße).
-    /// Das Bürgersystem lässt ihn sofort warten – sitzt er schon im Bus, bevor der Fußweg sichtbar zu Ende ist, verschwindet er.</item>
+    /// <b>Verkehrszeit</b> von <see cref="Passenger.StartTime"/> bis zur Ankunft an der Haltestelle (<c>ReadyTime</c>: Luftlinie ×
+    /// Umweg ÷ Gehtempo – erst dann kann er einsteigen), danach steht er am Haltestellenpunkt auf dem Gehweg (leicht gestreut,
+    /// Blick zur Straße).</item>
     /// <item>Im Bus (<see cref="Passenger.Bus"/>): unsichtbar (der Bus ist sichtbar).</item>
     /// <item>Nach dem Aussteigen: Fußweg vom Endpunkt der Fahrt zum Ziel in den letzten Ticks vor der Ankunft – gleiche Formel
-    /// wie <c>CitizenSystem.OnRideEnded</c> (Luftlinie ÷ 1 500 m je Tick, Spielzeit). Die Fahrt selbst entfernt das
+    /// wie <c>CitizenSystem.OnRideEnded</c> (<see cref="CitizenSystem.EgressTicks"/>, Gehtempo in Verkehrszeit). Die Fahrt selbst entfernt das
     /// Bürgersystem beim Aussteigen; deshalb merkt sich diese Klasse die zuletzt beobachtete Fahrt je Bürger.</item>
     /// <item>Statistische Fahrgäste (ohne einzelne Fahrt) und unbeobachtete Fahrten: unsichtbar („im Bus“).</item>
     /// </list>
     /// </summary>
     public sealed class TransitPedestrians
     {
-        /// <summary>Wie <c>CitizenSystem.OtherMetersPerTick</c> (Fußweg vom Ziel-Halt, Spielzeit).</summary>
-        public const float EgressMetersPerTick = 1500f;
-        /// <summary>Wie <c>CitizenSystem.OutsideTicks</c> (Zuschlag bei Zielen außerhalb).</summary>
-        public const int OutsideTicks = 3;
         /// <summary>Streuung der Wartenden entlang der Straße (± m) und Abstand vom Gehweg-Mittelpunkt zur Bordsteinkante hin.</summary>
         public const float WaitSpread = 2.5f, TowardsCurb = 0.6f;
 
@@ -38,9 +34,11 @@ namespace CityBuilder.Simulation.People
         readonly PedestrianPlanner planner;
         Dictionary<int, Passenger> lastRide = new Dictionary<int, Passenger>();
         Dictionary<int, Passenger> nextRide = new Dictionary<int, Passenger>();
+        /// <summary>Kalenderzeit in Ticks inkl. Bruchteil, passend zu <see cref="TrafficSystem.Time"/> (Standard: <see cref="SimulationWorld.TickTime"/>).</summary>
+        public Func<double> TickTime;
 
         public TransitPedestrians(SimulationWorld world, PedestrianPlanner planner)
-            : this(world.Citizens, world.Transit, world.Traffic, world.Clock, planner) { }
+            : this(world.Citizens, world.Transit, world.Traffic, world.Clock, planner) { TickTime = () => world.TickTime; }
 
         public TransitPedestrians(CitizenSystem citizens, TransitSystem transit, TrafficSystem traffic, SimulationClock clock, PedestrianPlanner planner)
         {
@@ -82,15 +80,11 @@ namespace CityBuilder.Simulation.People
                 if (stop == null || !WaitPoint(stop, c.Id, out var p, out float h, out var facing)) return TransitPose.InVehicle;
                 if (ride.Leg == 0 && !c.Location.IsNone)
                 {
-                    // Fußweg zur Haltestelle in Verkehrszeit (Startzeit der Fahrt in Ticks zurückgerechnet)
-                    double startTick = clock.Tick - (traffic.Time - ride.StartTime) / TrafficSystem.Dt;
-                    float meters = ride.Plan.AccessMeters * 1.25f;
-                    if (planner.TryEndpoint(c.Location, out var from) && planner.TryPointEndpoint(p, h, out var to))
-                    {
-                        var route = planner.Route(from, to);
-                        if (route != null) meters = route.Length;
-                    }
-                    double endTick = startTick + meters / TransitRules.WalkSpeed / TrafficSystem.Dt;
+                    // Fußweg zur Haltestelle in Verkehrszeit: Abfahrt bis Ankunft an der Haltestelle (ReadyTime, erst dann
+                    // steigt der Fahrgast ein); Verkehrszeit → Kalender-Ticks über die Weltuhr (30 s je Tick)
+                    double nowTicks = TickTime != null ? TickTime() : clock.Tick;
+                    double startTick = nowTicks - (traffic.Time - ride.StartTime) / TimeModel.TrafficSecondsPerTick;
+                    double endTick = nowTicks - (traffic.Time - ride.ReadyTime) / TimeModel.TrafficSecondsPerTick;
                     if (time < endTick) return TransitPose.Walk(c.Location, default, Place.None, p, startTick, endTick);
                 }
                 return TransitPose.WaitingAt(p, h, facing);
@@ -98,9 +92,7 @@ namespace CityBuilder.Simulation.People
             // Ausgestiegen: Rest zu Fuß bis zur Ankunft (Planung des Bürgersystems in Spielticks)
             if (lastRide.TryGetValue(c.Id, out var done) && !done.IsActive && done.Outcome != RideOutcome.Cancelled)
             {
-                float rest = Vector2.Distance(done.EndPosition, done.Destination);
-                int ticks = Math.Max(1, (int)MathF.Ceiling(rest / EgressMetersPerTick));
-                if (c.Destination.IsOutside) ticks += OutsideTicks;
+                int ticks = CitizenSystem.EgressTicks(done.EndPosition, done.Destination, c.Destination.IsOutside);
                 long arrive = c.PlannedArrivalTick;
                 // Ausstieg an der Ziel-Haltestelle: auf deren Gehweg beginnen (EndPosition liegt auf der Straßenmitte)
                 var from = done.EndPosition;

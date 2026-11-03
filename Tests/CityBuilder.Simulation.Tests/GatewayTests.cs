@@ -472,6 +472,21 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
+        public void OldWorldSection_WithoutGatewaySwitches_LoadsWithSwitchesOff()
+        {
+            var w = SimulationWorld.CreateDefault(Settings());
+            var c = SaveGame.Capture(w);
+            var ws = c.Find(SaveGame.WorldSectionId);
+            Assert.Equal(3, ws.Version);
+            c.Set(ws.Id, 2, ws.Data.Take(ws.Data.Length - 3).ToArray()); // v2: ohne die drei Gateway-Schalter
+            var old = SaveGame.Restore(SaveContainer.FromBytes(c.ToBytes()));
+            Assert.False(old.Settings.PrebuiltConnections);
+            Assert.False(old.Settings.RequireGatewayForMoveIn);
+            Assert.False(old.Settings.RequireGatewayForTrade);
+            Assert.Equal(w.Roads.SegmentCount, old.Roads.SegmentCount); // Straßen kommen aus dem Stand
+        }
+
+        [Fact]
         public void Generation_IsDeterministic()
         {
             var a = SimulationWorld.CreateDefault(Settings(terrain: true));

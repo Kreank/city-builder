@@ -24,8 +24,8 @@ namespace CityBuilder.Simulation.Persistence
         public const string GameVersion = "0.6";
         /// <summary>Abschnitt mit Einstellungen, Seed und Uhr – wird vor allen anderen gelesen (baut die Welt).</summary>
         public const string WorldSectionId = "world";
-        /// <summary>v2: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse).</summary>
-        const int WorldSectionVersion = 2;
+        /// <summary>v2: Zeitmodell (Verkehrsschritt im laufenden Tick), v3: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse).</summary>
+        const int WorldSectionVersion = 3;
 
         // ------------------------------------------------------------ Speichern
 
@@ -116,14 +116,14 @@ namespace CityBuilder.Simulation.Persistence
             if (ws.Version > WorldSectionVersion) throw new SaveLoadException("Der Spielstand stammt aus einer neueren Spielversion (Weltdaten).");
 
             WorldSettings settings;
-            int seed;
+            int seed, substep;
             long tick;
             try
             {
                 using (var ms = new MemoryStream(ws.Data, writable: false))
                 {
                     var r = new SaveReader(ms);
-                    ReadWorld(r, ws.Version, out settings, out seed, out tick);
+                    ReadWorld(r, ws.Version, out settings, out seed, out tick, out substep);
                 }
             }
             catch (SaveFormatException e) { throw new SaveLoadException($"Weltdaten beschädigt: {e.Message}", e); }
@@ -135,6 +135,7 @@ namespace CityBuilder.Simulation.Persistence
                 throw new SaveLoadException("Weltdaten ungültig (Welt kann nicht erzeugt werden).", e);
             }
             world.Clock.Restore(tick);
+            world.RestoreSubstep(substep);
 
             var saveables = SaveRegistry.Collect(world);
             foreach (var s in saveables)
@@ -194,13 +195,14 @@ namespace CityBuilder.Simulation.Persistence
             }
             w.Int(world.Seed);
             w.Long(world.Clock.Tick);
-            // v2 Gateways
+            w.Int(world.SubstepInTick); // v2
+            // v3 Gateways
             w.Bool(s.PrebuiltConnections);
             w.Bool(s.RequireGatewayForMoveIn);
             w.Bool(s.RequireGatewayForTrade);
         }
 
-        static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick)
+        static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick, out int substep)
         {
             s = new WorldSettings
             {
@@ -223,7 +225,8 @@ namespace CityBuilder.Simulation.Persistence
                 };
             seed = r.Int();
             tick = r.Long();
-            if (version >= 2) // Gateways (v1: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
+            substep = version >= 2 ? r.Int() : 0; // v1: immer auf der Tick-Grenze gespeichert
+            if (version >= 3) // Gateways (v1/v2: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
             {
                 s.PrebuiltConnections = r.Bool();
                 s.RequireGatewayForMoveIn = r.Bool();

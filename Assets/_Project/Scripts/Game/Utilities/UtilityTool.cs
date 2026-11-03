@@ -292,7 +292,10 @@ namespace CityBuilder.Game.Utilities
             lineRenderer.enabled = false;
             HidePoles();
             var plan = Utilities.PlanFacilityAligned(SelectedType, p, Rotation); // UX: Kraftwerke/Wasserturm zur Straße
-            ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid, SelectedType.NeedsRoadFront);
+            // Vorschau mit dem echten Modell in Baudrehung (sonst Quader)
+            var catalog = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+            ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid, SelectedType.NeedsRoadFront,
+                catalog != null ? catalog.Facility(SelectedType.Id) : null);
             var t = SelectedType;
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°";
             string power = t.IsSubstation ? $"Umspannkapazität {t.Capacity / 1000f:0.#} MW" : $"{t.Capacity:0} {UtilityCatalog.Unit(t.Kind)}";
@@ -484,15 +487,22 @@ namespace CityBuilder.Game.Utilities
             if (clicked) Utilities.DemolishLine(line.Id);
         }
 
-        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront)
+        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront,
+                       GameObject model = null)
         {
+            if (frontMarker == null) frontMarker = new PlacementGhost(transform, "Utility Front");
+            if (model != null)
+            {
+                ghost.SetActive(false);
+                frontMarker.ShowModel(model, pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront);
+                return;
+            }
             ghost.SetActive(true);
             ghost.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height + tall * 0.5f),
                 Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
             ghost.transform.localScale = new Vector3(width, tall, depth);
             ghostRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
             // UX: Vorderseite (Zufahrt) als Streifen + Pfeil – nur bei Bauwerken mit Straßenfront
-            if (frontMarker == null) frontMarker = new PlacementGhost(transform, "Utility Front");
             if (showFront) frontMarker.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial);
             else frontMarker.Hide();
         }

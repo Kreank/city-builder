@@ -381,6 +381,54 @@ def pool(coll, x, y, w, d):
             box(coll, (0.6, 0.1, 0.9), (x + w / 2 - 0.5, y - d / 2 - 0.3, 0.3), "metal")]
 
 
+def loft(coll, sections, colors, top=None, bottom=None, name="loft"):
+    """Verbindet Umrisse gleicher Punktzahl: sections = [(pts2d, z), ...] von unten nach oben.
+    colors[i] faerbt das Band zwischen Abschnitt i und i+1; top/bottom = Deckel-Farben (None = offen)."""
+    bm = bmesh.new()
+    rings = [[bm.verts.new((x, y, z)) for (x, y) in pts] for pts, z in sections]
+    n = len(rings[0])
+    for k in range(len(rings) - 1):
+        faces = []
+        for i in range(n):
+            j = (i + 1) % n
+            faces.append(bm.faces.new([rings[k][i], rings[k][j], rings[k + 1][j], rings[k + 1][i]]))
+        paint(bm, colors[k], faces)
+    if bottom:
+        paint(bm, bottom, [bm.faces.new(rings[0][::-1])])
+    if top:
+        paint(bm, top, [bm.faces.new(rings[-1])])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return mesh_obj(name, bm, coll, painted=True)
+
+
+def ship_outline(L, B, bow=0.25, stern_round=0.0, n_bow=4):
+    """Draufsicht eines Rumpfes, Bug nach -Y. Gegen den Uhrzeigersinn, Punktzahl fest (2*n_bow + 4)."""
+    pts = [(B / 2, L / 2 - stern_round), (B / 2 * (1 - stern_round * 0.3), L / 2), (-B / 2 * (1 - stern_round * 0.3), L / 2),
+           (-B / 2, L / 2 - stern_round)]
+    yb = -L / 2 + L * bow
+    for k in range(n_bow + 1):
+        t = k / n_bow
+        pts.append((-B / 2 * math.cos(t * math.pi / 2) ** 0.8, yb - (yb + L / 2) * math.sin(t * math.pi / 2)))
+    for k in range(n_bow - 1, -1, -1):
+        t = k / n_bow
+        pts.append((B / 2 * math.cos(t * math.pi / 2) ** 0.8, yb - (yb + L / 2) * math.sin(t * math.pi / 2)))
+    # doppelten Bugpunkt (t=1 links/rechts identisch) vermeiden
+    out = []
+    for p in pts:
+        if not out or (abs(out[-1][0] - p[0]) > 1e-6 or abs(out[-1][1] - p[1]) > 1e-6):
+            out.append(p)
+    return out
+
+
+def hull(coll, L, B, draft, freeboard, hull_col="steel_blue", deck="wood", bottom_col="red", bow=0.25, sheer=0.0):
+    """Schiffsrumpf: Unterwasserteil (rot) bis -draft, Bordwand bis freeboard, Deck als Deckel."""
+    o = ship_outline(L, B, bow)
+    lo = [(x * 0.72, y * 0.92) for x, y in o]
+    mid = [(x * 0.97, y * 0.99) for x, y in o]
+    return loft(coll, [(lo, -draft), (mid, 0.0), (o, 0.25), (o, freeboard)], [bottom_col, "white", hull_col],
+                top=deck, bottom=bottom_col, name="hull")
+
+
 def place_at(parts, x, y, rot):
     m = Matrix.Translation((x, y, 0)) @ Matrix.Rotation(math.radians(rot), 4, 'Z')
     for o in parts:

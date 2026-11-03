@@ -7,8 +7,10 @@ namespace CityBuilder.Simulation.Core
     /// </summary>
     public sealed class SimulationClock
     {
-        /// <summary>1 Tick = 6 Spielminuten.</summary>
-        public const int TicksPerDay = 240;
+        /// <summary>1 Tick = 6 Spielminuten (s. <see cref="TimeModel"/>).</summary>
+        public const int TicksPerDay = TimeModel.TicksPerDay;
+        /// <summary>Ticks je Spielstunde (10).</summary>
+        public const int TicksPerHour = TimeModel.TicksPerHour;
         public const int DaysPerYear = 360;
 
         public long Tick { get; private set; }

@@ -17,7 +17,7 @@ namespace CityBuilder.Simulation.Traffic
     public sealed partial class TrafficSystem : ISaveable, IBeforeSave
     {
         public string SaveId => "traffic";
-        public int SaveVersion => 1;
+        public int SaveVersion => 2; // v2: Zeitmodell – Verkehrszeit aus den Schritten (double), Fahrzeugzeiten double
 
         /// <summary>
         /// Ausstehende Spurgraph-Änderungen (Straßenbau ohne Tick dazwischen, z. B. im Pausenmodus) vor dem Speichern
@@ -30,7 +30,6 @@ namespace CityBuilder.Simulation.Traffic
         {
             rng.Write(w);
             w.Long(tick);
-            w.Float(Time);
             w.Int(nextId);
             w.Float(Demand);
             w.Float(ThroughTrafficRate);
@@ -78,7 +77,7 @@ namespace CityBuilder.Simulation.Traffic
                 w.Int(v.TripId);
                 w.Int(v.DestinationSegmentId);
                 w.Float(v.DestinationT);
-                w.Float(v.StartTime);
+                w.Double(v.StartTime);
                 w.Float(v.WaitTime);
                 w.Float(v.StopLineWait);
                 w.Float(v.LaneChangeCooldown);
@@ -95,7 +94,7 @@ namespace CityBuilder.Simulation.Traffic
                 w.Bool(v.IsScheduled);
                 w.Int(v.TransitId);
                 w.Bool(v.AtStop);
-                w.Float(v.HoldUntil);
+                w.Double(v.HoldUntil);
                 w.Byte(v.DestinationDirection);
             }
 
@@ -172,7 +171,7 @@ namespace CityBuilder.Simulation.Traffic
 
             rng.Read(r);
             tick = r.Long();
-            Time = r.Float();
+            if (version < 2) r.Float(); // v1: Verkehrszeit als float (= tick × Dt)
             nextId = r.Int();
             Demand = r.Float();
             ThroughTrafficRate = r.Float();
@@ -231,7 +230,7 @@ namespace CityBuilder.Simulation.Traffic
                 v.TripId = r.Int();
                 v.DestinationSegmentId = r.Int();
                 v.DestinationT = r.Float();
-                v.StartTime = r.Float();
+                v.StartTime = version >= 2 ? r.Double() : r.Float();
                 v.WaitTime = r.Float();
                 v.StopLineWait = r.Float();
                 v.LaneChangeCooldown = r.Float();
@@ -247,7 +246,7 @@ namespace CityBuilder.Simulation.Traffic
                 v.IsScheduled = r.Bool();
                 v.TransitId = r.Int();
                 v.AtStop = r.Bool();
-                v.HoldUntil = r.Float();
+                v.HoldUntil = version >= 2 ? r.Double() : r.Float();
                 v.DestinationDirection = r.Byte();
                 if (byId.ContainsKey(v.Id)) throw new SaveFormatException($"Fahrzeug {v.Id} doppelt.");
                 byId[v.Id] = v;

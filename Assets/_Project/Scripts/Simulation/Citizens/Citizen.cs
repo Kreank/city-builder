@@ -177,6 +177,8 @@ namespace CityBuilder.Simulation.Citizens
 
         /// <summary>Luftlinie der laufenden Fahrt (m).</summary>
         internal float TripDistance;
+        /// <summary>Luftlinie der laufenden Fahrt (m) – lesend, z. B. zu Fuß (≤ <see cref="Core.TimeModel.WalkMaxMeters"/>) oder Rad.</summary>
+        public float TripAirDistance => TripDistance;
         /// <summary>Luftlinie Wohnung → Arbeit (m), 0 = kein Pendeln.</summary>
         public float CommuteMeters { get; internal set; }
         internal int LastLeisureDay = -1;

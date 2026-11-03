@@ -30,7 +30,8 @@ namespace CityBuilder.Game.UI
             var w = runner.World;
             var c = w.Clock;
             var s = w.Traffic.Stats;
-            string speed = runner.IsPaused ? "<color=#ff8080>PAUSE</color>" : $"{runner.SpeedMultiplier}x";
+            string speed = runner.IsPaused ? "<color=#ff8080>PAUSE</color>" : $"{runner.SpeedIndex} (Sim {runner.LastFrameSimMilliseconds:0.0} ms" +
+                (runner.DroppedStepsLastFrame > 0 ? $", <color=#ff8080>Überlast: {runner.DroppedStepsLastFrame} Schritte ausgelassen</color>)" : ")");
             string snap = !roadTool.SnapEnabled ? "<color=#ff8080>aus</color>"
                 : roadTool.SnapActive ? $"{RoadTool.AngleSnapStep:0}° / {RoadTool.LengthSnapStep:0} m"
                 : "<color=#ffd060>frei (Strg)</color>";

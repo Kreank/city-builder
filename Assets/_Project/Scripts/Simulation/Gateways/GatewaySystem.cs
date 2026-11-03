@@ -15,7 +15,7 @@ namespace CityBuilder.Simulation.Gateways
     /// (Zuzug über Anschlüsse, Handel Richtung Partnerland, Durchgangsverkehr, freigehaltener Bahnkorridor) und zählt
     /// Verkehr/Handel je Anschluss.
     /// </summary>
-    public sealed partial class GatewaySystem : ISimulationSystem
+    public sealed partial class GatewaySystem : ISimulationSystem, ISubstepSystem
     {
         public int TickInterval => 1;
 
@@ -365,9 +365,14 @@ namespace CityBuilder.Simulation.Gateways
         {
             long now = w.Clock.Tick;
             if (now % SimulationClock.TicksPerDay == 0) RollDay();
-            if (now % GatewayRules.CountInterval == 0) CountVehicles();
             CountShipments();
-            if (now % 10 == 0) CountHousing();
+            if (now % TimeModel.TicksPerHour == 0) CountHousing();
+        }
+
+        /// <summary>Verkehrsschritt: Fahrzeuge an den Anschlüssen zählen (alle <see cref="GatewayRules.CountEverySteps"/> Schritte).</summary>
+        public void Substep(SimulationWorld w)
+        {
+            if (w.SubstepInTick % GatewayRules.CountEverySteps == 0) CountVehicles();
         }
 
         void RollDay()

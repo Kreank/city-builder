@@ -66,7 +66,7 @@ namespace CityBuilder.Simulation.Citizens
                     if (spot.IsValid)
                     {
                         park = MathF.Max(park, spot.Quality);
-                        walk = 2 * Math.Max(1, (int)MathF.Ceiling(Vector2.Distance(home.Entrance, spot.Position) / OtherMetersPerTick));
+                        walk = 2 * Core.TimeModel.WalkTicks(Vector2.Distance(home.Entrance, spot.Position)); // Gehtempo, Verkehrszeit
                     }
                     c.Activity = Activity.Leisure;
                     c.LeisureParkId = spot.IsValid ? spot.FacilityId : 0;

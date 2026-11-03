@@ -14,8 +14,8 @@ namespace CityBuilder.Game.People
     /// Zeichnet sichtbare Bürger (zu Fuß unterwegs, im Park, Spaziergang, vor dem Laden, an der Haustür) per GPU-Instancing
     /// ohne GameObjects. Zustand und Position kommen aus dem <see cref="PedestrianPlanner"/> (Simulation, rein lesend):
     /// Fußwege werden zwischen <see cref="Citizen.TripStartTick"/> und <see cref="Citizen.PlannedArrivalTick"/> entlang der
-    /// Gehwegroute interpoliert (Zeit = Tick + <see cref="SimulationRunner.TickAlpha"/>), die Geschwindigkeit ergibt sich aus
-    /// Routenlänge / Fahrzeit. Leistung: Vorprüfung je Bürger über Start/Ziel, nur in Kameranähe (≤ <see cref="FarDistance"/>,
+    /// Gehwegroute interpoliert (Zeit = <see cref="SimulationRunner.GameTickTime"/>, Ticks inkl. Verkehrsschritten) mit echtem
+    /// Gehtempo in Verkehrszeit (Zeitmodell, ≈ 1,3 m/s); Schrittfrequenz über <see cref="SimulationRunner.AnimationTimeScale"/>. Leistung: Vorprüfung je Bürger über Start/Ziel, nur in Kameranähe (≤ <see cref="FarDistance"/>,
     /// Sichtkegel), höchstens <see cref="MaxVisible"/> (nächste zuerst), volle Figur mit schwingenden Gliedern bis
     /// <see cref="NearDistance"/>, darüber zwei Quader ohne Schatten; neue Routen höchstens <see cref="RouteBudgetPerFrame"/>
     /// je Frame (Cache je Start/Ziel im Planer).
@@ -197,11 +197,11 @@ namespace CityBuilder.Game.People
             }
             planner.Transit = TransitHook ?? (transitPeople != null ? transitPeople.PoseOf : (Func<Citizen, double, TransitPose>)null);
             planner.RouteBudget = RouteBudgetPerFrame;
-            if (!runner.IsPaused) animClock += Time.deltaTime;
+            animClock += Time.deltaTime * runner.AnimationTimeScale; // Zeitmodell: Schritte folgen der Verkehrszeit (begrenzt)
 
             var cam = Camera.main;
             long tick = world.Clock.Tick;
-            double time = tick + runner.TickAlpha;
+            double time = runner.GameTickTime; // Ticks inkl. Verkehrsschritt-Bruchteil (Fußwege in Verkehrszeit)
             TrackLeisure(world, tick);
             if (cam == null) return;
 
@@ -342,7 +342,7 @@ namespace CityBuilder.Game.People
                 pos += new Vector3(PedestrianPlanner.Unit(id, 43) - 0.5f, 0f, PedestrianPlanner.Unit(id, 44) - 0.5f) * 0.8f;
             var rot = Quaternion.LookRotation(dir);
 
-            // Gang: Schrittfrequenz in Echtzeit (nicht im Zeitraffer der Simulation), Wippen
+            // Gang: Schrittfrequenz in Verkehrszeit, begrenzt auf AnimationTimeScale (kein Flimmern im Zeitraffer), Wippen
             bool walking = pose.Kind == PedestrianActivity.Walking;
             PeopleFigures.GaitOf(group, out float stepHz, out float legSwing);
             float phase = animClock * stepHz * Mathf.PI * 2f + PedestrianPlanner.Unit(id, 45) * 6.2832f;
@@ -485,7 +485,7 @@ namespace CityBuilder.Game.People
             if (c.Activity == Activity.Leisure) leisureSince.TryGetValue(c.Id, out since);
             int budget = planner.RouteBudget;
             planner.RouteBudget = Math.Max(budget, 2);
-            var pose = planner.Pose(c, runner.World.Clock.Tick + runner.TickAlpha, since);
+            var pose = planner.Pose(c, runner.GameTickTime, since);
             planner.RouteBudget = budget;
             if (!pose.IsVisible) return false;
             position = SimConvert.ToWorld(pose.Position, pose.Height + 0.9f);

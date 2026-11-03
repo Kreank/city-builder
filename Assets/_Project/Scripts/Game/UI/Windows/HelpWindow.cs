@@ -94,7 +94,7 @@ namespace CityBuilder.Game.UI.Windows
             using (ui.Fields())
             {
                 ui.Field("Zeit", $"Jahr {c.Year + 1}, Tag {c.DayOfYear + 1} · {c.Hour:00}:{c.Minute:00} · " +
-                                 (Runner.IsPaused ? "Pause" : $"{Runner.SpeedMultiplier}×"));
+                                 (Runner.IsPaused ? "Pause" : $"Tempo {Runner.SpeedIndex} (Sim {Runner.LastFrameSimMilliseconds:0.0} ms/Frame)"));
                 string snap = !Tool.SnapEnabled ? "aus" : Tool.SnapActive ? $"{RoadTool.AngleSnapStep:0}° / {RoadTool.LengthSnapStep:0} m" : "frei (Strg)";
                 ui.Field("Straßen / Knoten", $"{w.Roads.SegmentCount} / {w.Roads.NodeCount} · Einrasten {snap}");
                 ui.Field("Lärm am Cursor", Tool.HasCursor ? $"{w.Environment.Noise.Sample(Tool.Cursor) * 100f:0} %" : "–");

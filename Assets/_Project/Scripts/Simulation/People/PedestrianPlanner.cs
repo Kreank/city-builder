@@ -31,8 +31,9 @@ namespace CityBuilder.Simulation.People
     /// Bürgers aus den lesenden Abfragen des Bürgersystems:
     /// <list type="bullet">
     /// <item>Platzhalter-Fahrt (<see cref="Activity.Travelling"/>, kein Auto): entlang der Route zwischen
-    /// <see cref="Citizen.TripStartTick"/> und <see cref="Citizen.PlannedArrivalTick"/>; die Geschwindigkeit folgt aus
-    /// Routenlänge / Fahrzeit (die Simulation rechnet 15 km/h Luftlinie) – Ankunft und Ankunftszeit passen so immer.</item>
+    /// <see cref="Citizen.TripStartTick"/> und <see cref="Citizen.PlannedArrivalTick"/> mit echtem Gehtempo
+    /// (<see cref="Core.TimeModel.WalkSpeed"/> in Verkehrszeit, nur schneller, wenn die Route länger ist, als die geplante Zeit
+    /// erlaubt; danach Warten am Ziel). Rad/Sonstiges (Luftlinie &gt; <see cref="Core.TimeModel.WalkMaxMeters"/>) bleibt unsichtbar.</item>
     /// <item>Park (<see cref="Citizen.LeisureParkId"/>): Hinweg (wenn der Beginn bekannt ist), Aufenthalt auf der Parkfläche,
     /// Rückweg in den letzten Ticks vor <see cref="Citizen.BusyUntilTick"/> (Fußweg-Ticks wie im Bürgersystem).</item>
     /// <item>Spaziergang im Viertel: hin und her auf dem eigenen Gehweg. Einkauf: die letzten Ticks vor dem Laden.
@@ -42,15 +43,13 @@ namespace CityBuilder.Simulation.People
     /// </summary>
     public sealed class PedestrianPlanner
     {
-        /// <summary>Gehtempo, mit dem das Bürgersystem die Fußwege zum Park einrechnet (= Platzhalter-Fahrt 15 km/h je 6 min).</summary>
-        public const float ParkWalkMetersPerTick = 1500f;
         /// <summary>So viele Ticks vor Ende des Einkaufs steht der Bürger vor dem Laden.</summary>
         public const int ShopLingerTicks = 3;
         /// <summary>So lange (Ticks) nach der Ankunft zu Hause steht der Bürger noch vor der Tür.</summary>
         public const int DoorTicks = 2;
-        /// <summary>Spaziergang im Viertel: Länge des Gehwegstücks (m) und Dauer eines Hin-und-zurück (Ticks).</summary>
+        /// <summary>Spaziergang im Viertel: Länge des Gehwegstücks (m) und Dauer eines Hin-und-zurück (Ticks, ≈ 1,1 m/s Verkehrszeit).</summary>
         public const float StrollLength = 40f;
-        public const float StrollPeriodTicks = 8f;
+        public const float StrollPeriodTicks = 2f * StrollLength / 1.1f / Core.TimeModel.TrafficSecondsPerTick;
         /// <summary>Höchstzahl gespeicherter Routen (danach wird der Cache geleert).</summary>
         public int MaxCachedRoutes = 30000;
 
@@ -221,7 +220,7 @@ namespace CityBuilder.Simulation.People
                 {
                     if (!Endpoint(transit.WalkFrom, transit.WalkFromPoint, out var a) || !Endpoint(transit.WalkTo, transit.WalkToPoint, out var b))
                         return PedestrianPose.Hidden;
-                    return Walk(Route(a, b), transit.WalkStart, transit.WalkEnd, time, PedestrianSpot.Trip);
+                    return WalkAtPace(Route(a, b), transit.WalkStart, transit.WalkEnd, time, PedestrianSpot.Trip);
                 }
             }
 
@@ -231,7 +230,8 @@ namespace CityBuilder.Simulation.People
                 {
                     if (c.HasCarTrip || c.Mode == TravelMode.Car) return PedestrianPose.Hidden; // sichtbar als Auto
                     if (!TryEndpoint(c.Location, out var a) || !TryEndpoint(c.Destination, out var b)) return PedestrianPose.Hidden;
-                    return Walk(Route(a, b), c.TripStartTick, c.PlannedArrivalTick, time, PedestrianSpot.Trip);
+                    if (Vector2.Distance(a.Door, b.Door) > Core.TimeModel.WalkMaxMeters) return PedestrianPose.Hidden; // Rad/Sonstiges
+                    return WalkAtPace(Route(a, b), c.TripStartTick, c.PlannedArrivalTick, time, PedestrianSpot.Trip);
                 }
                 case Activity.Shopping:
                 {
@@ -285,6 +285,21 @@ namespace CityBuilder.Simulation.People
             };
         }
 
+        /// <summary>
+        /// Zeitmodell: Gehen mit echtem Tempo (<paramref name="metersPerSecond"/> Verkehrszeit, Standard
+        /// <see cref="Core.TimeModel.WalkSpeed"/>) ab <paramref name="start"/> (Ticks); reicht die Zeit bis
+        /// <paramref name="end"/> dafür nicht, schneller (Ankunft spätestens bei <paramref name="end"/>). Danach steht die
+        /// Figur am Ziel (Fortschritt 1).
+        /// </summary>
+        public static PedestrianPose WalkAtPace(PedestrianRoute route, double start, double end, double time, PedestrianSpot spot,
+                                                float metersPerSecond = Core.TimeModel.WalkSpeed)
+        {
+            if (route == null) return PedestrianPose.Hidden;
+            double available = Math.Max(1e-6, end - start);
+            double needed = route.Length / Math.Max(0.1, metersPerSecond) / Core.TimeModel.TrafficSecondsPerTick;
+            return Walk(route, start, start + Math.Min(available, needed), time, spot);
+        }
+
         static bool OnCrossing(PedestrianRoute r, float d)
         {
             // Abschnitt [i, i+1] liegt auf der Fahrbahn, wenn beide Enden Querungspunkte sind
@@ -305,7 +320,7 @@ namespace CityBuilder.Simulation.People
 
         /// <summary>Fußweg-Ticks je Richtung, wie sie das Bürgersystem beim Parkbesuch in die Dauer einrechnet.</summary>
         public static int ParkWalkTicks(Vector2 homeEntrance, Vector2 parkPosition) =>
-            Math.Max(1, (int)MathF.Ceiling(Vector2.Distance(homeEntrance, parkPosition) / ParkWalkMetersPerTick));
+            Core.TimeModel.WalkTicks(Vector2.Distance(homeEntrance, parkPosition));
 
         PedestrianPose ParkPose(Citizen c, double time, long since)
         {
@@ -318,8 +333,8 @@ namespace CityBuilder.Simulation.People
             double back = end - walk;
             // Platz des Bürgers auf der Parkfläche (fest je Bürger) + kleine Runde
             var spot = ParkSpot(park, c.Id, time);
-            if (time >= back) return Walk(Route(pe, he), back, end, time, PedestrianSpot.Park);
-            if (since != long.MinValue && time < since + walk) return Walk(Route(he, pe), since, since + walk, time, PedestrianSpot.Park);
+            if (time >= back) return WalkAtPace(Route(pe, he), back, end, time, PedestrianSpot.Park);
+            if (since != long.MinValue && time < since + walk) return WalkAtPace(Route(he, pe), since, since + walk, time, PedestrianSpot.Park);
             // Vom Ende des Hinwegs (Parkmitte) zum eigenen Platz schlendern bzw. vor dem Rückweg zurück zur Mitte
             float blend = 1f;
             if (since != long.MinValue) blend = (float)Math.Clamp(time - (since + walk), 0.0, 1.0);

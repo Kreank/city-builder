@@ -73,11 +73,11 @@ namespace CityBuilder.Simulation.Traffic
             return info;
         }
 
-        public LightState LightFor(JunctionInfo j, int approach, float time)
+        public LightState LightFor(JunctionInfo j, int approach, double time)
         {
             if (j.Control != JunctionControl.TrafficLights || j.Phases.Count == 0) return LightState.Green;
             float cycle = j.Phases.Count * j.GreenSeconds;
-            float t = (time + j.PhaseOffset) % cycle;
+            float t = (float)((time + j.PhaseOffset) % cycle);
             int phase = (int)(t / j.GreenSeconds);
             if (phase >= j.Phases.Count) phase = j.Phases.Count - 1;
             if (!j.Phases[phase].Contains(approach)) return LightState.Red;

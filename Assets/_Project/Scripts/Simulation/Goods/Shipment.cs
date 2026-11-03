@@ -47,7 +47,7 @@ namespace CityBuilder.Simulation.Goods
         /// <summary>Fahrt-Id im Verkehr (negativ, damit sie nicht mit Bürgerfahrten kollidiert; 0 = Platzhalter).</summary>
         public int TripId { get; internal set; }
         /// <summary>Verkehrszeit beim Start des Lkw (s) – für die echten Transportkosten.</summary>
-        public float StartTrafficTime { get; internal set; }
+        public double StartTrafficTime { get; internal set; }
         // Warteschlange der Lkw-Abfahrt
         internal long LaunchTick;
         internal int FallbackTicks;

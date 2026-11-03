@@ -30,11 +30,12 @@ namespace CityBuilder.Simulation.Traffic
     /// Verkehrssimulation: Bürgerfahrten zwischen Gebäudezufahrten/Außenanschlüssen (<see cref="RequestTrip"/>)
     /// und Durchgangsverkehr zwischen Außenanschlüssen am Kartenrand; bewegt Fahrzeuge spurgenau
     /// (Fahrzeugfolgemodell IDM), wählt Spuren/Spurwechsel, beachtet Vorfahrt, Schilder und Ampeln.
-    /// Verkehrszeit ist von der Kalenderzeit entkoppelt: 1 Tick = <see cref="Dt"/> Sekunden Fahrzeit.
+    /// Zeitmodell (<see cref="TimeModel"/>): ein Verkehrsschritt (<see cref="Substep"/>) = <see cref="Dt"/> Sekunden Fahrzeit,
+    /// <see cref="TimeModel.TrafficStepsPerTick"/> Schritte je Kalender-Tick (30 s Verkehrszeit = 6 Spielminuten).
     /// </summary>
-    public sealed partial class TrafficSystem : ISimulationSystem
+    public sealed partial class TrafficSystem : ISimulationSystem, ISubstepSystem
     {
-        public const float Dt = 0.25f;
+        public const float Dt = TimeModel.TrafficStepSeconds;
         const float MinGap = 2f;
         const float TimeHeadway = 1.2f;
         const float ComfortDecel = 2.5f;
@@ -81,9 +82,10 @@ namespace CityBuilder.Simulation.Traffic
             set { deadEndsAreExternal = value; endpointsVersion = -1; }
         }
         public int MaxVehicles = 1500;
-        /// <summary>Simulierte Verkehrszeit in Sekunden.</summary>
-        public float Time { get; private set; }
+        /// <summary>Simulierte Verkehrszeit in Sekunden (= Verkehrsschritte × <see cref="Dt"/>, double: bleibt über Jahre exakt).</summary>
+        public double Time => tick * (double)Dt;
 
+        /// <summary>Verkehrsschritte seit Spielbeginn.</summary>
         long tick;
         int nextId = 1;
 
@@ -146,10 +148,16 @@ namespace CityBuilder.Simulation.Traffic
 
         // ------------------------------------------------------------ Tick
 
-        public void Tick(SimulationWorld world)
+        /// <summary>Kalender-Tick: nichts zu tun – der Verkehr läuft in <see cref="Substep"/>.</summary>
+        public void Tick(SimulationWorld world) { }
+
+        /// <summary>Ein Verkehrsschritt (<see cref="Dt"/> s Verkehrszeit).</summary>
+        public void Substep(SimulationWorld world) => Step();
+
+        /// <summary>Ein Verkehrsschritt ohne Welt (Tests, Werkzeuge).</summary>
+        public void Step()
         {
             tick++;
-            Time += Dt;
             Lanes.Update();
 
             if (Demand > 0f && Vehicles.Count < MaxVehicles) Spawn();

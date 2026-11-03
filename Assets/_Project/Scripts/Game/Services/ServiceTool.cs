@@ -169,7 +169,10 @@ namespace CityBuilder.Game.Services
             }
             var plan = cachedPlan;
             var t = SelectedType;
-            ShowGhost(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid, t.NeedsRoadFront);
+            // Vorschau mit dem echten Modell in Baudrehung (sonst Quader)
+            var catalog = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+            ShowGhost(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid, t.NeedsRoadFront,
+                catalog != null ? catalog.Service(t.Id) : null);
 
             if (t.Walking)
             {
@@ -187,7 +190,7 @@ namespace CityBuilder.Game.Services
             }
             else ring.enabled = false;
 
-            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
+            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielmin.)"; // G4 erw.: Funk
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°"; // UX
             string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
@@ -252,15 +255,22 @@ namespace CityBuilder.Game.Services
             }
         }
 
-        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront)
+        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront,
+                       GameObject model = null)
         {
+            if (frontMarker == null) frontMarker = new CityBuilder.Game.UI.PlacementGhost(transform, "Service Front");
+            if (model != null)
+            {
+                ghost.SetActive(false);
+                frontMarker.ShowModel(model, pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront);
+                return;
+            }
             ghost.SetActive(true);
             ghost.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height + tall * 0.5f),
                 Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
             ghost.transform.localScale = new Vector3(width, tall, depth);
             ghostRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
             // UX: Vorderseite (Zufahrt) als Streifen + Pfeil
-            if (frontMarker == null) frontMarker = new CityBuilder.Game.UI.PlacementGhost(transform, "Service Front");
             if (showFront) frontMarker.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial);
             else frontMarker.Hide();
         }

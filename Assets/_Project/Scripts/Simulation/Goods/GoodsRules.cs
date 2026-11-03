@@ -70,16 +70,21 @@ namespace CityBuilder.Simulation.Goods
         public const float ExportKeepFill = 0.3f;
 
         // ------------------------------------------------------------ Lieferverkehr
-        /// <summary>Anteil der Lieferungen, die als echter Lkw fahren (× <c>TrafficSystem.Demand</c>), Rest = Platzhalter.</summary>
-        public const float TruckShare = 0.35f;
+        /// <summary>
+        /// Anteil der Lieferungen, die als echter Lkw fahren (× <c>TrafficSystem.Demand</c>), Rest = Platzhalter. Seit dem
+        /// Zeitmodell (45 s Verkehrszeit je Tick, wenig gleichzeitige Fahrzeuge) 0,8 statt 0,35.
+        /// </summary>
+        public const float TruckShare = 0.8f;
         /// <summary>Höchstens dieser Anteil von <c>TrafficSystem.MaxVehicles</c> sind Lieferwagen (Bürger: 70 %).</summary>
         public const float MaxTruckShare = 0.15f;
-        /// <summary>Platzhalter-Lieferungen: Meter je Tick (≈ 30 km/h).</summary>
-        public const float PlaceholderMetersPerTick = 3000f;
-        /// <summary>Zusätzliche Ticks für die Strecke außerhalb der Karte bzw. aus dem Umland.</summary>
-        public const int OutsideTicks = 3;
+        /// <summary>
+        /// Platzhalter-Lieferungen (Zeitmodell): Fahrzeit in Verkehrszeit wie ein Lkw – Umweg 1,3 × Luftlinie bei
+        /// <see cref="Core.TimeModel.TruckPlaceholderSpeed"/> –, umgerechnet in Ticks (30 s Verkehrszeit je Tick).
+        /// </summary>
+        public static int PlaceholderTicks(float distance, bool outside) =>
+            Core.TimeModel.TicksFor(distance * 1.3f / Core.TimeModel.TruckPlaceholderSpeed + (outside ? Core.TimeModel.OutsideTrafficSeconds : 0f));
         /// <summary>Sicherheitsnetz: Lkw-Fahrt ohne Rückmeldung gilt nach 3 Tagen als angekommen.</summary>
-        public const long TruckTimeoutTicks = 3L * 240;
+        public const long TruckTimeoutTicks = 3L * Core.TimeModel.TicksPerDay;
 
         // ------------------------------------------------------------ Firmen
         /// <summary>Startkapital je Arbeitsplatz.</summary>

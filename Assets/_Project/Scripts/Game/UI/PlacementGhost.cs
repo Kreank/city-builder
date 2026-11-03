@@ -77,11 +77,76 @@ namespace CityBuilder.Game.UI
             arrow.SetPosition(4, SimConvert.ToWorld(tip - front * head - side * head, roof));
         }
 
+        // ------------------------------------------------------------ echtes Modell als Geist
+
+        readonly System.Collections.Generic.Dictionary<GameObject, GameObject> modelGhosts =
+            new System.Collections.Generic.Dictionary<GameObject, GameObject>();
+        readonly System.Collections.Generic.Dictionary<GameObject, float> modelHeights =
+            new System.Collections.Generic.Dictionary<GameObject, float>();
+        GameObject activeModel;
+        Material activeModelMaterial;
+
+        /// <summary>
+        /// Zeigt das <b>echte Modell</b> des Bauwerks durchsichtig (grün/rot über <paramref name="material"/>) in der
+        /// Drehung, in der es gebaut würde – plus Vorderseiten-Streifen und Pfeil. Ohne Modell → wie <see cref="Show"/> (Quader).
+        /// Die Instanz wird je Modell einmal erzeugt und wiederverwendet (keine Skripte, keine Schatten).
+        /// </summary>
+        public void ShowModel(GameObject model, SimVector2 pos, SimVector2 front, float width, float depth, float height,
+                              float fallbackTall, Material material, bool showFront = true)
+        {
+            if (model == null) { HideModel(); Show(pos, front, width, depth, height, fallbackTall, material, showFront); return; }
+            if (front.LengthSquared() < 1e-6f) front = SimVector2.UnitY;
+
+            if (!modelGhosts.TryGetValue(model, out var inst) || inst == null)
+            {
+                inst = Object.Instantiate(model, box.transform.parent, false);
+                inst.name = model.name + " (Vorschau)";
+                foreach (var c in inst.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
+                foreach (var b in inst.GetComponentsInChildren<MonoBehaviour>(true)) Object.Destroy(b);
+                float top = 0f;
+                foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+                {
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    r.receiveShadows = false;
+                    top = Mathf.Max(top, r.bounds.max.y - inst.transform.position.y);
+                }
+                modelGhosts[model] = inst;
+                modelHeights[model] = top > 0.5f ? top : fallbackTall;
+                activeModelMaterial = null;
+            }
+            if (activeModel != null && activeModel != inst) activeModel.SetActive(false);
+            activeModel = inst;
+            inst.SetActive(true);
+            inst.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height), Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
+
+            if (activeModelMaterial != material)
+            {
+                foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+                {
+                    var mats = new Material[Mathf.Max(1, r.sharedMaterials.Length)];
+                    for (int i = 0; i < mats.Length; i++) mats[i] = material;
+                    r.sharedMaterials = mats;
+                }
+                activeModelMaterial = material;
+            }
+
+            // Quader aus, Vorderseiten-Markierung bleibt (Pfeil über dem echten Dach)
+            Show(pos, front, width, depth, height, modelHeights[model], material, showFront);
+            box.SetActive(false);
+        }
+
+        void HideModel()
+        {
+            if (activeModel != null) activeModel.SetActive(false);
+            activeModel = null;
+        }
+
         public void Hide()
         {
             if (box != null) box.SetActive(false);
             if (stripe != null) stripe.SetActive(false);
             if (arrow != null) arrow.enabled = false;
+            HideModel();
         }
     }
 }

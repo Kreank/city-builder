@@ -430,8 +430,7 @@ namespace CityBuilder.Simulation.Goods
             s.Id = nextShipmentId++;
             s.DispatchTick = now;
             shipmentsToday++;
-            int ticks = Math.Max(1, (int)MathF.Ceiling(dist / GoodsRules.PlaceholderMetersPerTick));
-            if (outside) ticks += GoodsRules.OutsideTicks;
+            int ticks = GoodsRules.PlaceholderTicks(dist, outside);
             s.FallbackTicks = ticks;
             shipments.Add(s);
             if (traffic != null && !hinterland && activeTrucks + pendingTrucks.Count < GoodsRules.MaxTruckShare * traffic.MaxVehicles &&
@@ -461,7 +460,7 @@ namespace CityBuilder.Simulation.Goods
                 var s = pendingTrucks[i];
                 if (s.LaunchTick > upTo) { pendingTrucks[kept++] = s; continue; }
                 if (TryStartTruck(s, now)) continue;
-                // Kein Platz an der Einfahrt (Verkehrszeit: 1 Stunde = nur 2,5 s): bis zu 2 Stunden erneut versuchen
+                // Kein Platz an der Einfahrt: bis zu 2 Stunden (600 s Verkehrszeit, 20 Versuche) erneut versuchen
                 if (now - s.DispatchTick < 2 * GoodsRules.TickInterval) { s.LaunchTick = now + 1; pendingTrucks[kept++] = s; continue; }
                 s.ArriveTick = now + s.FallbackTicks;
                 truckFailedToday++;
@@ -498,7 +497,7 @@ namespace CityBuilder.Simulation.Goods
             byTrip.Remove(v.TripId);
             activeTrucks--;
             // Echte Fahrzeit statt Schätzung: Stau kostet Geld (Differenz trägt der Zahler)
-            double actual = TruckCostForSeconds(traffic.Time - s.StartTrafficTime);
+            double actual = TruckCostForSeconds((float)(traffic.Time - s.StartTrafficTime));
             double delta = actual - s.TruckEstimate;
             s.TransportCost += delta;
             s.TruckEstimate = actual;

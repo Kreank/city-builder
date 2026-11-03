@@ -275,6 +275,51 @@ namespace CityBuilder.Simulation.Core
             if (system == null) throw new ArgumentNullException(nameof(system));
             if (system.TickInterval < 1) throw new ArgumentException("TickInterval muss >= 1 sein.", nameof(system));
             systems.Add(system);
+            if (system is ISubstepSystem sub) substepSystems.Add(sub);
+        }
+
+        readonly List<ISubstepSystem> substepSystems = new List<ISubstepSystem>();
+
+        /// <summary>
+        /// Zeitmodell: Verkehrsschritte, die im laufenden Kalender-Tick schon gelaufen sind (0 = genau auf der Tick-Grenze).
+        /// Wird gespeichert (Speichern mitten im Tick ist erlaubt).
+        /// </summary>
+        public int SubstepInTick { get; private set; }
+
+        /// <summary>
+        /// Kalenderzeit in Ticks inkl. Bruchteil der schon gelaufenen Verkehrsschritte – synchron zu <c>TrafficSystem.Time</c>
+        /// (Darstellung: Fußgänger, Interpolation).
+        /// </summary>
+        public double TickTime => Clock.Tick + SubstepInTick / (double)TimeModel.TrafficStepsPerTick;
+
+        /// <summary>Steht die Welt genau auf einer Tick-Grenze (alle Verkehrsschritte des letzten Ticks gelaufen)?</summary>
+        public bool AtTickBoundary => SubstepInTick == 0;
+
+        /// <summary>Spielstand: Stand innerhalb des Ticks wiederherstellen.</summary>
+        internal void RestoreSubstep(int substep) =>
+            SubstepInTick = substep >= 0 && substep < TimeModel.TrafficStepsPerTick ? substep : 0;
+
+        /// <summary>
+        /// Ein Verkehrsschritt (<see cref="TimeModel.TrafficStepSeconds"/> Verkehrszeit) aller <see cref="ISubstepSystem"/>.
+        /// Nach <see cref="TimeModel.TrafficStepsPerTick"/> Schritten folgt der Kalender-Tick (Uhr + 1, alle Systeme nach
+        /// ihrem <see cref="ISimulationSystem.TickInterval"/>). Das Spiel verteilt die Schritte so über die Frames.
+        /// </summary>
+        public void Substep()
+        {
+            for (int i = 0; i < substepSystems.Count; i++) substepSystems[i].Substep(this);
+            if (++SubstepInTick < TimeModel.TrafficStepsPerTick) return;
+            SubstepInTick = 0;
+            CalendarTick();
+        }
+
+        void CalendarTick()
+        {
+            Clock.Advance();
+            foreach (var system in systems)
+            {
+                if (Clock.Tick % system.TickInterval == 0)
+                    system.Tick(this);
+            }
         }
 
         public T GetSystem<T>() where T : class, ISimulationSystem
@@ -287,15 +332,13 @@ namespace CityBuilder.Simulation.Core
         public bool Contains(Vector2 p) =>
             p.X >= Min.X && p.X <= Max.X && p.Y >= Min.Y && p.Y <= Max.Y;
 
-        /// <summary>Simuliert genau einen Tick.</summary>
+        /// <summary>
+        /// Simuliert genau einen Kalender-Tick: die (restlichen) <see cref="TimeModel.TrafficStepsPerTick"/> Verkehrsschritte,
+        /// dann den Tick selbst. Mitten im Tick aufgerufen, wird nur der laufende Tick beendet.
+        /// </summary>
         public void Step()
         {
-            Clock.Advance();
-            foreach (var system in systems)
-            {
-                if (Clock.Tick % system.TickInterval == 0)
-                    system.Tick(this);
-            }
+            do Substep(); while (SubstepInTick != 0);
         }
     }
 }

@@ -36,7 +36,7 @@ namespace CityBuilder.Simulation.Traffic
         public float DestinationT { get; internal set; }
         public bool HasSegmentDestination => DestinationSegmentId >= 0;
         /// <summary>Verkehrszeit (<see cref="TrafficSystem.Time"/>, s) beim Start – für die Fahrtdauer im Inspektor.</summary>
-        public float StartTime { get; internal set; }
+        public double StartTime { get; internal set; }
 
         /// <summary>Wartezeit am Stück (s) – für Deadlock-Auflösung und Umleitung.</summary>
         public float WaitTime { get; internal set; }
@@ -64,7 +64,7 @@ namespace CityBuilder.Simulation.Traffic
         public bool IsAtStop => AtStop;
         internal bool AtStop;
         /// <summary>Verkehrszeit, bis zu der das Fahrzeug an der Haltestelle stehen bleibt.</summary>
-        internal float HoldUntil;
+        internal double HoldUntil;
         /// <summary>Zielrichtung auf dem Zielsegment: 0 = beliebig, 1 = in Segmentrichtung, 2 = dagegen.</summary>
         internal byte DestinationDirection;
         // --- Ende ÖPNV
