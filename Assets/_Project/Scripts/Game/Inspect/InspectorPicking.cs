@@ -30,7 +30,7 @@ namespace CityBuilder.Game.Inspect
 
     /// <summary>
     /// Auswahl per Mausstrahl: Gebäude und Versorgungsbauwerke als gedrehte Quader (Grundstück × sichtbare Höhe),
-    /// Fahrzeuge als Kugel um die interpolierte Position. Gewinnt der vorderste Treffer; kleine Fahrzeuge haben
+    /// Fahrzeuge und Fußgänger als Kugel um die interpolierte Position. Gewinnt der vorderste Treffer; kleine Fahrzeuge haben
     /// etwas Vorrang, damit man sie vor Gebäuden anklicken kann. Liest nur.
     /// </summary>
     public static class InspectorPicking
@@ -103,6 +103,14 @@ namespace CityBuilder.Game.Inspect
                     result = new Selection(SelectionKind.Vehicle, v.Id);
                 }
             }
+            // --- Fußgänger: Kugel um die zuletzt gezeichnete Position (PeopleView), Vorrang wie Fahrzeuge → öffnet den Bürger
+            var people = People.PeopleView.Active;
+            if (people != null && people.Pick(ray, bestVehicle, out int citizenId, out float pt))
+            {
+                bestVehicle = pt;
+                result = new Selection(SelectionKind.Citizen, citizenId);
+            }
+            // --- Ende Fußgänger
             return result;
         }
 

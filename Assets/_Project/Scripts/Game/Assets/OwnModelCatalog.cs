@@ -23,6 +23,10 @@ namespace CityBuilder.Game.Assets
         public Entry[] Facilities = new Entry[0];
         /// <summary>G4 Dienste: Id = <c>ServiceType.Id</c> („police_station“ …), FBX unter Models/Services.</summary>
         public Entry[] Services = new Entry[0];
+        // --- Fußgänger: Personen-Modelle aus Models/People/*.fbx (Id = Dateiname; Gruppe nach Präfix Child/Kid/Toddler/Teen/Senior,
+        // sonst Erwachsene). Ursprung = Mitte zwischen den Füßen, Front +Z, 1 Einheit = 1 m, optionale Kindobjekte LegL/LegR/ArmL/ArmR.
+        public Entry[] People = new Entry[0];
+        // --- Ende Fußgänger
         /// <summary>ÖPNV: Id „bus_depot“ (Models/Transport/BusDepot.fbx), „bus_stop“ (Models/Props/BusStop.fbx).</summary>
         public Entry[] Transport = new Entry[0];
         /// <summary>Gemeinsames Material mit der Paletten-Textur (URP Lit).</summary>

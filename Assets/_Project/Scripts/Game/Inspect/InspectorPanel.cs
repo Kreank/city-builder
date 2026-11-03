@@ -316,6 +316,10 @@ namespace CityBuilder.Game.Inspect
                     if (c == null) break;
                     var v = world.Citizens.VehicleOf(c);
                     if (v != null) primary.Ring(InspectorPicking.VehiclePosition(v, tool.Runner.TickAlpha), Mathf.Clamp(v.Length * 0.7f, 3f, 12f), width * 0.6f);
+                    // --- Fußgänger: Ring um die sichtbare Person
+                    else if (People.PeopleView.Active != null && People.PeopleView.Active.TryGetPosition(c, out var walker))
+                        primary.Ring(walker, 1.6f, width * 0.4f);
+                    // --- Ende Fußgänger
                     else if (c.Location.IsBuilding) MarkBuilding(primary, world.City.GetBuilding(c.Location.BuildingId), width);
                     if (c.Home.IsBuilding && c.Home.BuildingId != c.Location.BuildingId) MarkBuilding(home, world.City.GetBuilding(c.Home.BuildingId), width * 0.7f);
                     if (c.WorkplaceId != 0 && c.WorkplaceId != c.Location.BuildingId) MarkBuilding(work, world.City.GetBuilding(c.WorkplaceId), width * 0.7f);
@@ -351,6 +355,7 @@ namespace CityBuilder.Game.Inspect
                     if (c == null) return null;
                     var v = world.Citizens.VehicleOf(c);
                     if (v != null) return InspectorPicking.VehiclePosition(v, tool.Runner.TickAlpha);
+                    if (People.PeopleView.Active != null && People.PeopleView.Active.TryGetPosition(c, out var walker)) return walker; // Fußgänger
                     var b = c.Location.IsBuilding ? world.City.GetBuilding(c.Location.BuildingId) : null;
                     return b != null ? SimConvert.ToWorld(b.Position, b.Height) : (Vector3?)null;
                 }
