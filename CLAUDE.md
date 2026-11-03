@@ -1013,6 +1013,46 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
   (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
 
+## Speichern & Laden
+- **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
+  `partial class XyzSystem` in `XyzSystem.Save.cs` (konfliktarm), Anmeldung in `Persistence/SaveRegistry.Collect`
+  (eine Zeile, Reihenfolge = Lesereihenfolge) – oder einfach per `AddSystem`: registrierte `ISaveable`-Systeme werden
+  automatisch hinten angehängt. `SaveLoadTests` vergleicht **alle** Abschnitte → neue Systeme sind sofort im Test.
+- Format (`Simulation/Persistence`): Kopf unkomprimiert (Magic „CBSV“, Formatversion, Spielversion, Name, Tick der
+  Simulationsuhr – keine Systemzeit –, Einwohner, Kontostand, Länge, FNV-1a-64-Prüfsumme), danach GZip mit Abschnitten
+  (Id als Text, Version, Länge, Bytes). Unbekannter Abschnitt → übersprungen, fehlender → Standardzustand der frischen
+  Welt, neuere Abschnittsversion → `SaveLoadException`. Beschädigt/abgeschnitten → `SaveLoadException` mit Meldung
+  (Abschnitt genannt), nie ein Absturz; die alte Welt bleibt dann unberührt.
+- `ISaveable` (`SaveId`, `SaveVersion`, `Write(SaveWriter)`, `Read(SaveReader, version)`), optional `IAfterLoad`
+  (nach allen Abschnitten, z. B. Querverweise wie Bürger ↔ Fahrgast) und `IBeforeSave` (nur ohnehin fällige Nacharbeit,
+  z. B. Spurgraph nach Bau im Pausenmodus). `Write` darf nichts verändern. **Enums immer über den Namen**
+  (`w.Name(e)`/`r.Name<T>()`, Felder je Enum `NamedFloats`/`NamedDoubles`, Güter/Kanäle über ihre Id) – unbekannte
+  Werte werden übersprungen. Nachschlage-Wörterbücher kanonisch (`w.IntDictionary`, nach Schlüssel sortiert); Wörterbücher,
+  die **durchlaufen** werden, sind `Core.StableMap` (gleiche Reihenfolge wie `Dictionary`, Platzbelegung speicherbar).
+  `System.Random` gibt es in der Simulation nicht mehr → `Core.CompatRandom` (gleiche Zahlenfolge, speicherbar) bzw. `SimRandom`.
+- **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s).
+- Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
+  alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
+  Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
+  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege. **Gespeichert, obwohl „abgeleitet“**, weil sie
+  bewusst nur bei Änderungen neu gerechnet werden und dazwischen eine Momentaufnahme sind: Zonenraster (Geländehöhen beim
+  Aufbau), Versorgungsnetze, Dienst-Zuordnung, Grobraster des Bodenwerts, Umfeld-Cache und Gebäudelisten der Bürger,
+  ÖPNV-Routen, KI-Lagebild des Handels.
+- **Verkehr: laufende Fahrzeuge werden vollständig gespeichert** (Spur/Verbindung, Position, Route, Wartezustand,
+  Reihenfolge je Spur, Stau-Index je Spur) – nur so laufen geladene Welten bitgleich weiter; Bürger, Lkw-Ladungen und
+  Busse behalten ihr Fahrzeug, niemand geht verloren.
+- Determinismus-Test: Welt A spielt, speichert, B lädt; A und B laufen weiter (auch mit gleichen Spieleraktionen,
+  Speichern mitten im Tag, nach Bau ohne Tick, Handels-Command in der Warteschlange) und müssen je Abschnitt bitgleich sein
+  (`SaveGame.SectionHashes`/`StateHash` = FNV über die Abschnittsbytes) plus unabhängige Beobachtungen.
+- Leistung (Testprojekt, Info): 15 000 Bürger speichern ≈ 0,1 s, laden ≈ 0,17 s (inkl. Welt erzeugen), Datei ≈ 2,8 MB.
+- Unity: `SimulationRunner.ReplaceWorld`/`NewGame` + Event `WorldReplaced` (Views lösen alte Abos, verwerfen Caches/Objekte,
+  bauen neu auf – neue Views bitte ebenso). `Game/Persistence/SaveManager` (Begleiter am RoadTool): Ablage
+  `Application.persistentDataPath/Saves/*.cbsave`, Schreiben im Hintergrund (atomar), Autosave alle N Spielminuten
+  (PlayerPrefs, Ringpuffer 3), **Strg+S** Schnellspeichern, **Strg+L** Schnellladen. `SaveMenuWindow` (mittig, **Esc**
+  wenn Esc sonst nichts tat; pausiert): Speichern/Speichern unter/Laden (Liste mit Spielzeit, Einwohner, Kontostand,
+  Größe)/Neues Spiel (Seed, Startregion)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
+  Im Editor noch nicht visuell abgenommen.
+
 ## Roadmap
 1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
 2. ✅ Straßen
@@ -1070,6 +1110,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
      Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
      bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
+   - ✅ Speichern & Laden: versioniertes Binärformat mit Abschnitten/Migrationen, alle Systeme `ISaveable`, Determinismus
+     nach dem Laden, Spielmenü (Esc) mit Autosave/Schnellspeichern. Später: Cloud/Multiplayer-Stände, Vorschaubild, Replays aus Commands
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
