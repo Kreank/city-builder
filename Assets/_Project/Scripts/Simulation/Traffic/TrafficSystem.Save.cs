@@ -35,6 +35,7 @@ namespace CityBuilder.Simulation.Traffic
             w.Float(Demand);
             w.Float(ThroughTrafficRate);
             w.Int(MaxVehicles);
+            w.Int(ScheduledVehicleReserve);
             w.Bool(deadEndsAreExternal);
             w.Int(Lanes.Version);
             w.Int(Paths.Sequence);
@@ -59,7 +60,7 @@ namespace CityBuilder.Simulation.Traffic
             {
                 w.Int(v.Id);
                 w.Bool(removed.Contains(v));
-                w.Int((int)v.Class);
+                w.Name(v.Class);
                 w.Float(v.Length);
                 w.Float(v.MaxSpeed);
                 w.Float(v.Acceleration);
@@ -90,6 +91,12 @@ namespace CityBuilder.Simulation.Traffic
                 w.Vector2(v.PrevPosition);
                 w.Float(v.PrevHeight);
                 w.Vector2(v.PrevDirection);
+                // ÖPNV: Linienfahrzeuge
+                w.Bool(v.IsScheduled);
+                w.Int(v.TransitId);
+                w.Bool(v.AtStop);
+                w.Float(v.HoldUntil);
+                w.Byte(v.DestinationDirection);
             }
 
             // Reihenfolge auf Spuren und Kreuzungsverbindungen (vorderstes zuerst)
@@ -170,6 +177,7 @@ namespace CityBuilder.Simulation.Traffic
             Demand = r.Float();
             ThroughTrafficRate = r.Float();
             MaxVehicles = r.Int();
+            ScheduledVehicleReserve = r.Int();
             deadEndsAreExternal = r.Bool();
             endpointsVersion = -1;
             Lanes.RestoreVersion(r.Int());
@@ -198,7 +206,7 @@ namespace CityBuilder.Simulation.Traffic
             {
                 var v = new Vehicle { Id = r.Int() };
                 bool isRemoved = r.Bool();
-                v.Class = (VehicleClass)r.Int();
+                v.Class = r.Name(VehicleClass.Car);
                 v.Length = r.Float();
                 v.MaxSpeed = r.Float();
                 v.Acceleration = r.Float();
@@ -236,6 +244,11 @@ namespace CityBuilder.Simulation.Traffic
                 v.PrevPosition = r.Vector2();
                 v.PrevHeight = r.Float();
                 v.PrevDirection = r.Vector2();
+                v.IsScheduled = r.Bool();
+                v.TransitId = r.Int();
+                v.AtStop = r.Bool();
+                v.HoldUntil = r.Float();
+                v.DestinationDirection = r.Byte();
                 if (byId.ContainsKey(v.Id)) throw new SaveFormatException($"Fahrzeug {v.Id} doppelt.");
                 byId[v.Id] = v;
                 Vehicles.Add(v);

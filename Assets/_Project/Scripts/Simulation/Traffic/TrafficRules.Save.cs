@@ -19,18 +19,18 @@ namespace CityBuilder.Simulation.Traffic
             // Nachschlage-Tabellen → kanonisch nach Schlüssel
             w.IntDictionary(nodes, n =>
             {
-                w.Int((int)n.Control);
-                w.IntDictionary(n.Signs, s => w.Int((int)s));
+                w.Name(n.Control);
+                w.IntDictionary(n.Signs, s => w.Name(s));
                 var bans = new List<(int from, int to)>(n.BannedTurns.Keys);
                 bans.Sort();
                 w.Int(bans.Count);
-                foreach (var b in bans) { w.Int(b.from); w.Int(b.to); w.Int((int)n.BannedTurns[b]); }
+                foreach (var b in bans) { w.Int(b.from); w.Int(b.to); w.Name(n.BannedTurns[b]); }
                 w.Float(n.GreenSeconds); // seit Version 2
             });
             w.IntDictionary(segments, s =>
             {
                 w.Bool(s.Closed);
-                w.Int((int)s.Banned);
+                w.Name(s.Banned);
                 w.Float(s.SpeedLimitKmh);
             });
         }
@@ -40,27 +40,27 @@ namespace CityBuilder.Simulation.Traffic
             nodes.Clear();
             segments.Clear();
             Version = r.Int();
-            int n = r.Count(12);
+            int n = r.Count(9);
             for (int i = 0; i < n; i++)
             {
                 int id = r.Int();
-                var rules = new NodeRules { Control = (JunctionControl)r.Int() };
-                int signs = r.Count(8);
-                for (int k = 0; k < signs; k++) rules.Signs[r.Int()] = (ApproachSign)r.Int();
-                int bans = r.Count(12);
+                var rules = new NodeRules { Control = r.Name<JunctionControl>() };
+                int signs = r.Count(5);
+                for (int k = 0; k < signs; k++) { int seg = r.Int(); rules.Signs[seg] = r.Name<ApproachSign>(); }
+                int bans = r.Count(9);
                 for (int k = 0; k < bans; k++)
                 {
                     int from = r.Int(), to = r.Int();
-                    rules.BannedTurns[(from, to)] = (VehicleClass)r.Int();
+                    rules.BannedTurns[(from, to)] = r.Name<VehicleClass>();
                 }
                 rules.GreenSeconds = version >= 2 ? r.Float() : 20f; // Migration v1 → v2
                 nodes[id] = rules;
             }
-            int s = r.Count(13);
+            int s = r.Count(10);
             for (int i = 0; i < s; i++)
             {
                 int id = r.Int();
-                segments[id] = new SegmentRules { Closed = r.Bool(), Banned = (VehicleClass)r.Int(), SpeedLimitKmh = r.Float() };
+                segments[id] = new SegmentRules { Closed = r.Bool(), Banned = r.Name<VehicleClass>(), SpeedLimitKmh = r.Float() };
             }
         }
     }

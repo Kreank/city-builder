@@ -45,7 +45,7 @@ namespace CityBuilder.Simulation.Goods
                 w.Int(f.BuildingId);
                 w.String(f.Recipe.Id);
                 w.Int(f.FoundedDay);
-                w.Byte((byte)f.Status);
+                w.Name(f.Status);
                 w.Int(f.AgeDays);
                 w.Floats(f.InputStock); w.Floats(f.InputCapacity); w.Floats(f.Incoming); w.Floats(f.OutputStock); w.Floats(f.OutputCapacity);
                 w.Doubles(f.InputValue);
@@ -122,7 +122,7 @@ namespace CityBuilder.Simulation.Goods
                 var recipe = RecipeCatalog.Get(rid) ?? throw new SaveFormatException($"Unbekanntes Rezept „{rid}“.");
                 var f = new Firm(b, recipe, r.Int())
                 {
-                    Status = (FirmStatus)r.Byte(),
+                    Status = r.Name<FirmStatus>(),
                     AgeDays = r.Int(),
                 };
                 ReadGoods(r, f.InputStock, savedIndex); ReadGoods(r, f.InputCapacity, savedIndex); ReadGoods(r, f.Incoming, savedIndex);
@@ -219,7 +219,8 @@ namespace CityBuilder.Simulation.Goods
         static void WriteShipment(SaveWriter w, Shipment s)
         {
             w.Int(s.Id);
-            w.Byte((byte)s.Kind);
+            w.Name(s.Kind);
+            w.Bool(s.IsContract); // Etappe 8: Vertragsware aus dem Grenzlager
             w.String(s.Good.Id);
             w.Float(s.Amount);
             w.Int(s.FromBuildingId); w.Int(s.ToBuildingId); w.Int(s.ConnectionNodeId);
@@ -252,7 +253,7 @@ namespace CityBuilder.Simulation.Goods
 
         Shipment ReadShipment(SaveReader r, int[] savedIndex)
         {
-            var s = new Shipment { Id = r.Int(), Kind = (ShipmentKind)r.Byte() };
+            var s = new Shipment { Id = r.Int(), Kind = r.Name<ShipmentKind>(), IsContract = r.Bool() };
             string gid = r.String();
             s.Good = GoodsCatalog.Get(gid) ?? throw new SaveFormatException($"Unbekanntes Gut „{gid}“.");
             s.Amount = r.Float();

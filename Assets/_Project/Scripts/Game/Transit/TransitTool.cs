@@ -122,7 +122,7 @@ namespace CityBuilder.Game.Transit
         void Update()
         {
             if (tool == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.digit5Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
                 tool.ToggleMode(RoadTool.Mode.Transit); // UX: erneut 5 = Auswählen

@@ -90,6 +90,16 @@ namespace CityBuilder.Simulation.Tests
             w.Services.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(-500, 220));
             w.Services.TryBuild(ServiceCatalog.ParkSmall, new Vector2(-150, 260));
             w.Services.TryBuild(ServiceCatalog.Landfill, new Vector2(600, 160));
+            w.Services.TryBuild(ServiceCatalog.Newspaper, new Vector2(300, -40));          // Medien
+            w.Utilities.TryBuildFacility(UtilityCatalog.SewagePlant, new Vector2(-700, -160)); // Abwasser
+            // ÖPNV: Depot, Haltestellen, Ringlinie mit 2 Bussen
+            if (w.Transit != null)
+            {
+                w.Transit.TryBuildDepot(Simulation.Transit.TransitCatalog.BusDepot, new Vector2(-300, -40));
+                var stops = new[] { new Vector2(-300, 0), new Vector2(200, 0), new Vector2(200, 160), new Vector2(-300, 160) }
+                    .Select(p => w.Transit.TryBuildStop(p, bothSides: true)).Where(s => s != null).Select(s => s.Id).ToList();
+                if (stops.Count >= 2) w.Transit.CreateLine(stops, loop: true, vehicles: 2);
+            }
             w.Terrain.Terraform(new TerraformBrush(TerraformMode.Raise, new Vector2(-800, -600), 40f, 2f));
             w.Economy.SetTaxRate(TaxKind.Residential, 0.12f);
             w.Economy.SetTaxRate(TaxKind.Industry, 0.08f);
@@ -169,9 +179,19 @@ namespace CityBuilder.Simulation.Tests
             Assert.NotNull(b.Planet);
             Assert.Equal(a.Planet.StartRegionId, b.Planet.StartRegionId);
             AssertSameState(a, b, "direkt nach dem Laden");
+            Assert.NotNull(a.Trade);
+            // Handel: ein offener Command in der Warteschlange muss mitwandern
+            int npc = a.Trade.Nations.First(n => !n.IsPlayer).Id;
+            foreach (var x in new[] { a, b })
+                x.Trade.Submit(new Simulation.Trade.SetTariffCommand(x.Trade.PlayerId, npc, 0.15));
+            AssertSameState(a, b, "mit Command in der Warteschlange");
+            var c = SaveGame.Load(SaveGame.SaveToBytes(a));
             Run(a, SimulationClock.TicksPerDay * 3);
             Run(b, SimulationClock.TicksPerDay * 3);
+            Run(c, SimulationClock.TicksPerDay * 3);
             AssertSameState(a, b, "nach 3 weiteren Tagen");
+            AssertSameState(a, c, "Command-Warteschlange gespeichert");
+            Assert.Equal(0.15, a.Trade.TariffRate(a.Trade.PlayerId, npc), 6);
             Assert.Equal(a.Planet.Economy.Nations[0].Stock, b.Planet.Economy.Nations[0].Stock);
         }
 
@@ -234,7 +254,7 @@ namespace CityBuilder.Simulation.Tests
             // Jeder Abschnitt bitgleich (alle registrierten Systeme)
             var ids = SaveRegistry.Collect(a).Select(s => s.SaveId).ToList();
             foreach (var id in new[] { "terrain", "environment", "resources", "roads", "rules", "city", "traffic", "citizens", "utilities",
-                                       "services", "landvalue", "goods", "economy" })
+                                       "waterquality", "services", "media", "transit", "landvalue", "goods", "economy" })
                 Assert.Contains(id, ids);
             var sb = SaveRegistry.Collect(b).ToDictionary(s => s.SaveId);
             foreach (var s in SaveRegistry.Collect(a))
@@ -285,6 +305,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(a.Economy.Balance, b.Economy.Balance);
             Assert.Equal(a.Economy.TaxRate(TaxKind.Residential), b.Economy.TaxRate(TaxKind.Residential));
             Assert.Equal(a.Economy.History.Count, b.Economy.History.Count);
+            // ÖPNV: Busse fahren als Fahrzeuge, Fahrgäste bleiben ihren Bürgern zugeordnet
+            Assert.Equal(a.Transit.Buses.Count, b.Transit.Buses.Count);
+            Assert.True(a.Transit.Lines.Count > 0, "Linie erwartet");
+            foreach (var bus in b.Transit.Buses) if (bus.Vehicle != null) Assert.Contains(bus.Vehicle, b.Traffic.Vehicles);
+            Assert.Equal(a.Citizens.ActiveTransitRides, b.Citizens.ActiveTransitRides);
+            Assert.Equal(a.Media.Recent.Count, b.Media.Recent.Count);
         }
 
         [Fact]
@@ -365,11 +391,11 @@ namespace CityBuilder.Simulation.Tests
                 var w = new SaveWriter(ms);
                 w.Int(5);                                 // Version der Regeln
                 w.Int(1);                                 // 1 Knoten
-                w.Int(light.Id); w.Int((int)JunctionControl.TrafficLights);
+                w.Int(light.Id); w.Name(JunctionControl.TrafficLights);
                 w.Int(0);                                 // keine Schilder
-                w.Int(1); w.Int(seg.Id); w.Int(seg.Id); w.Int((int)VehicleClass.Truck); // ein Abbiegeverbot (Wenden für Lkw)
+                w.Int(1); w.Int(seg.Id); w.Int(seg.Id); w.Name(VehicleClass.Truck); // ein Abbiegeverbot (Wenden für Lkw)
                 w.Int(1);                                 // 1 Segment
-                w.Int(seg.Id); w.Bool(true); w.Int(0); w.Float(50f);
+                w.Int(seg.Id); w.Bool(true); w.Name(VehicleClass.None); w.Float(50f);
                 w.Flush();
                 v1 = ms.ToArray();
             }

@@ -19,14 +19,24 @@ namespace CityBuilder.Simulation.Citizens
         public string SaveId => "citizens";
         public int SaveVersion => 1;
 
-        public void AfterLoad(SimulationWorld w) => world = w; // sonst erst ab dem ersten Tick gesetzt (Umfeld: Lärm, Abgas, Versorgung)
+        public void AfterLoad(SimulationWorld w)
+        {
+            world = w; // sonst erst ab dem ersten Tick gesetzt (Umfeld: Lärm, Abgas, Versorgung)
+            // ÖPNV: Fahrgäste gehören dem TransitSystem (später gelesen) → erst jetzt zuordnen
+            rides.Clear();
+            foreach (var (citizenId, passengerId) in pendingRides)
+                rides[citizenId] = Transit?.FindPassenger(passengerId) ?? CityBuilder.Simulation.Transit.TransitSystem.DetachedPassenger(passengerId, citizenId);
+            pendingRides.Clear();
+        }
+
+        readonly List<(int citizen, int passenger)> pendingRides = new List<(int, int)>();
 
         public void Write(SaveWriter w)
         {
             rng.WriteState(w);
             w.Float(CarShare); w.Float(CommuterCarShare); w.Float(MaxVehicleShare);
             w.Int(MaxNewCommutersPerRun); w.Int(MaxJobSearchesPerRun);
-            w.Float(LifeEventRate); w.Float(LeaveConsiderRate);
+            w.Float(LifeEventRate); w.Float(LeaveConsiderRate); w.Float(TransitRealShare);
             w.Int(nextCitizenId); w.Int(nextHouseholdId); w.Int(nextTripId); w.Int(householdCount);
             w.Bool(freeHousingDirty);
             w.Int(needsCursor); w.Int(needsCycle);
@@ -75,6 +85,7 @@ namespace CityBuilder.Simulation.Citizens
                 foreach (var c in staff[key]) w.Int(c.Id);
             }
             w.IntDictionary(trips, c => w.Int(c.Id));
+            w.IntDictionary(rides, p => w.Int(p.Id)); // ÖPNV: Bürger → Fahrgast (Objekt im TransitSystem)
 
             w.Int(contexts.Count);
             foreach (int key in SaveWriter.SortedKeys(contexts))
@@ -86,6 +97,7 @@ namespace CityBuilder.Simulation.Citizens
                 w.Float(x.Police); w.Float(x.Fire); w.Float(x.Health); w.Float(x.Education); w.Float(x.EducationPrimary);
                 w.Float(x.EducationSecondary); w.Float(x.Library); w.Float(x.Park); w.Float(x.Garbage); w.Float(x.GarbageLevel);
                 w.Bool(x.Supplied); w.Bool(x.PowerOut); w.Bool(x.WaterOut);
+                w.Float(x.DrinkingWater); w.Float(x.Nuclear); w.Float(x.Media); w.Bool(x.SewageOut);
             }
             w.IntDictionary(residentSatisfaction, w.Float);
             w.IntDictionary(workerSatisfaction, w.Float);
@@ -96,7 +108,7 @@ namespace CityBuilder.Simulation.Citizens
             for (int i = 0; i < recentCount; i++)
             {
                 var e = recentEvents[(recentStart + i) % MaxRecentEvents];
-                w.Byte((byte)e.Kind);
+                w.Name(e.Kind);
                 w.Int(e.Day);
                 w.Int(e.CitizenId);
                 w.String(e.Text);
@@ -115,7 +127,7 @@ namespace CityBuilder.Simulation.Citizens
             w.Bool(gone.Contains(c));
             w.Int(c.Age);
             w.Int(c.BirthDayOfYear);
-            w.Byte((byte)c.Education);
+            w.Name(c.Education);
             w.Int(c.Household?.Id ?? 0);
             w.Int(c.CommuterConnectionId);
             w.Int(c.WorkplaceId);
@@ -123,28 +135,29 @@ namespace CityBuilder.Simulation.Citizens
             w.Int(c.WorkStart);
             w.Int(c.UnemployedDays);
             w.Float(c.ShoppingNeed);
-            w.Byte((byte)c.Activity);
+            w.Name(c.Activity);
             WritePlace(w, c.Location);
-            w.Byte((byte)c.Purpose);
-            w.Byte((byte)c.Mode);
+            w.Name(c.Purpose);
+            w.Name(c.Mode);
             WritePlace(w, c.Destination);
             w.Int(c.TripId);
             w.Long(c.TripStartTick);
             w.Long(c.ArriveTick);
             w.Long(c.BusyUntil);
             w.Int(c.LastWorkDay);
-            w.Byte((byte)c.Gender);
+            w.Name(c.Gender);
             w.Int(c.FirstNameIndex);
             w.Int(c.LastNameIndex);
             var p = c.Personality;
             w.Int(p.Archetype);
-            foreach (var t in Personality.AllTraits) w.Float(p[t]);
-            w.Floats(c.NeedValues);
+            w.Int(Personality.AllTraits.Length);
+            foreach (var t in Personality.AllTraits) { w.Name(t); w.Float(p[t]); }
+            w.NamedFloats<NeedKind>(c.NeedValues);
             w.Float(c.Satisfaction);
             w.Float(c.Mood);
             w.Float(c.Health);
             w.Bool(c.IsIll);
-            w.Byte((byte)c.Relationship);
+            w.Name(c.Relationship);
             w.Int(c.PartnerId);
             w.Int(c.ParentAId);
             w.Int(c.ParentBId);
@@ -176,11 +189,12 @@ namespace CityBuilder.Simulation.Citizens
             w.Int(s.Population); w.Int(s.Households); w.Int(s.Children); w.Int(s.Students); w.Int(s.Adults); w.Int(s.Seniors);
             w.Ints(s.AgeGroups); w.Ints(s.ByEducation);
             w.Int(s.WorkingAge); w.Int(s.Employed); w.Int(s.Unemployed); w.Int(s.WorkingLocal); w.Int(s.CommutersOut); w.Int(s.CommutersIn);
-            w.Int(s.AtHome); w.Int(s.AtWork); w.Int(s.Shopping); w.Int(s.Travelling); w.Int(s.TravellingByCar);
+            w.Int(s.AtHome); w.Int(s.AtWork); w.Int(s.Shopping); w.Int(s.Travelling); w.Int(s.TravellingByCar); w.Int(s.TravellingByTransit);
+            w.Int(s.TransitTrips); w.Int(s.TransitArrivals); w.Int(s.TransitGaveUp); w.Int(s.TransitStatistical);
             w.Int(s.MovedIn); w.Int(s.MovedOut); w.Int(s.Died); w.Int(s.CarTrips); w.Int(s.OtherTrips); w.Int(s.CarArrivals); w.Int(s.CarTripsFailed);
             w.Int(s.ExternalConnections);
             w.Float(s.AverageSatisfaction); w.Float(s.AverageMood); w.Int(s.Ill); w.Int(s.AtLeisure);
-            w.Floats(s.AverageNeeds);
+            w.NamedFloats<NeedKind>(s.AverageNeeds);
             w.Int(s.Born); w.Int(s.Partnerships); w.Int(s.Weddings); w.Int(s.Separations); w.Int(s.MovedOutOfParents);
             w.Int(s.MovedWithinCity); w.Int(s.LeftCity); w.Int(s.JobChanges); w.Int(s.JobsLost);
             w.Int(s.LeisureHome); w.Int(s.LeisurePark); w.Int(s.LeisureRealPark); w.Int(s.LeisureStroll);
@@ -192,11 +206,12 @@ namespace CityBuilder.Simulation.Citizens
             s.Population = r.Int(); s.Households = r.Int(); s.Children = r.Int(); s.Students = r.Int(); s.Adults = r.Int(); s.Seniors = r.Int();
             r.IntsInto(s.AgeGroups); r.IntsInto(s.ByEducation);
             s.WorkingAge = r.Int(); s.Employed = r.Int(); s.Unemployed = r.Int(); s.WorkingLocal = r.Int(); s.CommutersOut = r.Int(); s.CommutersIn = r.Int();
-            s.AtHome = r.Int(); s.AtWork = r.Int(); s.Shopping = r.Int(); s.Travelling = r.Int(); s.TravellingByCar = r.Int();
+            s.AtHome = r.Int(); s.AtWork = r.Int(); s.Shopping = r.Int(); s.Travelling = r.Int(); s.TravellingByCar = r.Int(); s.TravellingByTransit = r.Int();
+            s.TransitTrips = r.Int(); s.TransitArrivals = r.Int(); s.TransitGaveUp = r.Int(); s.TransitStatistical = r.Int();
             s.MovedIn = r.Int(); s.MovedOut = r.Int(); s.Died = r.Int(); s.CarTrips = r.Int(); s.OtherTrips = r.Int(); s.CarArrivals = r.Int(); s.CarTripsFailed = r.Int();
             s.ExternalConnections = r.Int();
             s.AverageSatisfaction = r.Float(); s.AverageMood = r.Float(); s.Ill = r.Int(); s.AtLeisure = r.Int();
-            r.FloatsInto(s.AverageNeeds);
+            r.NamedFloatsInto<NeedKind>(s.AverageNeeds);
             s.Born = r.Int(); s.Partnerships = r.Int(); s.Weddings = r.Int(); s.Separations = r.Int(); s.MovedOutOfParents = r.Int();
             s.MovedWithinCity = r.Int(); s.LeftCity = r.Int(); s.JobChanges = r.Int(); s.JobsLost = r.Int();
             s.LeisureHome = r.Int(); s.LeisurePark = r.Int(); s.LeisureRealPark = r.Int(); s.LeisureStroll = r.Int();
@@ -210,7 +225,7 @@ namespace CityBuilder.Simulation.Citizens
             rng.ReadState(r);
             CarShare = r.Float(); CommuterCarShare = r.Float(); MaxVehicleShare = r.Float();
             MaxNewCommutersPerRun = r.Int(); MaxJobSearchesPerRun = r.Int();
-            LifeEventRate = r.Float(); LeaveConsiderRate = r.Float();
+            LifeEventRate = r.Float(); LeaveConsiderRate = r.Float(); TransitRealShare = r.Float();
             nextCitizenId = r.Int(); nextHouseholdId = r.Int(); nextTripId = r.Int(); householdCount = r.Int();
             freeHousingDirty = r.Bool();
             needsCursor = r.Int(); needsCycle = r.Int();
@@ -272,6 +287,10 @@ namespace CityBuilder.Simulation.Citizens
                 int id = r.Int();
                 trips[id] = FindCitizen(r.Int());
             }
+            rides.Clear();
+            pendingRides.Clear();
+            int rideCount = r.Count(8);
+            for (int i = 0; i < rideCount; i++) { int cid = r.Int(); pendingRides.Add((cid, r.Int())); }
 
             int ctx = r.Count(60);
             for (int i = 0; i < ctx; i++)
@@ -281,6 +300,7 @@ namespace CityBuilder.Simulation.Citizens
                 x.Police = r.Float(); x.Fire = r.Float(); x.Health = r.Float(); x.Education = r.Float(); x.EducationPrimary = r.Float();
                 x.EducationSecondary = r.Float(); x.Library = r.Float(); x.Park = r.Float(); x.Garbage = r.Float(); x.GarbageLevel = r.Float();
                 x.Supplied = r.Bool(); x.PowerOut = r.Bool(); x.WaterOut = r.Bool();
+                x.DrinkingWater = r.Float(); x.Nuclear = r.Float(); x.Media = r.Float(); x.SewageOut = r.Bool();
                 contexts[id] = x;
             }
             r.IntDictionaryInto(residentSatisfaction, r.Float, 4);
@@ -293,7 +313,7 @@ namespace CityBuilder.Simulation.Citizens
             Array.Clear(recentEvents, 0, recentEvents.Length);
             for (int i = 0; i < recentCount; i++)
             {
-                var kind = (Content.LifeEventKind)r.Byte();
+                var kind = r.Name<Content.LifeEventKind>();
                 int day = r.Int(), id = r.Int();
                 recentEvents[(recentStart + i) % MaxRecentEvents] = new LifeEventRecord(kind, day, id, r.String());
             }
@@ -318,7 +338,7 @@ namespace CityBuilder.Simulation.Citizens
             isGone = r.Bool();
             c.Age = r.Int();
             c.BirthDayOfYear = r.Int();
-            c.Education = (Education)r.Byte();
+            c.Education = r.Name<Education>();
             householdId = r.Int();
             c.CommuterConnectionId = r.Int();
             c.WorkplaceId = r.Int();
@@ -326,28 +346,35 @@ namespace CityBuilder.Simulation.Citizens
             c.WorkStart = r.Int();
             c.UnemployedDays = r.Int();
             c.ShoppingNeed = r.Float();
-            c.Activity = (Activity)r.Byte();
+            c.Activity = r.Name<Activity>();
             c.Location = ReadPlace(r);
-            c.Purpose = (TripPurpose)r.Byte();
-            c.Mode = (TravelMode)r.Byte();
+            c.Purpose = r.Name<TripPurpose>();
+            c.Mode = r.Name<TravelMode>();
             c.Destination = ReadPlace(r);
             c.TripId = r.Int();
             c.TripStartTick = r.Long();
             c.ArriveTick = r.Long();
             c.BusyUntil = r.Long();
             c.LastWorkDay = r.Int();
-            c.Gender = (Gender)r.Byte();
+            c.Gender = r.Name<Gender>();
             c.FirstNameIndex = r.Int();
             c.LastNameIndex = r.Int();
             var p = new Personality { Archetype = r.Int() };
-            foreach (var t in Personality.AllTraits) p[t] = r.Float();
+            foreach (var t in Personality.AllTraits) p[t] = 0.5f;
+            int traits = r.Count(5);
+            for (int i = 0; i < traits; i++)
+            {
+                bool ok = r.TryName<Trait>(out var t);
+                float v = r.Float();
+                if (ok) p[t] = v;
+            }
             c.Personality = p;
-            r.FloatsInto(c.NeedValues);
+            r.NamedFloatsInto<NeedKind>(c.NeedValues);
             c.Satisfaction = r.Float();
             c.Mood = r.Float();
             c.Health = r.Float();
             c.IsIll = r.Bool();
-            c.Relationship = (Relationship)r.Byte();
+            c.Relationship = r.Name<Relationship>();
             c.PartnerId = r.Int();
             c.ParentAId = r.Int();
             c.ParentBId = r.Int();
@@ -374,9 +401,9 @@ namespace CityBuilder.Simulation.Citizens
             for (int i = 0; i < Count; i++)
             {
                 var m = items[i];
-                w.Byte((byte)m.Kind);
+                w.Name(m.Kind);
                 w.Byte(m.Template);
-                w.Byte((byte)m.Zone);
+                w.Name(m.Zone);
                 w.Float(m.Strength);
                 w.Int(m.Day);
                 w.Int(m.Street);
@@ -391,13 +418,15 @@ namespace CityBuilder.Simulation.Citizens
         {
             int n = r.Byte();
             if (n > items.Length) throw new SaveFormatException("Zu viele Erinnerungen.");
+            int kept = 0;
             for (int i = 0; i < n; i++)
             {
-                items[i] = new Memory
+                bool known = r.TryName<MemoryKind>(out var kind);
+                var m = new Memory
                 {
-                    Kind = (MemoryKind)r.Byte(),
+                    Kind = kind,
                     Template = r.Byte(),
-                    Zone = (ZoneType)r.Byte(),
+                    Zone = r.Name<ZoneType>(),
                     Strength = r.Float(),
                     Day = r.Int(),
                     Street = r.Int(),
@@ -406,8 +435,9 @@ namespace CityBuilder.Simulation.Citizens
                     OtherId = r.Int(),
                     OtherName = r.Int(),
                 };
+                if (known) items[kept++] = m; // Erinnerungsart dieser Version unbekannt → vergessen
             }
-            Count = n;
+            Count = kept;
         }
     }
 

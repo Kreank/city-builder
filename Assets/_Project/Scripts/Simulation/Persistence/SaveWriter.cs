@@ -41,8 +41,31 @@ namespace CityBuilder.Simulation.Persistence
             if (v.HasValue) Vector2(v.Value);
         }
 
-        /// <summary>Aufzählung als Ganzzahl.</summary>
-        public void Enum<T>(T v) where T : struct, System.Enum => w.Write(Convert.ToInt32(v));
+        /// <summary>
+        /// Aufzählung <b>über ihren Namen</b> (robust gegen umsortierte/ergänzte Werte; Flags als „A, B“). Standard für alle
+        /// Enums im Spielstand.
+        /// </summary>
+        public void Name<T>(T v) where T : struct, System.Enum => w.Write(EnumNames<T>.Of(v));
+
+        /// <summary>Feld, das über eine Aufzählung indiziert ist (Index i = (T)i), als Paare Name → Wert.</summary>
+        public void NamedFloats<T>(float[] values) where T : struct, System.Enum
+        {
+            w.Write(values.Length);
+            for (int i = 0; i < values.Length; i++) { w.Write(EnumNames<T>.OfIndex(i)); w.Write(values[i]); }
+        }
+
+        public void NamedDoubles<T>(double[] values) where T : struct, System.Enum
+        {
+            w.Write(values.Length);
+            for (int i = 0; i < values.Length; i++) { w.Write(EnumNames<T>.OfIndex(i)); w.Write(values[i]); }
+        }
+
+        /// <summary>Feld über Text-Schlüssel (z. B. Dienst-Kanäle) als Paare Schlüssel → Wert.</summary>
+        public void KeyedFloats(IReadOnlyList<string> keys, float[] values)
+        {
+            w.Write(values.Length);
+            for (int i = 0; i < values.Length; i++) { w.Write(keys[i]); w.Write(values[i]); }
+        }
 
         /// <summary>Verweis über die Id (0 = keiner).</summary>
         public void Ref<T>(T obj, Func<T, int> id) where T : class => w.Write(obj == null ? 0 : id(obj));
@@ -120,5 +143,32 @@ namespace CityBuilder.Simulation.Persistence
         }
 
         public void Flush() => w.Flush();
+    }
+
+    /// <summary>Zwischenspeicher Name ↔ Wert je Aufzählung (schnell bei vielen Bürgern; Flags-Kombinationen über ToString/TryParse).</summary>
+    static class EnumNames<T> where T : struct, System.Enum
+    {
+        static readonly Dictionary<T, string> names = new Dictionary<T, string>();
+        static readonly Dictionary<string, T> values = new Dictionary<string, T>();
+
+        static EnumNames()
+        {
+            foreach (T v in System.Enum.GetValues(typeof(T)))
+            {
+                string n = v.ToString();
+                if (!names.ContainsKey(v)) names[v] = n;
+                values[n] = v;
+            }
+        }
+
+        public static string Of(T v) => names.TryGetValue(v, out var n) ? n : v.ToString();
+
+        public static string OfIndex(int i) => Of((T)System.Enum.ToObject(typeof(T), i));
+
+        public static bool TryParse(string s, out T v)
+        {
+            if (s != null && values.TryGetValue(s, out v)) return true;
+            return System.Enum.TryParse(s, false, out v) && !int.TryParse(s, out _);
+        }
     }
 }

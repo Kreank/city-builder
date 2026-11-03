@@ -33,12 +33,16 @@ namespace CityBuilder.Simulation.Persistence
             Add(w.City);                    // Zonen, Zonenraster, Gebäude, Nachfrage
             Add(w.Traffic);                 // Fahrzeuge, Stau-Index, Zufall
             Add(w.Citizens);                // Bürger, Haushalte, Fahrten, Erinnerungen
-            Add(w.Utilities);               // Versorgung
+            Add(w.Utilities);               // Versorgung (Strom, Wasser, Abwasser, Atom-Störfälle)
+            Add(w.WaterQuality);            // Wasserverschmutzung, Trinkwasser
             Add(w.Services);                // Dienste, Müll
+            Add(w.Media);                   // Schlagzeilen, Sperrfristen
+            Add(w.Transit);                 // ÖPNV: Haltestellen, Linien, Busse, Fahrgäste (nach Verkehr und Bürgern)
             Add(w.LandValue);               // Bodenwert, Stufen
             Add(w.Goods);                   // Firmen, Märkte, Lieferungen
             Add(w.Economy);                 // Stadtkasse
-            // --- neue Systeme (transit, services2, trade …) hier anmelden, z. B. Add(w.Transit);
+            Add(w.Trade);                   // Handel zwischen Ländern (nur mit Weltkarte), Grenzlager
+            // --- neue Systeme hier anmelden (oder einfach per AddSystem – s. unten)
 
             // Weitere registrierte Systeme mit eigenem Zustand automatisch hinten anhängen
             foreach (var s in w.Systems)

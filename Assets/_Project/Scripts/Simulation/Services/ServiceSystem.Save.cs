@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CityBuilder.Simulation.Persistence;
 using CityBuilder.Simulation.Zoning;
@@ -39,7 +40,7 @@ namespace CityBuilder.Simulation.Services
             states.WriteLayout(w, (id, s) =>
             {
                 w.Int(id);
-                w.Floats(s.Coverage);
+                w.KeyedFloats(Channels, s.Coverage); // je Kanal über den Namen (Kanäle kommen dazu)
                 w.Float(s.Garbage);
                 w.Float(s.FireRisk);
             });
@@ -47,8 +48,10 @@ namespace CityBuilder.Simulation.Services
             foreach (var f in sortedFacilities) w.Int(f.Id);
             w.Int(sortedBuildings.Count);
             foreach (var b in sortedBuildings) w.Int(b.Id);
+            w.Int(links.Length);
             for (int c = 0; c < links.Length; c++)
             {
+                w.String(Channels[c]);
                 w.Int(links[c].Count);
                 foreach (var kv in links[c])
                 {
@@ -87,7 +90,7 @@ namespace CityBuilder.Simulation.Services
             {
                 int id = r.Int();
                 var s = new BuildingState();
-                r.FloatsInto(s.Coverage);
+                r.KeyedFloatsInto(Channels, s.Coverage);
                 s.Garbage = r.Float();
                 s.FireRisk = r.Float();
                 return new KeyValuePair<int, BuildingState>(id, s);
@@ -106,9 +109,12 @@ namespace CityBuilder.Simulation.Services
                 int id = r.Int();
                 sortedBuildings.Add(city.GetBuilding(id) ?? new Building { Id = id });
             }
-            for (int c = 0; c < links.Length; c++)
+            foreach (var l in links) l.Clear();
+            int channels = r.Count(5);
+            for (int ci = 0; ci < channels; ci++)
             {
-                links[c].Clear();
+                int c = Array.IndexOf(Channels, r.String());
+                var target = c >= 0 ? links[c] : new Dictionary<int, BuildingLinks>(); // unbekannter Kanal → verwerfen
                 int n = r.Count(16);
                 for (int i = 0; i < n; i++)
                 {
@@ -123,7 +129,7 @@ namespace CityBuilder.Simulation.Services
                         float factor = r.Float();
                         if (f != null) bl.Links.Add(new Link { Facility = f, Factor = factor });
                     }
-                    links[c][key] = bl;
+                    target[key] = bl;
                 }
             }
         }

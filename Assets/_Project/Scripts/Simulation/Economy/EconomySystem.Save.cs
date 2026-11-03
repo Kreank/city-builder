@@ -16,8 +16,7 @@ namespace CityBuilder.Simulation.Economy
             w.Bool(ConstructionFrozen);
             w.Int(billedDays);
             w.Int(Version);
-            w.Int(taxRates.Length);
-            foreach (var t in taxRates) w.Float(t);
+            w.NamedFloats<TaxKind>(taxRates);
             CurrentWeek.WriteState(w);
             w.Bool(LastDay != null);
             LastDay?.WriteState(w);
@@ -33,12 +32,7 @@ namespace CityBuilder.Simulation.Economy
             ConstructionFrozen = r.Bool();
             billedDays = r.Int();
             Version = r.Int();
-            int n = r.Count(4);
-            for (int i = 0; i < n; i++)
-            {
-                float t = r.Float();
-                if (i < taxRates.Length) taxRates[i] = t;
-            }
+            r.NamedFloatsInto<TaxKind>(taxRates);
             CurrentWeek = BudgetPeriod.ReadState(r);
             LastDay = r.Bool() ? BudgetPeriod.ReadState(r) : null;
             history.Clear();
@@ -56,7 +50,7 @@ namespace CityBuilder.Simulation.Economy
             w.Int(Days);
             w.Double(OpeningBalance);
             w.Double(ClosingBalance);
-            w.Doubles(amounts);
+            w.NamedDoubles<BudgetCategory>(amounts); // Kategorien über den Namen (Reihenfolge ändert sich)
             w.Int(serviceOrder.Count);
             foreach (var name in serviceOrder) { w.String(name); w.Double(services[name]); }
         }
@@ -67,8 +61,7 @@ namespace CityBuilder.Simulation.Economy
             {
                 Index = r.Int(), FirstDay = r.Int(), Days = r.Int(), OpeningBalance = r.Double(), ClosingBalance = r.Double(),
             };
-            var a = r.Doubles() ?? new double[0];
-            for (int i = 0; i < a.Length && i < p.amounts.Length; i++) p.amounts[i] = a[i]; // neue Kategorien → 0
+            r.NamedDoublesInto<BudgetCategory>(p.amounts); // neue Kategorien → 0, unbekannte verworfen
             int n = r.Count(9);
             for (int i = 0; i < n; i++)
             {

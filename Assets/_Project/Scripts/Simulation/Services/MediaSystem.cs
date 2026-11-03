@@ -45,7 +45,7 @@ namespace CityBuilder.Simulation.Services
     /// Bürgersystem (Gemüt der Erreichten, vorsichtig dosiert). Ereignis <see cref="Published"/> für die HUD.
     /// </para>
     /// </summary>
-    public sealed class MediaSystem : ISimulationSystem
+    public sealed partial class MediaSystem : ISimulationSystem
     {
         public int TickInterval => 5;
 

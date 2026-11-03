@@ -51,8 +51,57 @@ namespace CityBuilder.Simulation.Persistence
 
         public Vector2? NullableVector2() => Bool() ? Vector2() : (Vector2?)null;
 
-        /// <summary>Aufzählung (als Ganzzahl gespeichert).</summary>
-        public T Enum<T>() where T : struct, System.Enum => (T)System.Enum.ToObject(typeof(T), Int());
+        /// <summary>Aufzählung über den Namen (Gegenstück zu <see cref="SaveWriter.Name{T}"/>); unbekannter Name → <paramref name="fallback"/>.</summary>
+        public T Name<T>(T fallback = default) where T : struct, System.Enum =>
+            TryName<T>(out var v) ? v : fallback;
+
+        /// <summary>Aufzählung über den Namen; false, wenn der Name (z. B. aus einer neueren Version) unbekannt ist.</summary>
+        public bool TryName<T>(out T value) where T : struct, System.Enum
+        {
+            return EnumNames<T>.TryParse(String0(), out value);
+        }
+
+        string String0()
+        {
+            try { return r.ReadString(); }
+            catch (EndOfStreamException) { throw new SaveFormatException("Text abgeschnitten."); }
+        }
+
+        /// <summary>Gegenstück zu <see cref="SaveWriter.NamedFloats{T}"/>: unbekannte Namen werden übersprungen, fehlende bleiben.</summary>
+        public void NamedFloatsInto<T>(float[] target) where T : struct, System.Enum
+        {
+            int n = Count(5);
+            for (int i = 0; i < n; i++)
+            {
+                bool ok = TryName<T>(out var k);
+                float v = Float();
+                int idx = ok ? Convert.ToInt32(k) : -1;
+                if (idx >= 0 && idx < target.Length) target[idx] = v;
+            }
+        }
+
+        public void NamedDoublesInto<T>(double[] target) where T : struct, System.Enum
+        {
+            int n = Count(9);
+            for (int i = 0; i < n; i++)
+            {
+                bool ok = TryName<T>(out var k);
+                double v = Double();
+                int idx = ok ? Convert.ToInt32(k) : -1;
+                if (idx >= 0 && idx < target.Length) target[idx] = v;
+            }
+        }
+
+        public void KeyedFloatsInto(IReadOnlyList<string> keys, float[] target)
+        {
+            int n = Count(5);
+            for (int i = 0; i < n; i++)
+            {
+                string key = String0();
+                float v = Float();
+                for (int k = 0; k < keys.Count && k < target.Length; k++) if (keys[k] == key) { target[k] = v; break; }
+            }
+        }
 
         /// <summary>
         /// Anzahl von Elementen mit mindestens <paramref name="minBytesPerItem"/> Bytes je Element – prüft gegen die

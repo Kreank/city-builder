@@ -33,6 +33,7 @@ namespace CityBuilder.Simulation.World
         {
             w.Int(Country.Id);
             w.Double(Population);
+            w.Doubles(CapacityPerCapita); // kalibriert beim Erzeugen (Etappe 8)
             w.Doubles(Production);
             w.Doubles(Demand);
             w.Doubles(Consumption);
@@ -49,6 +50,7 @@ namespace CityBuilder.Simulation.World
             int id = r.Int();
             if (id != Country.Id) throw new SaveFormatException($"Land {id} erwartet {Country.Id}.");
             Population = r.Double();
+            r.DoublesInto(CapacityPerCapita);
             r.DoublesInto(Production);
             r.DoublesInto(Demand);
             r.DoublesInto(Consumption);

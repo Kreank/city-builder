@@ -21,6 +21,9 @@ namespace CityBuilder.Simulation.Utilities
             w.Int(StructureVersion); w.Int(StatusVersion);
             w.Bool(AbandonmentEnabled); w.Int(AbandonedBuildings); w.Bool(pollutionActive);
             w.Int(ReroutedLines); w.Int(LinesRemovedByConstruction);
+            // Atom (G3 erw.): Störfälle, Abschaltungen
+            w.Bool(IncidentsEnabled); w.Float(IncidentChancePerDay); w.Int(Incidents); w.Int(incidentCheckedDay);
+            w.IntDictionary(offlineUntilDay, w.Int);
 
             facilities.WriteLayout(w, (id, f) =>
             {
@@ -35,7 +38,7 @@ namespace CityBuilder.Simulation.Utilities
             lines.WriteLayout(w, (id, l) =>
             {
                 w.Int(l.Id);
-                w.Byte((byte)l.Kind);
+                w.Name(l.Kind);
                 w.Vector2(l.A);
                 w.Vector2(l.B);
                 w.Int(l.NetworkId);
@@ -51,9 +54,12 @@ namespace CityBuilder.Simulation.Utilities
                 w.Bool(s.HasPower); w.Bool(s.HasWater);
                 w.Int(s.TicksWithoutPower); w.Int(s.TicksWithoutWater);
                 w.Int(s.PowerNetwork); w.Int(s.WaterNetwork);
+                w.Bool(s.HasSewage); w.Int(s.TicksWithoutSewage); w.Int(s.SewageNetwork);
             }
-            for (int k = 0; k < 2; k++)
+            w.Int(networks.Length);
+            for (int k = 0; k < networks.Length; k++)
             {
+                w.Name((UtilityKind)k);
                 w.Int(networks[k].Count);
                 for (int i = 0; i < networks[k].Count; i++)
                 {
@@ -76,6 +82,8 @@ namespace CityBuilder.Simulation.Utilities
             StructureVersion = r.Int(); StatusVersion = r.Int();
             AbandonmentEnabled = r.Bool(); AbandonedBuildings = r.Int(); pollutionActive = r.Bool();
             ReroutedLines = r.Int(); LinesRemovedByConstruction = r.Int();
+            IncidentsEnabled = r.Bool(); IncidentChancePerDay = r.Float(); Incidents = r.Int(); incidentCheckedDay = r.Int();
+            r.IntDictionaryInto(offlineUntilDay, r.Int, 4);
 
             facilities.ReadLayout(r, () =>
             {
@@ -92,7 +100,7 @@ namespace CityBuilder.Simulation.Utilities
             });
             lines.ReadLayout(r, () =>
             {
-                var l = new UtilityLine { Id = r.Int(), Kind = (UtilityKind)r.Byte(), A = r.Vector2(), B = r.Vector2(), NetworkId = r.Int(), Revision = r.Int() };
+                var l = new UtilityLine { Id = r.Int(), Kind = r.Name<UtilityKind>(), A = r.Vector2(), B = r.Vector2(), NetworkId = r.Int(), Revision = r.Int() };
                 int poles = r.Count(8);
                 var list = new List<System.Numerics.Vector2>(poles);
                 for (int i = 0; i < poles; i++) list.Add(r.Vector2());
@@ -108,18 +116,24 @@ namespace CityBuilder.Simulation.Utilities
                 {
                     HasPower = r.Bool(), HasWater = r.Bool(), TicksWithoutPower = r.Int(), TicksWithoutWater = r.Int(),
                     PowerNetwork = r.Int(), WaterNetwork = r.Int(),
+                    HasSewage = r.Bool(), TicksWithoutSewage = r.Int(), SewageNetwork = r.Int(),
                 };
             }
-            for (int k = 0; k < 2; k++)
+            for (int k = 0; k < networks.Length; k++) { networks[k].Clear(); networkBuildings[k].Clear(); buildingNetwork[k].Clear(); }
+            int kinds = r.Count(5);
+            for (int kk = 0; kk < kinds; kk++)
             {
-                networks[k].Clear();
-                networkBuildings[k].Clear();
+                bool knownKind = r.TryName<UtilityKind>(out var kind);
+                int k = knownKind && (int)kind < networks.Length ? (int)kind : -1;
+                var netList = new List<UtilityNetwork>();
+                var memberList = new List<List<Building>>();
+                var map = new Dictionary<int, int>();
                 int nc = r.Count(36);
                 for (int i = 0; i < nc; i++)
                 {
                     var n = new UtilityNetwork
                     {
-                        Id = r.Int(), Kind = (UtilityKind)k, Production = r.Float(), Demand = r.Float(), Delivered = r.Float(),
+                        Id = r.Int(), Kind = knownKind ? kind : UtilityKind.Power, Production = r.Float(), Demand = r.Float(), Delivered = r.Float(),
                         Facilities = r.Int(), Buildings = r.Int(), SuppliedBuildings = r.Int(), Lines = r.Int(),
                     };
                     int m = r.Count(4);
@@ -129,10 +143,14 @@ namespace CityBuilder.Simulation.Utilities
                         int id = r.Int();
                         members.Add(city.GetBuilding(id) ?? new Building { Id = id }); // seit dem letzten Neuaufbau abgerissen
                     }
-                    networks[k].Add(n);
-                    networkBuildings[k].Add(members);
+                    netList.Add(n);
+                    memberList.Add(members);
                 }
-                r.IntDictionaryInto(buildingNetwork[k], r.Int, 4);
+                r.IntDictionaryInto(map, r.Int, 4);
+                if (k < 0) continue; // unbekannte (künftige) Versorgungsart
+                networks[k].AddRange(netList);
+                networkBuildings[k].AddRange(memberList);
+                foreach (var kv in map) buildingNetwork[k][kv.Key] = kv.Value;
             }
         }
     }

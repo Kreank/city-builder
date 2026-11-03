@@ -22,7 +22,8 @@ namespace CityBuilder.Simulation.Zoning
             w.Int(Version);
             w.Float(moveInPull);
             w.Ints(freeCells);
-            for (int z = 0; z < 8; z++) w.Float(Demand[(ZoneType)z]);
+            w.Int(Zones.All.Length);
+            foreach (var z in Zones.All) { w.Name(z); w.Float(Demand[z]); }
             var s = Stats;
             w.Int(s.Buildings); w.Int(s.UnderConstruction); w.Int(s.Households); w.Int(s.OccupiedHouseholds); w.Int(s.Population);
             w.Int(s.Jobs); w.Int(s.Workers); w.Int(s.ZonedCells); w.Int(s.FreeZonedCells);
@@ -36,7 +37,7 @@ namespace CityBuilder.Simulation.Zoning
             buildings.WriteLayout(w, (id, b) =>
             {
                 w.Int(b.Id);
-                w.Byte((byte)b.Zone);
+                w.Name(b.Zone);
                 w.Int(b.WidthCells);
                 w.Int(b.DepthCells);
                 w.Vector2(b.Position);
@@ -63,7 +64,13 @@ namespace CityBuilder.Simulation.Zoning
             Version = r.Int();
             moveInPull = r.Float();
             r.IntsInto(freeCells);
-            for (int z = 0; z < 8; z++) Demand[(ZoneType)z] = r.Float();
+            int zones = r.Count(5);
+            for (int i = 0; i < zones; i++)
+            {
+                bool ok = r.TryName<ZoneType>(out var z);
+                float v = r.Float();
+                if (ok) Demand[z] = v;
+            }
             var s = Stats;
             s.Buildings = r.Int(); s.UnderConstruction = r.Int(); s.Households = r.Int(); s.OccupiedHouseholds = r.Int(); s.Population = r.Int();
             s.Jobs = r.Int(); s.Workers = r.Int(); s.ZonedCells = r.Int(); s.FreeZonedCells = r.Int();
@@ -79,7 +86,7 @@ namespace CityBuilder.Simulation.Zoning
                 var b = new Building
                 {
                     Id = r.Int(),
-                    Zone = (ZoneType)r.Byte(),
+                    Zone = r.Name<ZoneType>(),
                     WidthCells = r.Int(),
                     DepthCells = r.Int(),
                     Position = r.Vector2(),

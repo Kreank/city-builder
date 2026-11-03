@@ -16,6 +16,7 @@ namespace CityBuilder.Simulation.Environment
         {
             w.Int(Resolution);
             w.Float(WaterLevel);
+            w.Vector2(FlowDirection); // Wasserqualität: Fließrichtung
             w.Int(Version);
             w.Floats(current);
             w.Floats(natural);
@@ -27,6 +28,7 @@ namespace CityBuilder.Simulation.Environment
             int res = r.Int();
             if (res != Resolution) throw new SaveFormatException($"Geländeauflösung {res} passt nicht zur Welt ({Resolution}).");
             WaterLevel = r.Float();
+            FlowDirection = r.Vector2();
             Version = r.Int();
             r.FloatsInto(current);
             r.FloatsInto(natural);
