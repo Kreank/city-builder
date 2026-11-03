@@ -130,7 +130,7 @@ namespace CityBuilder.Game.Services
             var paving = new Color(0.66f, 0.65f, 0.62f);
             var grass = new Color(0.33f, 0.58f, 0.27f);
             var white = new Color(0.92f, 0.92f, 0.9f);
-            bool park = f.Type.Walking;
+            bool park = f.Type.Walking && !f.Type.Broadcast; // Funk (G4 erw.) ist kein Park
             Box(t, new Vector3(0f, 0.15f, 0f), new Vector3(w, 0.3f, d), park ? grass : paving);
 
             switch (f.Type.Id)
@@ -208,6 +208,21 @@ namespace CityBuilder.Game.Services
                     Cyl(t, new Vector3(w * 0.3f, 20f, -d * 0.25f), 1.8f, 40f, new Color(0.72f, 0.7f, 0.68f));
                     Cyl(t, new Vector3(w * 0.3f, 39f, -d * 0.25f), 1.9f, 2f, new Color(0.75f, 0.15f, 0.12f));
                     break;
+                // --- G4 erweitert: Medien (Platzhalter, bis Newspaper/RadioStation/TVTower.fbx im Katalog sind)
+                case "media_newspaper":
+                    Box(t, new Vector3(0f, 5f, -1f), new Vector3(w * 0.75f, 10f, d * 0.6f), new Color(0.78f, 0.74f, 0.66f));
+                    Box(t, new Vector3(0f, 10.6f, -1f), new Vector3(w * 0.6f, 1.2f, 0.4f), new Color(0.15f, 0.15f, 0.15f)); // Schriftzug
+                    break;
+                case "media_radio":
+                    Box(t, new Vector3(-3f, 2.5f, 0f), new Vector3(7f, 5f, 6f), new Color(0.8f, 0.8f, 0.82f));
+                    Cyl(t, new Vector3(4f, 20f, 0f), 0.5f, 40f, new Color(0.8f, 0.2f, 0.15f)); // Sendemast
+                    break;
+                case "media_tv":
+                    Cyl(t, new Vector3(0f, 45f, 0f), 2.2f, 90f, new Color(0.85f, 0.85f, 0.85f));
+                    Part(t, sphere, new Vector3(0f, 70f, 0f), Quaternion.identity, new Vector3(10f, 6f, 10f), new Color(0.7f, 0.72f, 0.76f));
+                    Cyl(t, new Vector3(0f, 100f, 0f), 0.4f, 20f, new Color(0.8f, 0.2f, 0.15f));
+                    break;
+                // --- Ende
                 default:
                     Box(t, new Vector3(0f, 4f, 0f), new Vector3(w * 0.8f, 8f, d * 0.8f), paving);
                     break;

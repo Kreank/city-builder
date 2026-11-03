@@ -279,7 +279,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
@@ -390,13 +390,60 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Leitungsende, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar; Vorschau im Werkzeug zeigt die Masten, ungültige rot),
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
-- Später: Abwasser/Kläranlage, Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
+- Später (Abwasser/Atom: s. „G3 erweitert“): Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
   Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
   Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
-  Wasserqualität/Verschmutzung flussabwärts. **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
+  (Wasserqualität: erledigt, s. „G3 erweitert“). **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
   Leitungen am selben Punkt zusammenlegen.
+
+## Abwasser, Wasserqualität & Atomkraftwerk (G3 erweitert)
+- **Abwasser** = dritte Netzart `UtilityKind.Sewage` im `UtilitySystem` (Status `HasSewage`/`TicksWithoutSewage`). Gebäude
+  erzeugen 0,9 × Wasserbedarf (`UtilityCatalog.SewageShareOfWater`); Abnahme durch **Kläranlage** (500 m³/h, klärt voll) und
+  **Abwasser-Auslass** (1500 m³/h, billig, `Untreated`, muss ans Ufer). Startphase wie Strom/Wasser: erst verlangt, wenn es eine
+  Kläranlage/einen Auslass gibt; dann fließt es in `IsSatisfied` (Versorgung, Zustand, Stufen) ein; verlassen nach 4 Tagen
+  (`SewageAbandonAfterTicks`). **Kanäle werden selbst verlegt** (Entscheidung des Spielers): Straßen führen sie nicht mit.
+- **`ConnectionRules`** (wiederverwendbarer Baustein, bisher nur Abwasser – Wasser/Strom folgen): `CarriedByRoads(kind)`,
+  Gebäude angeschlossen, wenn ein Kanal ≤ `BuildingReach` 12 m von der Zufahrt (`Building.Entrance`) verläuft (auch mittendrin);
+  Leitungen/Bauwerke verbinden sich weiter über Enden (3 m). `UtilitySystem.ConnectedLine(b, kind)`, `HouseConnection(...)` für
+  den sichtbaren Hausanschluss (`UtilityView`, unterirdisch, braun, 1,5 m unter den Wasserrohren).
+- **`WaterQualitySystem`** (`world.WaterQuality`, nach dem `UtilitySystem`): je Kanalnetz geklärt (Kläranlagen zuerst, anteilig)
+  bzw. ungeklärt über Auslässe. `Pollution` (`GridLayer`, Umwelt-Gitter, 0 = sauber): Auslass gibt `PollutionPerCubicMeter`
+  (0,015) × m³/h auf Wasserzellen ≤ 40 m; Transport **nur flussabwärts** (`TerrainMap.FlowDirection`, Festlegung −y bzw. zum Meer,
+  weil der Fluss kein Gefälle hat): 60 % zur nächsten Wasserzelle stromab (sonst schräg), 4 % je Seite quer, 1 % Selbstreinigung.
+  `PumpQuality(f)` = 1 − Verschmutzung im Ansaugbereich, je Wassernetz nach Leistung gemischt (Brunnen = 1) →
+  `DrinkingWaterQuality(b)`. Bodenwert: Wasserlage × (1 − 1,5 × Verschmutzung) (`LandValueSystem.WaterPollutionNear`).
+- **Atomkraftwerk** (`UtilityCatalog.NuclearPlant`): 200 MW, 400 000 € / 4 500 €/Tag, Kühlwasser (am Ufer, aber trockene ebene
+  Grundfläche: `DryFootprint`), kein Abgas, `ConcernRadius` 1200 m → `UtilitySystem.ConcernAt(p)` (voll bis 30 %).
+  **Störfall** (Entscheidung: an, aber harmlos): `IncidentChancePerDay` 0,2 % je Tag (stabiler Hash aus Id + Tag, kein
+  gemeinsamer Zufall), 3 Tage Abschaltung (Leistung 0), Event `NuclearIncident`, Medienmeldung; keine Sperrzone.
+  `IncidentsEnabled` schaltet ab, `ForceIncident` für Tests.
+- **Bürger** (Hooks in `CitizenSystem.Needs`, verbunden in `CitizenUtilityBinding.Connect`, alle null = neutral):
+  `DrinkingWaterQuality` → Gesundheit −0,4 × (1 − Qualität), Erinnerung `BadTapWater` unter 0,8; `NuclearConcern` → Ruhe −0,3 ×
+  Sorge × ängstlich, Erinnerung `NuclearFear` ab Ängstlichkeit 0,4; fehlendes Abwasser → `SewageBackup`. Ohne Zufall (RNG unverändert).
+- Darstellung: Werkzeug „Abwasserkanal“ (`UtilityTool.UtilityAction.SewagePipe`, unterirdisch), Kacheln Atom/Kläranlage/Auslass,
+  O schaltet Strom → Wasser → **Abwasser** → aus, linke Leiste Knöpfe „Abwasser“ und „Wasserqualität“ (`EnvironmentOverlayView.
+  Overlay.WaterQuality`, nur Verschmutzung sichtbar), Kanal-Chip oben, Inspektor: Abwasser/Trinkwasser/Atom-Sorge am Gebäude,
+  geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
+- Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
+  Fischsterben/Tourismus, Grundwasser-Verschmutzung, Wasser/Strom auf `ConnectionRules` umstellen (Hochspannung → Umspannwerk → Ortsnetz).
+
+## Medien (G4 erweitert)
+- Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
+  3 min, braucht Zufahrt), **Radiosender** (Funkradius 900 m) und **TV-Sender (Turm)** (1600 m) – `ServiceType.Broadcast` (technisch
+  `Walking` = Luftlinie, keine Zufahrt). Kapazität = Leser/Hörer/Zuschauer, Bedarf = Einwohner, Kosten wie alle Dienste (Kasse).
+- Bürger: `MediaReach` (ohne Medienhaus 0, nicht 0,5) → Freizeit +0,004 je Bewertung, Bildung Erwachsene +0,08;
+  `NewsTone` → Gemüt ± 0,05 × Reichweite × Stimmung (vorsichtig dosiert).
+- **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
+  Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
+  Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
+  Arbeitslosigkeit ≥ 12 %. Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
+  `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
+  `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
+- Später: Nachrichtenfenster/Ticker in der HUD, Kampagnen/Werbung, Medien beeinflussen Wahlen/Politik, Klatsch aus Lebensereignissen.
 
 ## Dienste (G4)
 - `Simulation/Services`: `ServiceCatalog` (Polizeiwache, Feuerwache, Klinik, Krankenhaus, Grundschule, Gymnasium/Oberschule,
@@ -443,7 +490,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
 - Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
-  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
+  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
 
 ## Bodenwert & Ausbaustufen (G6)
@@ -692,8 +739,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
   (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
   `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
-  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
-  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
+  Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
+  zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
+  Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -748,10 +796,12 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
-     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse. Später: Abwasser, schwankende Erzeugung
+     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
+     ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,
+     Atomkraftwerk mit Akzeptanz und Störfall. Später: schwankende Erzeugung, Wasser/Strom auf ConnectionRules
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
-     (im Editor noch nicht visuell abgenommen). Später: Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Brände/Kriminalität
+     (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. Später: Brände/Kriminalität
      als Ereignisse, Dienstfahrzeuge
    - ✅ G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
@@ -764,7 +814,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
-   - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
+   - Energie erweitern: ✅ Atomkraftwerk; weitere reale Kraftwerkstypen
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,

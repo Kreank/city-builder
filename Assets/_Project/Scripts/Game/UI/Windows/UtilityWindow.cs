@@ -49,6 +49,7 @@ namespace CityBuilder.Game.UI.Windows
             {
                 Section(ui, u, UtilityKind.Power);
                 Section(ui, u, UtilityKind.Water);
+                Section(ui, u, UtilityKind.Sewage); // G3 erweitert
             }
             ui.Section("Folgen");
             using (ui.Fields())
