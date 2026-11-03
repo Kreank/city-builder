@@ -24,8 +24,10 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud : MonoBehaviour
     {
-        /// <summary>Platzhalter: Die Simulation kennt noch keinen Stadtnamen.</summary>
-        public const string CityName = "Neustadt";
+        /// <summary>Spielstart: Name der Spielerstadt aus der Simulation (<c>World.Realm</c>, im Spielstand; früher Platzhalter).</summary>
+        public static string CityName => activeRunner != null && activeRunner.World != null
+            ? activeRunner.World.Realm.CityName : CityBuilder.Simulation.World.PlayerRealm.DefaultCityName;
+        static SimulationRunner activeRunner;
 
         const string ThemeResource = "UI/CityTheme";
         const string StyleResource = "UI/CityHud";
@@ -90,6 +92,7 @@ namespace CityBuilder.Game.UI.Hud
         {
             tool = roadTool;
             runner = roadTool.Runner;
+            activeRunner = runner; // Spielstart: Stadtname
             envOverlay = FindAnyObjectByType<EnvironmentOverlayView>();
             trafficOverlay = GetComponent<TrafficOverlayView>();
             utilityOverlay = GetComponent<UtilityOverlayView>();
@@ -380,12 +383,14 @@ namespace CityBuilder.Game.UI.Hud
             logo.Add(Icon(HudIconKind.Logo, "cb-icon--l"));
             brand.Add(logo);
             var names = Container("cb-col");
-            names.Add(Text(CityName, "cb-city-name", "cb-heading"));
+            var cityLabel = Text(CityName, "cb-city-name", "cb-heading");
+            names.Add(cityLabel);
             var date = Text("", "cb-date");
             names.Add(date);
             brand.Add(names);
             topBar.Add(brand);
             slowRefresh.Add(() => date.text = DateText() + ClimateText());
+            slowRefresh.Add(() => { string n = CityName; if (cityLabel.text != n) cityLabel.text = n; }); // Spielstart: Stadtname
 
             // Spieltempo (Leertaste/1/2/3 bleiben im SimulationRunner)
             var speed = Container("cb-segment");
@@ -456,6 +461,7 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(SupplyChip(UtilityKind.Power, HudIconKind.Power, UtilityOverlayView.Overlay.Power));
             topBar.Add(SupplyChip(UtilityKind.Water, HudIconKind.Water, UtilityOverlayView.Overlay.Water));
             topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
+            topBar.Add(GatewayChip()); // Außenanbindung: „Stadt an die Autobahn anschließen“
 
             // Info-Modus (C)
             // UX: Info = Stadtübersicht ein/aus (wechselt ins Auswählen); Auswahl selbst geht immer per Linksklick
@@ -531,6 +537,35 @@ namespace CityBuilder.Game.UI.Hud
                             $"{BuildLabels.Number(runner.World.Utilities.TotalDemand(kind))} {UtilityCatalog.Unit(kind)} · Klick: Info-Ansicht");
             return chip;
         }
+
+        // --- Außenanbindungen (Gateways): Warnchip, solange Wohngebiete an keinem Anschluss hängen; Klick fährt zum Zubringer
+        VisualElement GatewayChip()
+        {
+            var chip = El("cb-chip-warn", "cb-hidden");
+            chip.Add(Icon(HudIconKind.Highway));
+            var text = Text("", "cb-chip-warn__text");
+            chip.Add(text);
+            string hint = null;
+            OnClick(chip, () =>
+            {
+                var gw = runner.World.Gateways;
+                var cam = tool.Camera != null ? tool.Camera.GetComponent<CameraController>() : null;
+                if (gw == null || cam == null || gw.FeederEnds.Count == 0) return;
+                // nächstes Zubringer-Ende zur Kartenmitte anfahren
+                var best = gw.FeederEnds[0];
+                foreach (var p in gw.FeederEnds) if (p.Length() < best.Length()) best = p;
+                cam.FocusOn(SimConvert.ToWorld(best, runner.World.Terrain.HeightAt(best)));
+            });
+            slowRefresh.Add(() =>
+            {
+                hint = runner.World.Gateways?.ConnectionHint;
+                chip.EnableInClassList("cb-hidden", hint == null);
+                text.text = "Nicht angeschlossen";
+            });
+            Tip(chip, () => (hint ?? "") + " · Klick: zum Zubringer");
+            return chip;
+        }
+        // --- Ende Gateways
 
         static readonly string[] SeasonNames = { "Frühling", "Sommer", "Herbst", "Winter" };
 

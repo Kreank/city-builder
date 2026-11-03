@@ -104,14 +104,30 @@ namespace CityBuilder.Simulation.Goods
             return c;
         }
 
-        Route WorldRoute(Firm f, bool import)
+        // --- Gateways (Hook, klein): Handel über einen konkreten Anschluss in Richtung Partnerland
+        /// <summary>
+        /// (Gut, Import?, Vertrag?, Netzteil der Firma) → Knoten des Gateways Richtung Partnerland (Import: Einfahrt,
+        /// Export: Ausfahrt) oder null = nächster Außenanschluss wie bisher.
+        /// </summary>
+        public Func<GoodType, bool, bool, int, RoadNode> PreferredGateway { get; set; }
+        /// <summary>Ohne Außenanschluss kein Handel (das „Umland“ entfällt). Standard aus (Tests).</summary>
+        public bool RequireGatewayForTrade { get; set; }
+        // --- Ende Gateways
+
+        Route WorldRoute(Firm f, bool import, GoodType g = null, bool contract = false)
         {
-            if (externals.Count == 0) return new Route(true, true, null, GoodsRules.HinterlandDistance);
+            if (externals.Count == 0)
+                return RequireGatewayForTrade ? default : new Route(true, true, null, GoodsRules.HinterlandDistance); // Gateways: kein Umland
             int comp = Comp(f);
             if (comp < 0) return default;
             RoadNode best = null;
             float bestD = float.MaxValue;
             var p = f.Building.Entrance;
+            if (PreferredGateway != null && g != null) // --- Gateways
+            {
+                var n = PreferredGateway(g, import, contract, comp);
+                if (n != null) return new Route(true, false, n, Vector2.Distance(p, n.Position));
+            }
             foreach (var e in externals)
             {
                 if (e.Component != comp || !(import ? e.CanStart : e.CanArrive)) continue;
@@ -169,7 +185,7 @@ namespace CityBuilder.Simulation.Goods
                     }
 
                 // Import: Weltmarkt + Fracht + Transport ab Außenanschluss
-                if (!routeKnown) { route = WorldRoute(buyer, true); routeKnown = true; }
+                if (!routeKnown) { route = WorldRoute(buyer, true, g); routeKnown = true; }
                 double tariffRate = TradeGateway?.SpotTariffRate(g) ?? 0.0; // Etappe 8: Zoll des Spielers
                 double importUnit = route.Ok
                     ? m.WorldPrice * (1.0 + route.FreightShare + tariffRate) + TruckCost(route.Distance) / amount
@@ -178,13 +194,15 @@ namespace CityBuilder.Simulation.Goods
                 // --- Etappe 8 Handel: Vertragsware im Grenzlager (Lkw ab Außenanschluss, Fernfracht trug der Verkäufer)
                 float contractAmount = 0f;
                 double contractUnit = double.MaxValue;
+                var contractRoute = route; // Gateways: Vertragsware kommt über den Anschluss Richtung Lieferland
                 if (TradeGateway != null && route.Ok)
                 {
                     float avail = TradeGateway.ImportAvailable(g);
                     if (avail >= GoodsRules.MinShipment)
                     {
+                        if (PreferredGateway != null) { contractRoute = WorldRoute(buyer, true, g, true); if (!contractRoute.Ok) contractRoute = route; }
                         contractAmount = MathF.Min(amount, avail);
-                        contractUnit = TradeGateway.ImportUnitPrice(g) + TruckCost(route.Distance) / contractAmount;
+                        contractUnit = TradeGateway.ImportUnitPrice(g) + TruckCost(contractRoute.Distance) / contractAmount;
                     }
                 }
                 // --- Ende Etappe 8
@@ -192,7 +210,7 @@ namespace CityBuilder.Simulation.Goods
                 if (best == null && !route.Ok) return;
                 float shipped;
                 if (contractAmount > 0f && contractUnit <= Math.Min(importUnit, best != null ? bestUnit : double.MaxValue) * ContractPreference)
-                    shipped = DispatchContractImport(buyer, g, contractAmount, route, now); // Etappe 8
+                    shipped = DispatchContractImport(buyer, g, contractAmount, contractRoute, now); // Etappe 8
                 else if (best != null && bestUnit <= importUnit) shipped = DispatchLocal(best, buyer, g, bestAmount, bestDist, now);
                 else shipped = DispatchImport(buyer, g, amount, route, now);
                 want -= shipped;
@@ -302,7 +320,7 @@ namespace CityBuilder.Simulation.Goods
                 float avail = seller.OutputStock[k] - cap * ContractKeepFill;
                 float amount = MathF.Min(g.LoadUnits, MathF.Min(wanted, avail));
                 if (amount < GoodsRules.MinShipment) return;
-                if (!routeKnown) { route = WorldRoute(seller, false); routeKnown = true; }
+                if (!routeKnown) { route = WorldRoute(seller, false, g, true); routeKnown = true; } // Gateways: Richtung Käuferland
                 if (!route.Ok) return;
                 double truck = TruckCost(route.Distance);
                 double net = TradeGateway.ExportUnitPrice(g) - truck / amount;
@@ -339,16 +357,22 @@ namespace CityBuilder.Simulation.Goods
             foreach (var seller in firms)
             {
                 if (!seller.Building.IsConstructed || !seller.Recipe.IsIndustry) continue;
-                Route route = default;
-                bool routeKnown = false;
                 foreach (var o in seller.Recipe.Outputs)
                 {
                     var g = o.Good;
                     int k = g.Index;
                     float cap = seller.OutputCapacity[k];
-                    if (TradeGateway != null && cap > 0f) ContractExport(seller, g, cap, ref route, ref routeKnown, now); // Etappe 8: Verträge zuerst
+                    // Gateways: Weg je Gut (Partnerland) – Vertrag und Weltmarkt getrennt
+                    Route route = default;
+                    bool routeKnown = false;
+                    if (TradeGateway != null && cap > 0f)
+                    {
+                        Route contractRoute = default;
+                        bool contractKnown = false;
+                        ContractExport(seller, g, cap, ref contractRoute, ref contractKnown, now); // Etappe 8: Verträge zuerst
+                    }
                     if (cap <= 0f || seller.OutputStock[k] < cap * GoodsRules.ExportFill) continue;
-                    if (!routeKnown) { route = WorldRoute(seller, false); routeKnown = true; }
+                    if (!routeKnown) { route = WorldRoute(seller, false, g); routeKnown = true; }
                     if (!route.Ok) break;
                     var m = markets[k];
                     for (int load = 0; load < 2; load++)

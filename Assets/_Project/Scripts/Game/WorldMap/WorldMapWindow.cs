@@ -148,6 +148,7 @@ namespace CityBuilder.Game.WorldMap
             if (p.IsRiver(i)) sb.Append(" · Fluss");
             var c = p.CountryOfCell(i);
             if (c != null) sb.Append($"\nRegion <b>{p.Regions[p.RegionOf[i]].Name}</b>, Land <b>{c.Name}</b>{(c.IsPlayer ? " (Spieler)" : "")}");
+            else if (p.RegionOf[i] >= 0) sb.Append($"\nRegion <b>{p.Regions[p.RegionOf[i]].Name}</b> · freies Land (unbesiedelt)");
             sb.Append($"\nBoden {p.Fertility[i]:0.00} · Wald {p.Forest[i]:0.00} · Erz {p.Ore[i]:0.00} · Kohle {p.Coal[i]:0.00} · Öl {p.Oil[i]:0.00} · " +
                       $"Sand {p.Sand[i]:0.00} · Grundwasser {p.Groundwater[i]:0.00}");
             return sb.ToString();
@@ -235,11 +236,39 @@ namespace CityBuilder.Game.WorldMap
                 var col = c.IsPlayer ? new Color32(255, 216, 74, 255) : new Color32(20, 20, 20, 255);
                 px[(p.Height - 1 - p.YOf(c.CapitalCell)) * p.Width + p.XOf(c.CapitalCell)] = col;
             }
+            DrawGatewayRays(p, px); // Außenanbindungen: Richtungen der Anschlüsse ab der Startregion
             texture.SetPixels32(px);
             texture.Apply(false);
             shownMode = mode;
             shownCountryVersion = start;
         }
+
+        // --- Außenanbindungen (Gateways): Strahl je Anschluss ab der Mitte der Startregion (Autobahn rot, Bahn braun, Wasser hellblau)
+        void DrawGatewayRays(Planet p, Color32[] px)
+        {
+            var gw = tool != null && tool.Runner != null ? tool.Runner.World?.Gateways : null;
+            var start = p.StartRegion;
+            if (gw == null || start == null) return;
+            int cx = p.XOf(start.CenterCell), cy = p.YOf(start.CenterCell);
+            float cosLat = Mathf.Max(0.2f, Mathf.Cos(start.Latitude * Mathf.Deg2Rad));
+            foreach (var g in gw.All)
+            {
+                if (!g.HasLocation) continue;
+                Color32 col = g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Highway ? new Color32(230, 60, 40, 255)
+                    : g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Rail ? new Color32(140, 100, 70, 255)
+                    : new Color32(120, 220, 255, 255);
+                int len = g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Highway ? 7 : 4;
+                for (int k = 2; k <= len; k++)
+                {
+                    int x = cx + Mathf.RoundToInt(g.Direction.X * k / cosLat);
+                    int y = cy - Mathf.RoundToInt(g.Direction.Y * k); // Weltkarte: y wächst nach Süden
+                    if (y < 0 || y >= p.Height) break;
+                    x = ((x % p.Width) + p.Width) % p.Width;
+                    px[(p.Height - 1 - y) * p.Width + x] = col;
+                }
+            }
+        }
+        // --- Ende Gateways
 
         static readonly Color32[] BiomeColors =
         {
@@ -280,7 +309,7 @@ namespace CityBuilder.Game.WorldMap
                 {
                     if (!land) return ocean;
                     var country = p.CountryOfCell(i);
-                    uint rgb = country.Color;
+                    uint rgb = country != null ? country.Color : FreeLandColor; // Spielstart: freies Land hell/neutral
                     var c = new Color32((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, 255);
                     // Grenzen dunkler
                     for (int k = 0; k < 4; k++)
@@ -320,6 +349,12 @@ namespace CityBuilder.Game.WorldMap
                 }
             }
         }
+
+        /// <summary>Farbe eines Bioms (wie in der Biom-Ansicht) – auch für die Karte im Neues-Spiel-Fenster.</summary>
+        public static Color32 BiomeColor(Biome b) => BiomeColors[Mathf.Clamp((int)b, 0, BiomeColors.Length - 1)];
+
+        /// <summary>Spielstart: unbesiedeltes Land ohne Staat (Länder-Ansicht).</summary>
+        public const uint FreeLandColor = 0xD8D2C0;
 
         static Color32 ResourceColor(Mode m)
         {

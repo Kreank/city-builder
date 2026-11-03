@@ -213,6 +213,9 @@ namespace CityBuilder.Simulation.World
 
         public int DaysSimulated { get; private set; }
 
+        /// <summary>Skalierung je Kategorie aus <see cref="Calibrate"/> (für den Stadtstaat des Spielers).</summary>
+        readonly double[] calibration = { 1, 1, 1, 1, 1, 1, 1, 1 };
+
         internal WorldEconomy(Planet p)
         {
             int cc = p.Countries.Count;
@@ -222,6 +225,7 @@ namespace CityBuilder.Simulation.World
             {
                 if (!p.IsLand(i)) continue;
                 int c = p.Regions[p.RegionOf[i]].CountryId;
+                if (c < 0) continue; // freies Land: niemand wohnt dort (der Spieler gründet dort seine Stadt)
                 float a = p.CellAreaKm2(p.YOf(i));
                 float t = p.Temperature[i];
                 float habitable = WorldNoise.Clamp01(1f - MathF.Abs(t - 16f) / 26f) * (p.BiomeOf[i] == Biome.Ice ? 0f : 1f);
@@ -293,6 +297,7 @@ namespace CityBuilder.Simulation.World
                 for (int i = 0; i < nations.Count; i++) capacity += nations[i].Population * nations[i].CapacityPerCapita[c] * meanFactor[i, c];
                 double target = demand[c] * (cat == GoodsCategory.Food ? CalibrationFood : CalibrationMargin);
                 double scale = capacity > 0 ? target / capacity : 1.0;
+                calibration[c] = scale; // Spielstart: gleiche Skalierung für den später angelegten Stadtstaat
                 for (int i = 0; i < nations.Count; i++) nations[i].CalibrateCapacity(c, scale);
                 // Vorleistungen dieser (jetzt kalibrierten) Produktion erhöhen den Bedarf der Eingänge
                 foreach (var (o, input, amount) in NationEconomy.InputTable)
@@ -300,6 +305,41 @@ namespace CityBuilder.Simulation.World
             }
             for (int i = 0; i < nations.Count; i++) nations[i].ResetStartPrices();
         }
+
+        // --- Spielstart: Stadtstaat des Spielers
+        /// <summary>Bevölkerung der aggregierten Volkswirtschaft eines Stadtstaats (Umland/Dörfer der Startregion – die Stadt selbst läuft voll).</summary>
+        public const double CityStatePopulation = 5000.0;
+
+        /// <summary>
+        /// Volkswirtschaft des Spieler-Stadtstaats anlegen bzw. ersetzen (Verlegen). Klein (<see cref="CityStatePopulation"/>),
+        /// Kapazitäten aus Profil/Vorkommen der Startregion, skaliert mit denselben Kalibrierfaktoren wie die NPC-Länder, damit
+        /// Preise/Stärken vergleichbar sind. Die NPC-Länder bleiben unverändert (keine neue Kalibrierung). Steht hinten in
+        /// <see cref="Nations"/> (Index = <see cref="Country.Id"/>).
+        /// </summary>
+        internal void PlaceCityState(Planet p, Country c)
+        {
+            float area = 0f, wood = 0f, minerals = 0f, energy = 0f;
+            foreach (int r in c.Regions)
+                foreach (int i in p.Regions[r].Cells)
+                {
+                    float a = p.CellAreaKm2(p.YOf(i));
+                    area += a;
+                    wood += p.Forest[i] * a;
+                    minerals += 0.7f * p.Ore[i] * a + 0.3f * p.Sand[i] * a;
+                    energy += 0.5f * (p.Coal[i] + p.Oil[i]) * a;
+                }
+            float inv = area > 0f ? 1f / area : 0f;
+            var climate = new ClimateModel(ClimateParams.FromCell(p, c.CapitalCell), p.Seed * 31 + c.Id);
+            var e = new NationEconomy(c, climate, CityStatePopulation,
+                WorldNoise.Clamp01(wood * inv * 1.3f), WorldNoise.Clamp01(minerals * inv * 2.5f), WorldNoise.Clamp01(energy * inv * 3f));
+            for (int k = 0; k < GoodsCategories.Count; k++) e.CalibrateCapacity(k, calibration[k]);
+            e.ResetStartPrices();
+            c.Economy = e;
+            if (c.Id < nations.Count) nations[c.Id] = e;
+            else if (c.Id == nations.Count) nations.Add(e);
+            else throw new InvalidOperationException("Stadtstaat-Id passt nicht zu den Volkswirtschaften.");
+        }
+        // --- Ende Spielstart
 
         /// <summary>Zielverhältnis Welt-Kapazität / Welt-Bedarf (Lebensmittel verderben 0,5 %/Tag im Lager, alles andere 0,1 %).</summary>
         public const double CalibrationMargin = 1.04, CalibrationFood = 1.12;

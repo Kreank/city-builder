@@ -212,6 +212,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.WorldMap.WorldMapWindow>().Init(this);
             // --- Ende Welt
 
+            // --- Außenanbindungen (Gateways): Schilder am Kartenrand, Bahnkorridor, Hinweis „anschließen“
+            Ensure<CityBuilder.Game.Gateways.GatewayView>().Init(this, previewMaterial);
+            // --- Ende Gateways
+
             // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
             // --- Ende G5
@@ -1007,7 +1011,8 @@ namespace CityBuilder.Game.Roads
             var segment = PickSegment(roads, ray);
             if (segment == null) { HidePreview(); return; }
 
-            ShowSegmentHighlight(segment, segment.Type.Width + 1f, true);
+            string locked = RoadBuilder.LockedReason(segment); // Gateways: Fernstraße der Welt
+            ShowSegmentHighlight(segment, segment.Type.Width + 1f, locked == null);
             Guide = new GuideState
             {
                 Active = true,
@@ -1017,10 +1022,11 @@ namespace CityBuilder.Game.Roads
                 StartHeight = segment.HeightAt(0.5f),
                 EndHeight = segment.HeightAt(0.5f),
                 Type = segment.Type,
-                Valid = true,
+                Valid = locked == null,
+                Error = locked,
                 Info = segment.Type.IsOneWay ? "Fahrtrichtung umdrehen" : "Richtung tauschen (Spuren spiegeln)",
             };
-            if (clicked) roads.Reverse(segment);
+            if (clicked && locked == null) RoadBuilder.Reverse(roads, segment);
         }
 
         void UpdateBulldoze(RoadNetwork roads, Ray ray, SimVector2 raw, bool clicked)
@@ -1032,6 +1038,20 @@ namespace CityBuilder.Game.Roads
             if (segment == null) { previewRenderer.enabled = false; return; }
 
             ShowSegmentHighlight(segment, segment.Type.Width + 1f, false);
+            // --- Gateways: vorgebaute Autobahn/Anschlussstelle gehört der Welt → Hinweis statt Abriss (nur der Zubringer geht)
+            string locked = RoadBuilder.LockedReason(segment);
+            if (locked != null)
+            {
+                Guide = new GuideState
+                {
+                    Active = true, LabelOnly = true,
+                    Start = segment.Evaluate(0.5f), End = segment.Evaluate(0.5f),
+                    StartHeight = segment.HeightAt(0.5f), EndHeight = segment.HeightAt(0.5f),
+                    Type = segment.Type, Valid = false, Error = locked,
+                };
+                return;
+            }
+            // --- Ende Gateways
             if (clicked)
             {
                 RoadBuilder.Demolish(roads, segment); // Stadtkasse: Abrisserlös
@@ -1147,6 +1167,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.OverWater: return "Über Wasser nur als Brücke – Bauhöhe erhöhen (Bild↑)";
                 case RoadBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 case RoadBuildError.OverlapsStructure: return "Straße überschneidet ein Bauwerk – anders führen oder Gebäude verschieben";
+                case RoadBuildError.Locked: return "Gehört zum Fernstraßennetz – nicht abreißbar/umbaubar (am Zubringer anschließen)"; // Gateways
                 default: return null;
             }
         }

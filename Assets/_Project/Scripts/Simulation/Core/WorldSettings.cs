@@ -37,5 +37,26 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Auflösung/Anzahl Regionen und Länder; null = Standard.</summary>
         public World.PlanetSettings Planet;
         // --- Ende Welt
+
+        // --- Spielstart & Startregion
+        /// <summary>Name der Spielerstadt (null = „Neustadt“); der Stadtstaat heißt „Freie Stadt {Name}“. Laufend: <c>SimulationWorld.Realm</c>.</summary>
+        public string CityName;
+        // --- Ende Spielstart
+        // --- Außenanbindungen (Gateways)
+        /// <summary>
+        /// Beim Kartenstart (neue Welt) eine Autobahn quer durch die Karte mit Anschlussstelle + Zubringer bauen (gehört der
+        /// Welt, nicht abreißbar). Standard aus → Tests/Standardwelt wie bisher; das Spiel (<c>SimulationRunner</c>) schaltet ein.
+        /// </summary>
+        public bool PrebuiltConnections;
+        /// <summary>
+        /// Neue Haushalte ziehen nur zu, wenn ihre Wohnung übers Straßennetz mit einem befahrbaren Gateway (bzw. ohne
+        /// Gateways: einem Außenanschluss) verbunden ist; ersetzt die alte Regel „kein Außenanschluss nötig“. Standard aus (Tests).
+        /// </summary>
+        public bool RequireGatewayForMoveIn;
+        /// <summary>
+        /// Import/Export ohne Außenanschluss („Umland“) entfällt – Handel läuft nur über einen Anschluss. Standard aus (Tests).
+        /// </summary>
+        public bool RequireGatewayForTrade;
+        // --- Ende Gateways
     }
 }

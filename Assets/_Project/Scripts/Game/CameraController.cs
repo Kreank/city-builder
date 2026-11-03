@@ -40,6 +40,14 @@ namespace CityBuilder.Game
 
         void Start() => runner = FindAnyObjectByType<SimulationRunner>();
 
+        /// <summary>Springt mit dem Fokus zu einem Punkt (z. B. Zubringer der Autobahn); Folgen endet.</summary>
+        public void FocusOn(Vector3 p)
+        {
+            FollowTarget = null;
+            focus.x = Mathf.Clamp(p.x, -worldHalfSize, worldHalfSize);
+            focus.z = Mathf.Clamp(p.z, -worldHalfSize, worldHalfSize);
+        }
+
         void LateUpdate()
         {
             var kb = GameKeyboard.Current;

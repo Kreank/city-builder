@@ -34,6 +34,11 @@ namespace CityBuilder.Game.UI.Windows
 
         public override void DrawBody(Ui ui)
         {
+            // --- Außenanbindungen: der erste Schritt jeder Stadt
+            ui.Section("Start");
+            ui.Note("Eine Autobahn führt schon durch die Karte. Baue deine erste Straße an den Zubringer der Anschlussstelle " +
+                    "(„hier anschließen“) – erst dann ziehen Leute zu, und Handel/Lkw laufen über die Autobahn. Autobahn und " +
+                    "Anschlussstelle gehören der Welt (nicht abreißbar); Bahntrasse und Wasserwege sind vorbereitet und folgen später.");
             ui.Section("Bauen");
             using (ui.Fields())
             {

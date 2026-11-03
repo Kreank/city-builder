@@ -8,6 +8,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 ## Vision (vom Spieler formuliert, Leitlinie für alle Etappen)
 - **Fiktive Erde:** Man erschafft sein eigenes Land, baut eine Stadt, später weitere Städte (selbst oder durch NPCs).
   Jedes Land hat andere natürliche Vorkommen und Stärken (Tourismus, Rohstoffe, Technik …).
+- **Spielstart (2026-11-03, Spieler):** Statt einer Karte (Cities: Skylines) sucht man sich aus, **wo** man beginnt – nach
+  Vorlieben (Klima, Küste/Fluss, Gelände, Schwerpunkt wie Agrar/Erze/Tourismus …), wobei eine Wahl andere unmöglich machen
+  kann (Erze meist in Bergen, selten am Meer). Keine echten Ländernamen. Der Spieler gründet seine Stadt in **freiem,
+  unbesiedeltem Land** als **freie Stadt (Stadtstaat)**; mit weiteren Städten wird daraus später ein eigenes Land mit selbst
+  gewähltem Namen (Etappe 7). Umgesetzt: s. „Spielstart & Startregion“.
 - **Handel intern und extern:** zwischen eigenen Städten und zwischen Ländern; Regierungen können gebildet werden.
   **Freunde einladen** (Multiplayer, asynchron): eigene Städte im eigenen Land oder als fremdes Land, Handel untereinander.
 - **Zwei Bauarten:** (1) **Gebiete** markieren, Leute kommen und bebauen selbst – Wohnen (gering/mittel/dicht),
@@ -49,6 +54,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Spiegel der Standortqualität und Steuerbasis.
 - **Welt (Etappe 5):** fiktive Erde mit Regionen (Klima, Relief, Böden, Bodenschätze) → **komparative Vorteile**:
   Länder spezialisieren sich (Tourismus, Rohstoffe, Technik). Jede Stadtkarte ist ein Ausschnitt einer Region.
+  Ein knappes Drittel des Landes ist **frei** (zwischen den Ländern, Randlagen); dort startet der Spieler als Stadtstaat und
+  wächst durch weitere Städte zum Land.
 - **Detailstufen (LOD-Simulation):** die eigene, betrachtete Stadt läuft voll (einzelne Bürger, Fahrzeuge, Lager);
   andere Städte und Länder laufen **aggregiert** (Volkswirtschaft je Stadt: Bevölkerung, Produktion je Gut,
   Bedarf, Lager, Preise) – so bleibt eine ganze Welt rechenbar. Wechselt man in eine Stadt, wird sie detailliert.
@@ -65,6 +72,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein `ConnectionRules` für alle Netzarten.
 - Hilfe „Netz entlang Straßen verlegen“ (einzelne oder alle Stadtstraßen, normale Kosten, Vorschau) – v. a. für
   bestehende Städte/alte Spielstände (Übergangsfrist 5 Tage nach dem Laden eines Stands v1).
+
+## Entscheidung: Bauart (2026-11-03, Spieler)
+- **Freie Straßen bleiben** (kein Anno-Raster).
+- **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
+  sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
+- **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
+  Schwerpunkte/Förderung statt selbst gebauter Produktionsketten.
 
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
@@ -94,8 +108,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Ziel-Halt (`CitizenSystem.EgressTicks`), Parkwege (`TimeModel.WalkTicks`, gleiche Formel in `PedestrianPlanner.ParkWalkTicks`),
   statistische Busfahrten, Lkw-Platzhalter (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s). ÖPNV-Fahrgast geht erst zur
   Haltestelle (`Passenger.ReadyTime` = Start + Zugangsweg) und kann erst dann einsteigen.
-- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,67) × `SpeedMultipliers` 1/2/4 →
-  1 Spieltag = 6 / 3 / 1,5 Minuten (120 / 240 / 480 Verkehrsschritte je Sekunde). Der Runner verteilt die Verkehrsschritte über
+- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,111) × `SpeedMultipliers` 1/3/6 →
+  1 Spieltag = 36 / 12 / 6 Minuten, Verkehr sichtbar 5× / 15× / 30× Echtzeit (20 / 60 / 120 Verkehrsschritte je Sekunde;
+  Entscheidung des Spielers 2026-11-03 „viel langsamer“, vorher 6 / 3 / 1,5 min). `ticksPerSecond` ist **nicht** mehr
+  serialisiert (die Szene hatte einen alten Wert 10 gespeichert, der das Zeitmodell überschrieb). Der Runner verteilt die Verkehrsschritte über
   die Frames (`Substep`), Budget `maxSimMillisecondsPerFrame` 8 ms: Rückstand wird verworfen (Simulation langsamer, Frame
   friert nicht ein; `DroppedStepsLastFrame`, `LastFrameSimMilliseconds` in Debug-HUD/Hilfe). `TickAlpha` = Bruchteil zum nächsten
   **Verkehrsschritt** (Fahrzeug-Interpolation), `GameTickTime` = Kalenderzeit für Fußgänger, `AnimationTimeScale` = Verkehrszeit je
@@ -111,7 +127,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Frame bei 60 fps.
 - **Neue Zeitkonstanten** immer in `TimeModel` (oder dort ableiten), Fahr-/Gehzeiten in Verkehrssekunden, Tagesablauf in Ticks.
   Tests mit Fahrverhalten laufen in `Substep()`-Schritten (z. B. `TrafficTests.Run`), Kalender-Logik in `Step()`.
-- **Speichern:** Weltabschnitt v2 speichert `SubstepInTick` (Speichern mitten im Tick erlaubt); Verkehr v2 / ÖPNV v2 / Waren v2:
+- **Speichern:** Weltabschnitt v2 speichert `SubstepInTick` (Speichern mitten im Tick erlaubt; v4: Gateway-Schalter); Verkehr v2 / ÖPNV v2 / Waren v2:
   Verkehrszeiten als double, `Passenger.ReadyTime`. Alte Stände: Uhr unverändert (Tick-Länge gleich), Verkehrszeit = Schritte ×
   0,25 s (wie vorher), alte Fahrgäste gelten als schon an der Haltestelle, laufende Platzhalter-Fahrten behalten ihre alte
   (kürzere) Ankunft.
@@ -120,7 +136,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -245,7 +261,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Household`, `CitizenSystem` (jeden Tick Tagesablauf, alle 5 Ticks Zuzug/Jobsuche/Statistik, täglich Altern),
   `RoadComponents` (zusammenhängende Netzteile = Vorprüfung „erreichbar“).
 - Zuzug: wie G1 ein Haushalt je Gebäude und Durchlauf, solange `MoveInPull > 5` (Single/Paar/Familie/Alleinerziehend/
-  Senioren). Kein Außenanschluss nötig (Start). Jobsuche: nächster freier passender Job im selben Netzteil (Büro braucht
+  Senioren). **Im Spiel nur über einen Anschluss** (`WorldSettings.RequireGatewayForMoveIn`, ersetzt die alte Regel „kein
+  Außenanschluss nötig“; s. „Außenanbindungen (Gateways)“): Wohnung muss im selben Netzteil wie die Einfahrt eines befahrbaren
+  Gateways liegen, ein Erwachsener fährt vom Gateway zur neuen Wohnung (normale Verkehrsmittelwahl). Tests ohne Schalter wie
+  früher (sofort in der Wohnung). Jobsuche: nächster freier passender Job im selben Netzteil (Büro braucht
   mittleren Abschluss, Gebildete bevorzugen Büro). Ohne Job hier → Auspendler über den nächsten Außenanschluss;
   Auspendler wechseln zu freien Jobs hier. Freie Jobs ohne einheimische Bewerber → Einpendler (Bürger ohne Haushalt);
   Einwohner verdrängen Einpendler. Altern am Geburtstag, 18 = Abschluss, 65 = Rente, ab 80 Sterbewahrscheinlichkeit,
@@ -386,7 +405,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Resources/UI/CityTheme.tss` (importiert nur `unity-theme://default` → Standardschrift) und `Resources/UI/CityHud.uss`
   (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
-- Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
+- Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
   (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
@@ -831,8 +850,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
   Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage); mit Weltkarte stattdessen der Weltpreis der Länder (Etappe 8).
 - **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
-  Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
-  Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
+  Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab Außenanschluss – mit Gateways der
+  Anschluss Richtung Partnerland, s. „Außenanbindungen (Gateways)“). Ohne jeden Außenanschluss: **Umland** (Fracht 15 %,
+  Platzhalter, 1,5 km) – nur noch in Tests; im Spiel entfällt es (`WorldSettings.RequireGatewayForTrade`). Export
   ab 50 % Ausgangslager, wenn Welt − Fracht ≥ 90 % des lokalen Preises, ab 90 % Füllung immer (bis 30 % herunter). Firmen
   dürfen bis 10 Tage Lohn überziehen, darüber kaufen sie nichts.
 - **Lieferverkehr:** eine Lieferung = eine Ladung. Anteil 0,8 × `TrafficSystem.Demand` als echter Lkw (seit dem Zeitmodell; vorher 0,35) (`VehicleClass.Truck`,
@@ -910,7 +930,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Regionen** (~360): Saatpunkte mit Mindestabstand, Mehrquellen-Dijkstra über Land (Höhenunterschied teuer → Grenzen auf
   Kämmen), Inseln ab 6 Zellen eigene Region; Mittelwerte (Klima, Relief, Vorkommen inkl. halbem Schelf-Öl), Fluss, Küste +
   Richtung zum Meer, Nachbarn. **Länder** (~36): Hauptstadt-Regionen mit Mindestabstand, Dijkstra über den Regionsgraph
-  (Land, Gebirge teurer; Seewege zu den 3 nächsten Regionen ×2,5). Namen aus dem Silbengenerator (eindeutig), Hauptstadt =
+  (Land, Gebirge teurer; Seewege zu den 3 nächsten Regionen ×2,5); danach bleibt **freies Land** übrig (`PlanetSettings.FreeLandShare`
+  32 %, `Region.IsFree`/`Country == null`, s. „Spielstart & Startregion“). Namen aus dem Silbengenerator (eindeutig), Hauptstadt =
   beste Zelle (Boden, Fluss, Küste, Klima). **Profil** (`CountryProfile`): `Raw` 0..1 aus Natur/Lage für Tourismus
   (Küste, Wärme, Berge, Vielfalt), Landwirtschaft (Boden × Wachstum × Wasser), Rohstoffe (Erz/Kohle/Öl/Wald), Industrie
   (Kohle+Erz, Wasser, Flüsse, Ebene, Küste), Technik (gemäßigt, Küste, Flüsse, „Kultur“-Zufall); `Rank` = Rang unter allen
@@ -921,8 +942,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
   Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
-  produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
-  vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
+  produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`): seit
+  „Spielstart“ der **Stadtstaat** in einer freien Region (eigene kleine Volkswirtschaft, 5 000 Einwohner Umland); in alten
+  Spielständen das NPC-Land der Startregion (läuft aggregiert als „Rest des Landes neben der Stadt“).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
   0,35–2,2 aus der Zerklüftung, Fluss ja/nein + Breite nach Abfluss, Küste in Meeresrichtung mit 12–30 % Meer, Mitte bleibt
   frei), Geländeseed = `TerrainSeed + Region.Id·7919`. `TerrainParams.Default` = bitgleich zum alten Gelände.
@@ -948,9 +970,69 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
-- Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
+- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
   Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
   Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
+
+## Spielstart & Startregion
+- **Politisches Modell** (`PlanetGenerator.Political`, `FreeLand`): Nach der Länderverteilung bleiben ~32 % der Regionen
+  **frei** (`PlanetSettings.FreeLandShare`, `Region.IsFree`, `Region.CountryId == -1`, `Region.Country == null`): Schlüssel =
+  0,5 × Abstand zur eigenen Hauptstadt (relativ) + 0,25 × Abstand weltweit + 0,2 Grenzregion + 0,1 Insel + 0,35 Hash-Rauschen →
+  freies Land liegt zwischen den Ländern und in Randlagen, in allen Klimazonen und auf mehreren Kontinenten; Hauptstädte bleiben,
+  was danach nicht mehr über eigene Regionen (Land/See) mit der Hauptstadt verbunden ist, wird ebenfalls frei. NPC-Länder behalten
+  Namen/Ids/Reihenfolge; Profile und Volkswirtschaften rechnen nur über eigenes Land. **`FreeLandShare = 0` = altes Modell
+  bitgleich** (Prüfsumme in `StartFinderTests`, zusätzlich 60 Tage Handel gegen den alten Code verglichen).
+- **Spieler als Stadtstaat:** `Planet.SetStartRegion(freie Region)` legt ein `Country` mit `IsPlayer` + `IsCityState` **hinten**
+  an `Countries` an (Id = Anzahl NPC-Länder), Hauptstadtzelle wie bei Ländern, Profil aus der Region (Rang gegen die NPC-Länder,
+  deren Ränge bleiben), Volkswirtschaft `WorldEconomy.PlaceCityState` (5 000 Einwohner Umland, dieselben Kalibrierfaktoren, keine
+  Neukalibrierung). Erneuter Aufruf mit einer freien Region verlegt ihn; Wechsel in ein NPC-Land → Ausnahme. Startregion in einem
+  NPC-Land (alte Stände, Tests) = altes Verhalten (dieses Land wird Spieler-Land). `SuggestStartRegion` wählt nur freie Regionen,
+  wenn es welche gibt. Dazu `Planet.IsStartable(r)`, `FreeRegionCount`, `PlayerCityState`, `AssignRegion` (hält Id, Objekt und
+  Listen gleich). **API kompatibel:** `Region.CountryId`/`Country.Regions`/`PlayerCountry` bleiben; neu sind nur Felder
+  (`Region.Country`, `IsFree`, `Country.IsCityState`). `CountryOfCell` liefert für freies Land **null** – Leser müssen das abfangen.
+  **Handel/LOD:** Der Stadtstaat ist eine normale Handelspartei (`TradeSystem.PlayerId` = seine Id, Handelsort = Mitte der
+  Startregion, Grundzoll 0); die Stadt-Seite läuft wie bisher über das Grenzlager. Am Handel musste nichts geändert werden
+  (geprüft: Lieferungen/Bezahlung laufen für `IsPlayer` über `City`, Lagebild/Weltpreis rechnen mit seiner kleinen
+  Volkswirtschaft, Beziehungen/Nachbarschaft über `CountryId >= 0`).
+- **`PlayerRealm`** (`world.Realm`, immer gesetzt, Abschnitt „realm“ v1): `CityName` (aus `WorldSettings.CityName`, Standard
+  „Neustadt“, `RenameCity`), `DisplayName` = `NationName` ?? „Freie Stadt {Stadtname}“ (Name des Stadtstaats auf Weltkarte und
+  im Handel), vorbereitet für Etappe 7: `NationName` (null), `FlagColor`, `CityRegions`, `MinCitiesForNation` 3, `CanFoundNation`.
+  Speichert zusätzlich den **Besitz aller Regionen** (Land-Id je Region) und stellt Abweichungen beim Laden wieder her.
+- **Startsuche** `Simulation/World/StartFinder` (rein, getestet in `StartFinderTests`) mit Katalog `StartCriteria` (Regeln +
+  Erklärtexte als Daten): `RegionFacts` je freier Region (≥ 4 Zellen) aus den echten Planet-Daten – Klimazone
+  (`ClimateOf`: polar < −6 °C/Eis, trocken = Wüste oder < 250 mm, subpolar = Tundra/Taiga/< 4 °C, gemäßigt < 14 °C,
+  subtropisch < 21 °C, sonst tropisch), Relief-Index max(Zerklüftung/150 m, Höhe/600 m) (< 1 flach, 1–3 hügelig, ≥ 3 gebirgig),
+  Küstenanteil, Flussgröße (Abfluss/Flussschwelle), Landwirtschaft (Boden × Wasser × Wachstum), Tourismus (warme trockene Küste
+  oder Berge), Lebensfreundlichkeit, Entfernung zum nächsten NPC-Land (Dijkstra über alle Zellen, km).
+  **Gruppen:** Klima (eine), Lage (mehrere: Meeresküste, großer Fluss, Binnenland – Seen gibt es im Weltmodell nicht),
+  Gelände (eine), Schwerpunkt (mehrere: Landwirtschaft, Forst, Erze, Kohle, Öl/Gas, Baustoffe, Tourismus, Hafen & Handel),
+  Schwierigkeit (leicht/normal/schwer), Nachbarn (nahe ≤ ~320 km / abgelegen ≥ ~500 km). Score 0..1 je Option, passt ab 0,5;
+  Schwellen so, dass eine Vorliebe etwa das obere Fünftel bis Drittel trifft (Seeds 2024/7/99).
+  **Ausschluss aus der Welt:** `Evaluate(auswahl)` zählt je Option die freien Regionen mit Auswahl + Option (exklusive Gruppe:
+  statt der bisherigen); 0 → `Unavailable` (Tooltip: „keine passende Region zu deiner übrigen Auswahl – {Erklärtext}“), ≤ 3 →
+  `Rare`. Beispiele Seed 2024: Küste → Binnenland gesperrt; Küste + Erze → subpolar gesperrt, gemäßigt selten (2);
+  Polar + großer Fluss = 0. `Suggest` = beste 5 (Summe der Scores + 0,6 × Lebensfreundlichkeit, bei „schwer“ umgekehrt) mit
+  Begründung, z. B. „gemäßigt, hügelig, Küste, großer Fluss, fruchtbar, Kohle im Flachland im Westen, nächstes Land Boumavien
+  250 km“ (Lage der Vorkommen = Schwerpunkt der ergiebigen Zellen + Relief dort) und 8 Balkenwerten. `Describe(regionId)` für die
+  freie Wahl auf der Karte.
+  **Erz und Küste:** Auf Zellebene liegt an Küsten halb so viel Erz wie im Bergland (Test); auf Regionsebene (~700 km) enthalten
+  Küstenregionen oft auch Gebirge (wie die Anden), daher ist „Küste + Erze“ nicht automatisch leer – selten ist Erz an **flacher**
+  Küste (5–24 % der Erzregionen), Erzregionen sind überwiegend hügelig/gebirgig (55–95 %).
+- **Neues-Spiel-Fenster** `Game/Persistence/NewGameWindow` (Baukasten, mittig breit, 4 Schritte): (1) Welt-Seed / „Neu würfeln“,
+  Kartenvorschau (Planet + StartFinder im Hintergrund-Task; freies Land hell, Länder getönt), Zahlen; (2) Vorlieben als
+  `Ui.ChoiceChip` (Treffer als Zahl, „selten · n“ mit Akzentrand, gesperrt ausgegraut mit Erklärung, Meldung „n freie Regionen
+  passen“); (3) Vorschläge als Liste mit Begründung, Goldpunkte auf der Karte, Klick wählt, Klick auf freies Land wählt frei,
+  Balkenwerte der Auswahl; (4) Stadtname (`Ui.TextInput`) → „Stadt gründen“ = `SaveManager.StartNewGame` →
+  `SimulationRunner.NewGame(WorldSettings)` (Seed, `StartRegion`, `CityName`). Gleicher Seed + Einstellungen → gleiche Regions-Ids.
+  Esc geht einen Schritt zurück. **Erster Programmstart ohne Spielstand** (`SaveManager.HasAnySave`): Runner erzeugt nur eine
+  schnelle Platzhalterwelt ohne Weltkarte (angehalten, `AwaitingNewGame`), das Fenster öffnet sich und lässt sich erst nach dem
+  Gründen schließen („Schnellstart“ = beste Region ohne Vorlieben). Mit Spielständen startet das Spiel wie bisher mit der
+  Standardwelt; Spielmenü (Esc) → „Neues Spiel einrichten …“. Optik ungetestet (Unity nicht gestartet).
+- **Spielstand:** Weltabschnitt **v3** = v2 (Zeitmodell: Verkehrsschritt) + `FreeLandShare` + Stadtname der Einstellungen; Abschnitt „realm“ (s. o.).
+  **Migration (Entscheidung): alte Stände behalten ihr Spieler-Land.** v1/v2 laden mit `FreeLandShare = 0` → exakt die alte Welt
+  (alle Regionen NPC, Spieler = Land der Startregion), weil Länder-Volkswirtschaften („planet“) und Handel („trade“) nach
+  Länder-Ids gespeichert sind – eine neu verteilte Welt würde nicht mehr zu Verträgen, Beziehungen und Lagern passen.
+  Fehlt „realm“, heißt die Stadt „Neustadt“ (wie der alte Platzhalter).
 
 ## Handel (Etappe 8)
 - `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
@@ -1101,7 +1183,72 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Fahrten: Bürgerfahrten aus Gebäuden (s. Bürger G2) und Durchgangsverkehr zwischen **Außenanschlüssen**
   (Straßenenden am Kartenrand, `ExternalConnections`). Sackgassen in der Stadt erzeugen keinen Verkehr mehr – außer mit
   `DeadEndsAreExternal` (Testszenarien). Ziele mitten auf Segmenten (`FindPathToSegment`) wandern beim Zerteilen mit.
-  Hängende Fahrzeuge verschwinden nach 90 s.
+  Hängende Fahrzeuge verschwinden nach 90 s. Hook `ThroughTrafficWeight` (Gateways): Gewicht je Start/Ziel statt Gleichverteilung
+  (null = wie bisher).
+
+## Außenanbindungen (Gateways)
+Wunsch des Spielers: Fernstraße, Bahn, Wasserstraße sind wie in Cities: Skylines **schon da**; man muss die Stadt an die Autobahn
+anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spieler als Ziel: bewusst später.)
+- `Simulation/Gateways` (Namespace `CityBuilder.Simulation.Gateways`): `Gateway` (Art `GatewayKind` Highway/Road/Rail/Water/Air,
+  `GatewayStatus` Operational/Planned, Lage am Kartenrand + Richtung nach außen, **Ziel** `TargetKind/TargetName/TargetCountryId/
+  TargetRegionId` + `Importance`, `Capacity`, Einfahrt/Ausfahrt `EntryNodeId`/`ExitNodeId`, `PartnerId` = anderes Ende, Wasser:
+  Breite/Tiefe/`Navigable`, Zähler `Today`/`Yesterday`/`TotalMoveIns`), `GatewayRules` (alle Zahlen), `GatewayGenerator`,
+  `GatewaySystem` (`world.Gateways`, läuft zuletzt, ISaveable „gateways“, + `.Trade.cs`, `.Save.cs`).
+- **Schalter** in `WorldSettings` (Standard aus → Tests/Standardwelt wie bisher; `SimulationRunner` schaltet alle ein):
+  `PrebuiltConnections` (Kartenstart baut die Anbindung), `RequireGatewayForMoveIn`, `RequireGatewayForTrade`. Weltabschnitt des
+  Spielstands v4 (v1–v3 = alles aus; Platzhalterwelt des Erststarts ohne Gateways). `CreateDefault(settings, seed, newGame)`: erzeugt nur bei `newGame` (Laden: false – Straßen und
+  Gateways kommen aus dem Stand, nichts wird doppelt gebaut).
+- **Ziele** (`GatewayGenerator.Targets`): Nachbarregionen der Startregion (fremdes Land +1,5, Hauptstadt-Region +1,5, Bevölkerung),
+  die 6 wichtigsten fremden Hauptstädte (Bevölkerung × Nähe), die eigene Hauptstadt; Peilung Ost/Nord aus Länge/Breite. Ohne Welt:
+  vier „Umland“-Richtungen. Freie Nachbarregion (kein Land) → Ziel „{Region} (freies Land)“ (Art Umland); Spieler = `PlayerCountryId` (auch Stadtstaat). Gateway-Ziel = bestes Ziel in seiner Richtung (Gewicht × cos, ab cos 0,35), Wichtigkeit = Σ w·cos².
+- **Autobahn** (`BuildHighway`, deterministisch): Achse = Winkel (15°-Schritte) mit dem besten Bezug zu den Zielen; Anschlussstelle
+  (Vorlage Raute, 400 m) bevorzugt ±300 m seitlich der Mitte (Mitte bleibt für die Stadt), sonst weitere Lagen; Richtungsfahrbahnen
+  `Highway2` von den Vorlagen-Enden bis 6 m vor den Kartenrand in Stücken à ~260 m (≤ 900 m, Grenzen ≥ 150 m vom Wasser), Höhen der
+  Stückgrenzen auf einer geglätteten, auf 4,5 % begrenzten Gradiente, je Stück automatische Trassierung (Tunnel/Brücke/Damm, Brücke
+  über den Fluss). Alles wird erst komplett geplant (Kandidat verworfen bei ungültigem Stück, Ende im Meer, zu wenig lichter Höhe der
+  Rauten-Brücke am Hang), dann mit abgehängter Stadtkasse gebaut (**Kosten trägt die Welt**). Autobahn, Rampen und Brücke bekommen
+  `RoadSegmentFlags.Locked`; die beiden äußeren Querstraßen-Stücke der Raute sind der **Zubringer** (Stadtstraße, frei, dort schließt
+  der Spieler an; `FeederEnds`). Name „A {Nr} Richtung {Ziel}“ (Nummer aus Hash von Region/Geländeseed).
+- **Gesperrte Straßen** (`RoadSegment.IsLocked`): `RoadBuilder.Demolish` → false, `CheckReplace` → `RoadBuildError.Locked`,
+  `RoadBuilder.Reverse` → null, `LockedReason(seg)` für den Hinweis; Kreisverkehr entfernt sie nicht; kein Unterhalt
+  (`EconomySystem`); Flag bleibt beim Zerteilen (Rampen an die Autobahn anschließen geht weiter).
+- **Bahn** (vorbereitet): gerader Korridor quer durch die Karte (≥ 45° zur Autobahn, ≥ 480 m von der Anschlussstelle, Enden auf Land,
+  ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways „noch nicht befahrbar (Züge folgen)“. Freigehalten über den verketteten
+  `CitySystem.LotBlocker` (`InRailCorridor`). Gelände wird nicht gesperrt.
+- **Wasser** (vorbereitet): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
+  → Water-Gateways mit Breite, Tiefe, schiffbar ab 40 m/2,5 m (Meer immer), Name „Fluss stromab-/stromaufwärts Richtung …“ bzw.
+  „Seeweg · Küste“. **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
+- **Zuzug** (Hook `CitizenSystem.MoveInGateway`, nur mit `RequireGatewayForMoveIn`): `MoveInEntry(home, Netzteil)` = Einfahrt eines
+  befahrbaren Straßen-Gateways im Netzteil (mehrere: wer gemessen an der Wichtigkeit am wenigsten Zuzügler brachte); gibt es gar
+  keine Gateways, zählt jeder befahrbare Außenanschluss (Testwelten). Sonst null → kein Zuzug (`BlockedMoveInsToday`). Zuzug startet
+  die erste Fahrt (`StartMoveInTrip`: ein Erwachsener von `Place.Outside(Einfahrt)` heim, Rest ist schon da); `MovedInVia` zählt je
+  Gateway. `ConnectionHint` („Stadt an die A 7 (Zubringer an der Anschlussstelle) anschließen, damit Leute kommen.“) solange ein
+  Wohngebäude ohne Anschluss ist (Stundenprüfung).
+- **Handel** (Hook `GoodsSystem.PreferredGateway`, `RequireGatewayForTrade`): `TradeNode(gut, import, vertrag, netzteil)` – Vertrag →
+  Partner des laufenden Vertrags (`ContractPartner`), Weltmarkt → günstigstes Lieferland (Preis + Fracht) bzw. bester Abnehmer
+  (`SpotPartner`, täglich); `GatewayToward(land)`: Landweg → Gateway Richtung Handelsort des Landes, Seeweg → Gateway Richtung Hafen
+  des Spielerlandes (`TradeRouteText`: „Seeweg: Lkw über … zum Hafen außerhalb (bis Wasserstraße/Hafen fertig)“). Import = Einfahrt,
+  Export = Ausfahrt; Lkw fahren über die Autobahn. Ohne Welt/Treffer: nächster Außenanschluss wie bisher.
+- **Durchgangsverkehr** (Hook `TrafficSystem.ThroughTrafficWeight`, mit `PrebuiltConnections`): Autobahn-Einfahrt Gewicht
+  1 + 0,4 × Wichtigkeit (≤ 5; Spielerstraßen am Rand 1), Ausfahrten sind kein Start, keine Wende am selben Gateway – läuft auch
+  ohne angeschlossene Stadt.
+- **Zählung**: Fahrzeuge rein/raus je Straßen-Gateway (Fahrzeug-Ids auf dem ersten/letzten Stück, alle 8 Verkehrsschritte = 2 s Verkehrszeit als `ISubstepSystem`, gespeichert),
+  Zuzüge, Import/Export-Ladungen + Wert (neue `Shipment`s mit `ConnectionNodeId`).
+- **Darstellung**: `Game/Gateways/GatewayView` (Begleiter am RoadTool): Schilder „A 7 · Richtung …“ (90 m innerhalb des Rands,
+  `WorldLabels`), Bahntrasse als gestrichelte Doppellinie mit „Bahntrasse · Züge folgen“, Wasserwege beschriftet, „Zubringer · hier
+  anschließen“ + Meldung (Schlüssel „gateway-connect“) solange `ConnectionHint`; HUD-Warnchip „Nicht angeschlossen“ (Klick →
+  `CameraController.FocusOn` Zubringer). Inspektor: Gateways anklickbar (`SelectionKind.Gateway`, Art, Ziel inkl. Handelsweg, Zustand,
+  Verkehr/Zuzug/Handel heute/gestern), Liste in der Stadtübersicht, Lkw/Orte außerhalb zeigen den Gateway. Weltkarte: Strahlen je
+  Anschluss ab der Startregion (rot Autobahn, braun Bahn, hellblau Wasser) + Liste beim Spielerland. RoadTool: gesperrte Segmente
+  zeigen den Hinweis statt Abriss/Umdrehen/Ausbau. Hilfe (F1) Abschnitt „Start“. Im Editor noch nicht visuell abgenommen.
+- Tests: `GatewayTests` (Autobahn durchgehend in beide Richtungen, Raute + Zubringer, Brücke über den Fluss, gesperrt/Zubringer
+  abreißbar, Unterhalt, Zuzug erst nach Anschluss + Zuzügler-Auto auf der Einfahrt, Durchgangsverkehr ohne Anschluss/ohne Wende,
+  Bahnkorridor frei, Wasser-Gateways, Import über den Gateway Richtung Partnerland + Vertrag, kein Umland, Speichern/Laden ohne
+  Neubau + bitgleich, Erzeugung deterministisch; volle Erde Seeds 2024/74/333/592).
+- Später: Stufe 2 Bahn (Gleise, Bahnhof, Güter-/Personenzüge auf dem Korridor), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über
+  den Wasser-Gateway, Klappbrücken), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
+  Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
+  andere echte Städte als Ziel.
 
 ## ÖPNV (Stufe 1: Buslinien)
 - `Simulation/Transit`: `TransitTypes.cs` (`TransitRules` alle Zahlen, `TransitCatalog.BusDepot`, `BusStop`, `TransitLine`, `Bus`,
@@ -1183,7 +1330,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
-  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege. **Gespeichert, obwohl „abgeleitet“**, weil sie
+  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege, Handelspartner der Gateways. Weltabschnitt v4 trägt die
+  Gateway-Schalter; Laden ruft `CreateDefault(…, newGame: false)` (keine vorgebaute Autobahn, sie steht im Abschnitt „roads“ mit
+  `Locked`-Flag, die Gateways in „gateways“). **Gespeichert, obwohl „abgeleitet“**, weil sie
   bewusst nur bei Änderungen neu gerechnet werden und dazwischen eine Momentaufnahme sind: Zonenraster (Geländehöhen beim
   Aufbau), Versorgungsnetze, Dienst-Zuordnung, Grobraster des Bodenwerts, Umfeld-Cache und Gebäudelisten der Bürger,
   ÖPNV-Routen, KI-Lagebild des Handels.
@@ -1199,7 +1348,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   `Application.persistentDataPath/Saves/*.cbsave`, Schreiben im Hintergrund (atomar), Autosave alle N Spielminuten
   (PlayerPrefs, Ringpuffer 3), **Strg+S** Schnellspeichern, **Strg+L** Schnellladen. `SaveMenuWindow` (mittig, **Esc**
   wenn Esc sonst nichts tat; pausiert): Speichern/Speichern unter/Laden (Liste mit Spielzeit, Einwohner, Kontostand,
-  Größe)/Neues Spiel (Seed, Startregion)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
+  Größe)/Neues Spiel (öffnet das Neues-Spiel-Fenster, s. „Spielstart & Startregion“)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
   Im Editor noch nicht visuell abgenommen.
 
 ## Roadmap
@@ -1226,7 +1375,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
      ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
-     Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
+     ✅ Zuzug nur über Außenanschlüsse (s. Gateways), Lieferverkehr (G5), Zufriedenheit (G6)
      ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
      Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
      (im Editor noch nicht visuell abgenommen). ✅ Fußwege in Verkehrszeit (echtes Gehtempo, s. „Zeitmodell“). Später: Abkürzungen durch Parks,
@@ -1252,6 +1401,13 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
+   - Außenanbindungen (Gateways, s. dort):
+     - ✅ Stufe 1: vorhandene Autobahn beim Kartenstart (Raute + Zubringer, gehört der Welt, Brücke über den Fluss), Ziele aus der
+       Weltkarte, Zuzug nur über Anschlüsse (Zuzügler fahren vom Gateway), Handel über den Gateway Richtung Partnerland (Seeweg
+       vorerst per Lkw zum Hafen außerhalb), Durchgangsverkehr nach Wichtigkeit, Bahnkorridor + Wasserstraßen vorbereitet,
+       Schilder/Inspektor/HUD-Hinweis/Weltkarte (im Editor noch nicht visuell abgenommen)
+     - Stufe 2 Bahn (Gleise auf dem Korridor, Bahnhof, Güter-/Personenzüge), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über den
+       Wasser-Gateway), Stufe 4 Flughafen
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
@@ -1274,9 +1430,15 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
-   im Editor noch nicht visuell abgenommen). Später: Startregion wählen, Klima auf Gelände-Optik, Handel (8)
+   im Editor noch nicht visuell abgenommen). ✅ Startregion nach Vorlieben wählen (Spielstart, freies Land, Stadtstaat).
+   Später: Klima auf Gelände-Optik, Handel (8)
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
+   - Vorbereitet (Spielstart): Spieler startet als Stadtstaat „Freie Stadt {Stadtname}“ in freiem Land; `PlayerRealm` hat
+     `CityRegions`, `NationName`/`FlagColor` (null/Gold), `MinCitiesForNation` = 3, `CanFoundNation`; Regionsbesitz im Spielstand.
+   - Offen: **weitere Städte gründen** (freie Nachbarregionen beanspruchen → `Planet.AssignRegion`, Stadt wechseln = LOD),
+     **Land gründen** (ab 3 Städten: Name + Flagge wählen → `NationName`, Stadtstaat wird Land, Handel/Medien zeigen den Namen),
+     Anspruch auf freies Land durch NPC-Länder (Wettlauf), Grenzen/Gebietsstreit.
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
    - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
      Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit

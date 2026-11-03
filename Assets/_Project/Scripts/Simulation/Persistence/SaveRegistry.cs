@@ -27,6 +27,7 @@ namespace CityBuilder.Simulation.Persistence
             Add(w.Terrain);                 // Höhen (aktuell + natürlich), bearbeiteter Boden
             Add(w.Environment);             // Lärm, Abgas
             Add(w.Resources);               // Ressourcen-Raster + natürlicher Ausgangszustand
+            Add(w.Realm);                   // Spielstart: Stadtname, Spieler-Gebiet, Besitz der Regionen
             Add(w.Planet?.Economy);         // Länder-Volkswirtschaften (Planet selbst entsteht aus dem Seed neu)
             Add(w.Roads);                   // Knoten, Segmente, Profile, Typen
             Add(w.Traffic?.Rules);          // Verkehrsregeln
@@ -42,6 +43,7 @@ namespace CityBuilder.Simulation.Persistence
             Add(w.Goods);                   // Firmen, Märkte, Lieferungen
             Add(w.Economy);                 // Stadtkasse
             Add(w.Trade);                   // Handel zwischen Ländern (nur mit Weltkarte), Grenzlager
+            Add(w.Gateways);                // Außenanbindungen: Anschlüsse, Autobahn/Zubringer, Bahnkorridor, Zählungen
             // --- neue Systeme hier anmelden (oder einfach per AddSystem – s. unten)
 
             // Weitere registrierte Systeme mit eigenem Zustand automatisch hinten anhängen
