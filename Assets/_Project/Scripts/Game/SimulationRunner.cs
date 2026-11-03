@@ -18,6 +18,10 @@ namespace CityBuilder.Game
         [Header("Gelände")]
         [SerializeField] bool generateTerrain = true;
         [SerializeField] int terrainSeed = 4711;
+        [Header("Stadtkasse")]
+        [Tooltip("Sandbox: Kosten werden gebucht, aber Bauen wird nie wegen Geld blockiert.")]
+        [SerializeField] bool unlimitedFunds = false;
+        [SerializeField] double startingFunds = 100000.0;
 
         static readonly int[] SpeedMultipliers = { 0, 1, 3, 10 };
 
@@ -38,6 +42,8 @@ namespace CityBuilder.Game
                 SizeMeters = worldSize,
                 GenerateTerrain = generateTerrain,
                 TerrainSeed = terrainSeed,
+                UnlimitedFunds = unlimitedFunds,
+                StartingFunds = startingFunds,
             });
         }
 

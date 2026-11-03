@@ -27,6 +27,8 @@ namespace CityBuilder.Simulation.Utilities
         PoleOnFacility,
         /// <summary>Kein Maststandort: bestehendes Gebäude im Weg (wird nicht abgerissen).</summary>
         PoleOnBuilding,
+        /// <summary>Stadtkasse: zu wenig Geld oder Baustopp.</summary>
+        InsufficientFunds,
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -116,6 +118,11 @@ namespace CityBuilder.Simulation.Utilities
         /// <summary>Wie viele Gebäude bisher wegen fehlender Versorgung verlassen wurden.</summary>
         public int AbandonedBuildings { get; private set; }
 
+        // --- Stadtkasse (Hook): prüft/bucht Bau- und Abrisskosten. null = kostenlos. Gesetzt von SimulationWorld.
+        public Economy.IConstructionBudget Budget { get; set; }
+        bool Affordable(float cost) => Budget == null || Budget.CanAfford(cost);
+        // --- Ende Stadtkasse
+
         public IEnumerable<UtilityFacility> Facilities => facilities.Values;
         public IEnumerable<UtilityLine> Lines => lines.Values;
         public IReadOnlyList<UtilityNetwork> Networks(UtilityKind kind) => networks[(int)kind];
@@ -188,6 +195,7 @@ namespace CityBuilder.Simulation.Utilities
             float a = rotationDegrees * MathF.PI / 180f;
             var plan = new FacilityPlan { Type = type, Position = position, Front = new Vector2(MathF.Sin(a), MathF.Cos(a)), Cost = type.Cost };
             plan.Error = CheckFacility(plan);
+            if (plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
             plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
             if (plan.Error == UtilityBuildError.None)
                 foreach (var b in city.Buildings)
@@ -241,7 +249,8 @@ namespace CityBuilder.Simulation.Utilities
 
         public UtilityFacility BuildFacility(FacilityPlan plan)
         {
-            if (plan == null || !plan.IsValid) return null;
+            if (plan == null || !plan.IsValid || !Affordable(plan.Cost)) return null;
+            Budget?.Spend(Economy.BudgetCategory.UtilityConstruction, plan.Cost);
             foreach (var b in plan.Displaced) city.RemoveBuilding(b);
             var f = new UtilityFacility
             {
@@ -264,6 +273,15 @@ namespace CityBuilder.Simulation.Utilities
         /// <summary>Kurzform für Werkzeuge/Tests: planen und bauen, wenn gültig.</summary>
         public UtilityFacility TryBuildFacility(UtilityFacilityType type, Vector2 position, float rotationDegrees = 0f) =>
             BuildFacility(PlanFacility(type, position, rotationDegrees));
+
+        /// <summary>Spieler-Abriss: entfernt das Bauwerk und schreibt den Abrisserlös gut.</summary>
+        public bool DemolishFacility(int id)
+        {
+            if (!facilities.TryGetValue(id, out var f)) return false;
+            RemoveFacility(id);
+            Budget?.Refund(f.Type.Cost * Economy.EconomyRules.DemolitionRefundShare);
+            return true;
+        }
 
         public bool RemoveFacility(int id)
         {
@@ -297,12 +315,14 @@ namespace CityBuilder.Simulation.Utilities
             // Stromleitungen brauchen Masten (Wasserrohre liegen unterirdisch und dürfen unter Straßen)
             if (kind == UtilityKind.Power && plan.Error == UtilityBuildError.None)
                 plan.Error = PlanPoles(a, b, plan.Poles);
+            if (plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
             return plan;
         }
 
         public UtilityLine BuildLine(LinePlan plan)
         {
-            if (plan == null || !plan.IsValid) return null;
+            if (plan == null || !plan.IsValid || !Affordable(plan.Cost)) return null;
+            Budget?.Spend(Economy.BudgetCategory.UtilityConstruction, plan.Cost);
             var l = new UtilityLine { Id = nextLineId++, Kind = plan.Kind, A = plan.A, B = plan.B, Poles = PolePositions(plan.Poles) };
             lines[l.Id] = l;
             StructureVersion++;
@@ -310,6 +330,15 @@ namespace CityBuilder.Simulation.Utilities
         }
 
         public UtilityLine TryBuildLine(UtilityKind kind, Vector2 a, Vector2 b) => BuildLine(PlanLine(kind, a, b));
+
+        /// <summary>Spieler-Abriss: entfernt die Leitung und schreibt den Abrisserlös gut.</summary>
+        public bool DemolishLine(int id)
+        {
+            if (!lines.TryGetValue(id, out var l)) return false;
+            RemoveLine(id);
+            Budget?.Refund(l.Length * UtilityCatalog.LineCostPerMeter(l.Kind) * Economy.EconomyRules.DemolitionRefundShare);
+            return true;
+        }
 
         public bool RemoveLine(int id)
         {

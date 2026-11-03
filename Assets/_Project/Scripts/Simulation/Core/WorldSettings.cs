@@ -13,5 +13,16 @@ namespace CityBuilder.Simulation.Core
         public int TerrainSeed = 4711;
         /// <summary>Abstand der Gitterpunkte der Höhenkarte in Metern.</summary>
         public float TerrainCellSize = 4f;
+
+        // --- Stadtkasse
+        /// <summary>
+        /// Sandbox-Kasse: Kosten werden gebucht, aber nie blockiert (keine Zinsen, kein Baustopp).
+        /// Standard an, damit Tests und Werkzeuge ohne Geld-Denken bauen können; das Spiel
+        /// (<c>SimulationRunner</c>) schaltet es aus.
+        /// </summary>
+        public bool UnlimitedFunds = true;
+        /// <summary>Startkapital der Stadtkasse in €.</summary>
+        public double StartingFunds = 100000.0;
+        // --- Ende Stadtkasse
     }
 }

@@ -103,20 +103,25 @@ namespace CityBuilder.Simulation.Roads
                 plan.Cost += rp.Cost;
                 if (!rp.IsValid && rp.Error != RoadBuildError.Duplicate && plan.Error == RoadBuildError.None) plan.Error = rp.Error;
             }
+            if (plan.Error == RoadBuildError.None && !RoadBuilder.Affordable(network, plan.Cost)) plan.Error = RoadBuildError.InsufficientFunds;
             return plan;
         }
 
         public static List<RoadSegment> Build(RoadNetwork network, TemplatePlan plan)
         {
-            var built = new List<RoadSegment>();
-            if (plan == null || !plan.IsValid) return built;
-            foreach (var piece in plan.Pieces)
+            if (plan == null || !plan.IsValid) return new List<RoadSegment>();
+            // Stadtkasse: Gesamtpreis aus dem Plan einmal buchen
+            return RoadBuilder.Charged(network, plan.Cost, () =>
             {
-                var rp = RoadBuilder.Plan(network, piece.P0, 0.5f, piece.Control, piece.P2, 0.5f, piece.Type, piece.H0, piece.H2,
-                    followTerrain: piece.FollowTerrain);
-                built.AddRange(RoadBuilder.Build(network, rp));
-            }
-            return built;
+                var built = new List<RoadSegment>();
+                foreach (var piece in plan.Pieces)
+                {
+                    var rp = RoadBuilder.Plan(network, piece.P0, 0.5f, piece.Control, piece.P2, 0.5f, piece.Type, piece.H0, piece.H2,
+                        followTerrain: piece.FollowTerrain);
+                    built.AddRange(RoadBuilder.Build(network, rp));
+                }
+                return built;
+            });
         }
 
         // ------------------------------------------------------------ Anschlussstelle (Raute)
