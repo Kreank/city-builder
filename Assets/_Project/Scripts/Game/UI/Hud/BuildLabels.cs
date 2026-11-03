@@ -10,6 +10,12 @@ namespace CityBuilder.Game.UI.Hud
     public static class BuildLabels
     {
         /// <summary>Ganzzahl mit Tausenderpunkt (12.480) – ohne Abhängigkeit von installierten Kulturdaten.</summary>
+        /// <summary>Geldbetrag kurz: „12.480 €“, ab 1 Mio „1,24 Mio €“.</summary>
+        public static string Money(double value) =>
+            System.Math.Abs(value) >= 1_000_000
+                ? (value / 1_000_000).ToString("0.00", CultureInfo.InvariantCulture).Replace('.', ',') + " Mio €"
+                : Number((float)value) + " €";
+
         public static string Number(float value) =>
             Mathf.RoundToInt(value).ToString("N0", CultureInfo.InvariantCulture).Replace(',', '.');
 

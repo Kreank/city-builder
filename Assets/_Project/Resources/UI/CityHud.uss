@@ -329,6 +329,11 @@
     -unity-font-style: bold;
 }
 
+/* Konto überzogen / Baustopp */
+.cb-stat__value--warn {
+    color: var(--cb-warn-text);
+}
+
 .cb-stat__extra {
     font-size: var(--cb-font-s);
     color: var(--cb-text-muted);

@@ -358,6 +358,28 @@ namespace CityBuilder.Game.UI.Hud
             });
             topBar.Add(jobs);
 
+            // Stadtkasse: Kontostand + Saldo der letzten Woche, Klick öffnet das Fenster (M)
+            var cash = Stat(HudIconKind.Coins, "cb-icon--accent", "Stadtkasse", out var cashValue, out var cashExtra);
+            slowRefresh.Add(() =>
+            {
+                var e = runner.World.Economy;
+                if (e == null) { cashValue.text = "–"; cashExtra.text = ""; return; }
+                cashValue.text = BuildLabels.Money(e.Balance);
+                var last = e.LastWeek;
+                cashExtra.text = last == null ? "" : (last.Net >= 0 ? "+" : "−") + BuildLabels.Money(Math.Abs(last.Net)) + "/Wo";
+                cashValue.EnableInClassList("cb-stat__value--warn", e.IsOverdrawn || e.ConstructionFrozen);
+            });
+            Tip(cash, () =>
+            {
+                var e = runner.World.Economy;
+                if (e == null) return "Stadtkasse";
+                string state = e.ConstructionFrozen ? "Baustopp – zu lange im Minus" : e.IsOverdrawn ? "Konto überzogen" :
+                    e.UnlimitedFunds ? "Sandbox: unbegrenztes Geld" : "Klick: Stadtkasse (M)";
+                return $"{state} · Prognose heute {(e.EstimateDay().Net >= 0 ? "+" : "−")}{BuildLabels.Money(Math.Abs(e.EstimateDay().Net))}";
+            });
+            cash.RegisterCallback<ClickEvent>(_ => { var bp = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>(); if (bp != null) bp.Visible = !bp.Visible; });
+            topBar.Add(cash);
+
             // Versorgungswarnung – nur sichtbar, wenn ein Netz unterdeckt ist
             topBar.Add(SupplyChip(UtilityKind.Power, HudIconKind.Power, UtilityOverlayView.Overlay.Power));
             topBar.Add(SupplyChip(UtilityKind.Water, HudIconKind.Water, UtilityOverlayView.Overlay.Water));

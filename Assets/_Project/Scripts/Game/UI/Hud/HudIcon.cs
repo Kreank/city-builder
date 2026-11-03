@@ -6,7 +6,7 @@ namespace CityBuilder.Game.UI.Hud
     public enum HudIconKind
     {
         Logo, Pause, Play, Fast, Faster, People, Briefcase, Info, Car, Noise, Air, Power, Water, Underground,
-        Road, Highway, Zones, Terrain, TrafficLight, Bulldoze, Warning, Check, Pipe, Brush,
+        Road, Highway, Zones, Terrain, TrafficLight, Bulldoze, Warning, Check, Pipe, Brush, Coins,
     }
 
     /// <summary>
@@ -144,6 +144,9 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Brush:
                     Circle(12, 12, 8); Circle(12, 12, 3);
+                    break;
+                case HudIconKind.Coins: // Münzstapel (Stadtkasse)
+                    Poly(true, 5, 6, 19, 6, 19, 9, 5, 9); Poly(true, 5, 11, 19, 11, 19, 14, 5, 14); Poly(true, 5, 16, 19, 16, 19, 19, 5, 19);
                     break;
             }
         }

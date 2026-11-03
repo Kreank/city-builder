@@ -52,6 +52,8 @@ namespace CityBuilder.Simulation.Roads
         InsufficientClearance,
         InvalidHeight,
         OverWater,
+        /// <summary>Stadtkasse: zu wenig Geld (Kreditrahmen erschöpft) oder Baustopp wegen langer Überziehung.</summary>
+        InsufficientFunds,
     }
 
     public sealed class RoadPlan
@@ -189,6 +191,7 @@ namespace CityBuilder.Simulation.Roads
             ElevationRange(network.Ground, plan, out float minElev, out float maxElev);
             plan.Cost = plan.Length * type.CostPerMeter * CostFactor(minElev, maxElev);
             plan.Error = Validate(network, plan);
+            if (plan.Error == RoadBuildError.None && !Affordable(network, plan.Cost)) plan.Error = RoadBuildError.InsufficientFunds;
             return plan;
         }
 
@@ -400,8 +403,13 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Führt einen gültigen Plan aus. Liefert die neu gebauten Segmente in Baurichtung.</summary>
         public static List<RoadSegment> Build(RoadNetwork network, RoadPlan plan)
         {
+            if (plan == null || !plan.IsValid) return new List<RoadSegment>();
+            return Charged(network, plan.Cost, () => BuildUncharged(network, plan));
+        }
+
+        static List<RoadSegment> BuildUncharged(RoadNetwork network, RoadPlan plan)
+        {
             var built = new List<RoadSegment>();
-            if (plan == null || !plan.IsValid) return built;
 
             var points = new List<(float t, RoadNode node)>();
             points.Add((0f, Realize(network, plan.StartAnchor.Kind, plan.Start, plan.StartHeight)));
@@ -467,11 +475,18 @@ namespace CityBuilder.Simulation.Roads
                 if (id == segment.Id) continue;
                 if (!type.CanConnectTo(network.GetSegment(id).Type)) return RoadBuildError.IncompatibleConnection;
             }
+            if (!Affordable(network, ReplaceCost(segment, type))) return RoadBuildError.InsufficientFunds;
             return RoadBuildError.None;
         }
 
-        public static RoadSegment Replace(RoadNetwork network, RoadSegment segment, RoadType type) =>
-            CheckReplace(network, segment, type) == RoadBuildError.None ? network.ReplaceType(segment, type) : null;
+        public static RoadSegment Replace(RoadNetwork network, RoadSegment segment, RoadType type)
+        {
+            if (CheckReplace(network, segment, type) != RoadBuildError.None) return null;
+            float cost = ReplaceCost(segment, type);
+            var replaced = network.ReplaceType(segment, type);
+            if (replaced != null) network.Budget?.Spend(Economy.BudgetCategory.RoadConstruction, cost);
+            return replaced;
+        }
 
         /// <summary>Kosten eines Umbaus (halber Neubaupreis).</summary>
         public static float ReplaceCost(RoadSegment segment, RoadType type) => segment.Length * type.CostPerMeter * 0.5f;
@@ -502,19 +517,23 @@ namespace CityBuilder.Simulation.Roads
             plan.Left = Plan(network, l2, snap, lc, l0, snap, type, ls, le, followTerrain: followTerrain);
             plan.FollowTerrain = followTerrain;
             plan.Error = plan.Right.IsValid ? plan.Left.Error : plan.Right.Error;
+            if (plan.Error == RoadBuildError.None && !Affordable(network, plan.Cost)) plan.Error = RoadBuildError.InsufficientFunds;
             return plan;
         }
 
         public static List<RoadSegment> BuildDualCarriageway(RoadNetwork network, DualCarriagewayPlan plan, float snap)
         {
-            var built = new List<RoadSegment>();
-            if (plan == null || !plan.IsValid) return built;
-            built.AddRange(Build(network, plan.Right));
-            // Neu planen, falls die erste Fahrbahn das Netz verändert hat
-            var left = Plan(network, plan.Left.Start, snap, plan.Left.Control, plan.Left.End, snap, plan.Left.Type,
-                plan.Left.StartHeight, plan.Left.EndHeight, followTerrain: plan.FollowTerrain);
-            built.AddRange(Build(network, left));
-            return built;
+            if (plan == null || !plan.IsValid) return new List<RoadSegment>();
+            return Charged(network, plan.Cost, () =>
+            {
+                var built = new List<RoadSegment>();
+                built.AddRange(Build(network, plan.Right));
+                // Neu planen, falls die erste Fahrbahn das Netz verändert hat
+                var left = Plan(network, plan.Left.Start, snap, plan.Left.Control, plan.Left.End, snap, plan.Left.Type,
+                    plan.Left.StartHeight, plan.Left.EndHeight, followTerrain: plan.FollowTerrain);
+                built.AddRange(Build(network, left));
+                return built;
+            });
         }
 
         /// <summary>Parallelkurve im Abstand d (positiv = rechts). Kontrollpunkt = Schnitt der verschobenen Tangenten.</summary>
@@ -575,7 +594,7 @@ namespace CityBuilder.Simulation.Roads
                 if (error == RoadBuildError.None)
                 {
                     plan.StartAngle = offset;
-                    plan.Error = RoadBuildError.None;
+                    plan.Error = Affordable(network, plan.Cost) ? RoadBuildError.None : RoadBuildError.InsufficientFunds;
                     return plan;
                 }
                 if (firstError == RoadBuildError.None) firstError = error;
@@ -605,8 +624,13 @@ namespace CityBuilder.Simulation.Roads
 
         public static List<RoadSegment> BuildRoundabout(RoadNetwork network, RoundaboutPlan plan)
         {
+            if (plan == null || !plan.IsValid) return new List<RoadSegment>();
+            return Charged(network, plan.Cost, () => BuildRoundaboutUncharged(network, plan));
+        }
+
+        static List<RoadSegment> BuildRoundaboutUncharged(RoadNetwork network, RoundaboutPlan plan)
+        {
             var built = new List<RoadSegment>();
-            if (plan == null || !plan.IsValid) return built;
 
             int arcs = plan.Arcs.Count;
             float step = MathF.PI * 2f / arcs;
@@ -633,6 +657,54 @@ namespace CityBuilder.Simulation.Roads
             foreach (int id in inside) network.RemoveSegment(id);
 
             return built;
+        }
+        // ------------------------------------------------------------ Stadtkasse
+
+        /// <summary>Reicht das Geld (oder ist keine Kasse angeschlossen)?</summary>
+        public static bool Affordable(RoadNetwork network, float cost) => network.Budget == null || network.Budget.CanAfford(cost);
+
+        /// <summary>
+        /// Führt einen Bau aus und bucht danach einmal <paramref name="cost"/> (nur wenn etwas entstanden ist).
+        /// Während des Baus ist die Kasse abgehängt: Verbundbauten (Kreisverkehr, Doppelbau, Vorlage) planen ihre
+        /// Teilstücke neu – die sollen weder einzeln geprüft noch einzeln gebucht werden.
+        /// </summary>
+        internal static List<RoadSegment> Charged(RoadNetwork network, float cost, Func<List<RoadSegment>> build)
+        {
+            var budget = network.Budget;
+            if (budget != null && !budget.CanAfford(cost)) return new List<RoadSegment>();
+            List<RoadSegment> built;
+            network.Budget = null;
+            try { built = build(); }
+            finally { network.Budget = budget; }
+            if (budget != null && built.Count > 0) budget.Spend(Economy.BudgetCategory.RoadConstruction, cost);
+            return built;
+        }
+
+        /// <summary>Neubauwert eines Segments (Länge × Preis/m × Brücken-/Tunnelfaktor) – Basis für Unterhalt und Abrisserlös.</summary>
+        public static float SegmentValue(RoadSegment segment)
+        {
+            float min = float.MaxValue, max = float.MinValue;
+            for (int i = 0; i <= 8; i++)
+            {
+                float e = segment.ElevationAt(i / 8f);
+                min = MathF.Min(min, e);
+                max = MathF.Max(max, e);
+            }
+            return segment.Length * segment.Type.CostPerMeter * CostFactor(min, max);
+        }
+
+        /// <summary>Abrisserlös: Anteil <see cref="Economy.EconomyRules.DemolitionRefundShare"/> des Neubauwerts.</summary>
+        public static float DemolishRefund(RoadSegment segment) =>
+            (float)(SegmentValue(segment) * Economy.EconomyRules.DemolitionRefundShare);
+
+        /// <summary>Spieler-Abriss: entfernt das Segment und schreibt den Abrisserlös gut.</summary>
+        public static bool Demolish(RoadNetwork network, RoadSegment segment)
+        {
+            if (segment == null || !network.Contains(segment)) return false;
+            float refund = DemolishRefund(segment);
+            if (!network.RemoveSegment(segment.Id)) return false;
+            network.Budget?.Refund(refund);
+            return true;
         }
     }
 }

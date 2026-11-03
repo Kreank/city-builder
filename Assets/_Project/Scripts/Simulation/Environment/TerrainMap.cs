@@ -237,6 +237,10 @@ namespace CityBuilder.Simulation.Environment
         /// </summary>
         public Func<Vector2, Vector2, Func<Vector2, float>> LockQuery { get; set; }
 
+        // --- Stadtkasse (Hook): Erdarbeiten kosten Volumen × Preis. null = kostenlos (Tests ohne Wirtschaft).
+        public Economy.IConstructionBudget Budget { get; set; }
+        // --- Ende Stadtkasse
+
         /// <summary>
         /// Wendet einen Pinsel einmal an (Anheben, Absenken, Glätten, Einebnen). Gesperrte Punkte (unter Straßen
         /// und Gebäuden) bleiben, am Rand der Sperre wird die Wirkung weich ausgeblendet. Ändert aktuelle und
@@ -256,6 +260,14 @@ namespace CityBuilder.Simulation.Environment
             int y0 = Math.Max(0, (int)MathF.Floor((c.Y - r - Origin.Y) / CellSize));
             int y1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((c.Y + r - Origin.Y) / CellSize));
             if (x0 > x1 || y0 > y1) return result;
+
+            // Stadtkasse: vorher gegen die größtmögliche Erdmenge dieser Anwendung prüfen, danach die echte buchen
+            if (Budget != null)
+            {
+                float reach = r + CellSize;
+                double worst = MathF.PI * reach * reach * brush.Strength * Economy.EconomyRules.TerraformCostPerCubicMeter;
+                if (!Budget.CanAfford(worst)) { result.InsufficientFunds = true; return result; }
+            }
 
             // Schnappschuss (mit einem Punkt Rand), damit Glätten nicht von der eigenen Reihenfolge abhängt
             int sx0 = Math.Max(0, x0 - 1), sy0 = Math.Max(0, y0 - 1);
@@ -312,6 +324,8 @@ namespace CityBuilder.Simulation.Environment
             }
 
             if (result.ChangedPoints == 0) return result;
+            result.Cost = result.Volume * Economy.EconomyRules.TerraformCostPerCubicMeter;
+            Budget?.Spend(Economy.BudgetCategory.Terraforming, result.Cost);
             result.Min = min - new Vector2(CellSize);
             result.Max = max + new Vector2(CellSize);
             Version++;

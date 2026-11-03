@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using UnityEditor;
@@ -11,21 +12,26 @@ namespace CityBuilder.Editor
     /// <summary>
     /// Fenster „Store-Pakete“: zeigt alle im Asset-Store-Cache heruntergeladenen Pakete (der Cache gilt für ALLE
     /// Unity-Projekte), man hakt an, welche zu diesem Projekt gehören (gespeichert in <see cref="SelectionFile"/>, im Git),
-    /// und importiert die noch nicht importierten ohne Dialog. Danach: Organize (neue Ordner → ThirdParty), Convert,
+    /// und importiert die fehlenden ohne Dialog. Danach: Organize (Paketordner → ThirdParty), Convert,
     /// Build Asset Catalog und eine Inventurliste aller Prefabs mit Maßen (<see cref="InventoryFile"/>) zum Einsortieren.
-    /// Die Import-Warteschlange liegt im SessionState, damit sie Domain-Reloads zwischen den Paketen übersteht.
+    ///
+    /// Robust gegen Domain-Reloads: Ob ein Paket importiert ist, wird aus seiner Inhaltsliste geprüft (liegen seine
+    /// Dateien im Projekt – am Originalort oder unter ThirdParty?), nicht aus Import-Rückmeldungen. Aus derselben
+    /// Liste kommen die Paketordner, die Organize verschieben darf (<see cref="ThirdPartySetup.RecordedRootsFile"/>).
     /// </summary>
     [InitializeOnLoad]
     public sealed class StorePackageImporter : EditorWindow
     {
         /// <summary>Pakete dieses Projekts (Dateinamen ohne Pfad), eine Zeile je Paket – liegt im Git.</summary>
         const string SelectionFile = "Assets/_Project/Config/StorePackages.txt";
-        /// <summary>Auf diesem Rechner bereits importierte Pakete (ThirdParty ist nicht im Git).</summary>
-        const string ImportedFile = ThirdPartySetup.Root + "/_Catalog/ImportedPackages.txt";
         const string InventoryFile = ThirdPartySetup.Root + "/_Catalog/Inventory.txt";
+        /// <summary>Zwischenspeicher der Paket-Inhaltslisten (lokal, nicht im Git).</summary>
+        const string IndexDir = "Library/CityBuilderPackageIndex";
 
-        const string QueueKey = "CityBuilder.StoreImport.Queue";
         const string FinishKey = "CityBuilder.StoreImport.Finish";
+        const string IdleSinceKey = "CityBuilder.StoreImport.IdleSince";
+        /// <summary>So lange muss Unity nach dem Import ruhig sein (kein Import, kein Kompilieren), bevor einsortiert wird.</summary>
+        const double IdleSeconds = 4.0;
 
         static string CacheRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Unity", "Asset Store-5.x");
 
@@ -34,81 +40,89 @@ namespace CityBuilder.Editor
             public string Path, File, Publisher;
             public long Bytes;
             public DateTime Downloaded;
-            public bool Selected, Imported;
+            public bool Selected;
+            public float ImportedShare = -1f; // -1 = noch nicht geprüft
+            public bool Imported => ImportedShare >= 0.9f;
         }
 
         List<Entry> entries = new List<Entry>();
         Vector2 scroll;
 
-        const string FoldersBeforeKey = "CityBuilder.StoreImport.FoldersBefore";
-
         static StorePackageImporter()
         {
-            // Welche Ordner legt ein Import neu unter Assets/ an? (auch bei Import über den Package Manager)
-            AssetDatabase.importPackageStarted += _ => SessionState.SetString(FoldersBeforeKey, string.Join("|", AssetDatabase.GetSubFolders("Assets")));
-            AssetDatabase.importPackageCompleted += name => { RecordNewRoots(); MarkImported(name); Continue(); };
-            AssetDatabase.importPackageFailed += (name, error) => { Debug.LogError($"[StoreImport] {name}: {error}"); Continue(); };
-            AssetDatabase.importPackageCancelled += _ => Continue();
-            // Nach einem Domain-Reload mitten im Ablauf weitermachen
-            if (!string.IsNullOrEmpty(SessionState.GetString(QueueKey, "")) || SessionState.GetBool(FinishKey, false))
-                Continue();
+            EditorApplication.update += WatchFinish;
         }
 
         [MenuItem("City Builder/Third Party/Store-Pakete …")]
-        public static void Open() => GetWindow<StorePackageImporter>("Store-Pakete").Refresh();
+        public static void Open() => GetWindow<StorePackageImporter>("Store-Pakete").Refresh(true);
 
-        void OnEnable() => Refresh();
+        void OnEnable() => Refresh(false);
 
-        void Refresh()
+        void Refresh(bool check)
         {
             var selected = ReadLines(SelectionFile);
-            var imported = ReadLines(ImportedFile);
             entries = !Directory.Exists(CacheRoot) ? new List<Entry>() :
                 Directory.GetFiles(CacheRoot, "*.unitypackage", SearchOption.AllDirectories)
                     .Select(p =>
                     {
                         var fi = new FileInfo(p);
                         var rel = p.Substring(CacheRoot.Length).TrimStart('\\', '/');
-                        string file = fi.Name;
                         return new Entry
                         {
-                            Path = p, File = file, Bytes = fi.Length, Downloaded = fi.LastWriteTime,
-                            Publisher = rel.Split('\\', '/')[0],
-                            Selected = selected.Contains(file), Imported = imported.Contains(file),
+                            Path = p, File = fi.Name, Bytes = fi.Length, Downloaded = fi.LastWriteTime,
+                            Publisher = rel.Split('\\', '/')[0], Selected = selected.Contains(fi.Name),
                         };
                     })
                     .OrderBy(e => e.Selected ? 0 : 1).ThenByDescending(e => e.Downloaded).ToList();
+            if (check) CheckImported(entries.Where(e => e.Selected).ToList());
+        }
+
+        void CheckImported(List<Entry> list)
+        {
+            try
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    EditorUtility.DisplayProgressBar("Store-Pakete", "Prüfe " + list[i].File, (float)i / Math.Max(1, list.Count));
+                    list[i].ImportedShare = ImportedShare(PackagePaths(list[i].Path));
+                }
+            }
+            finally { EditorUtility.ClearProgressBar(); }
         }
 
         void OnGUI()
         {
             EditorGUILayout.HelpBox("Der Download-Ordner gilt für alle Unity-Projekte. Hake an, was zu City Builder gehört – " +
-                "die Auswahl wird in " + SelectionFile + " gespeichert. „Importieren“ holt alle angehakten, noch nicht importierten " +
-                "Pakete, räumt sie nach ThirdParty und baut den Katalog neu. Neue Pakete müssen danach noch im Katalog " +
+                "die Auswahl wird in " + SelectionFile + " gespeichert. „Importieren“ holt alle angehakten Pakete, deren Dateien " +
+                "noch fehlen, räumt sie nach ThirdParty und baut den Katalog neu. Neue Pakete müssen danach noch im Katalog " +
                 "einsortiert werden (Inventurliste: " + InventoryFile + ").", MessageType.Info);
             if (!Directory.Exists(CacheRoot)) { EditorGUILayout.HelpBox("Cache nicht gefunden: " + CacheRoot, MessageType.Warning); return; }
+            if (SessionState.GetBool(FinishKey, false))
+                EditorGUILayout.HelpBox("Import läuft – einsortiert wird automatisch, sobald Unity fertig ist.", MessageType.None);
 
             scroll = EditorGUILayout.BeginScrollView(scroll);
             foreach (var e in entries)
             {
                 EditorGUILayout.BeginHorizontal();
                 bool sel = EditorGUILayout.ToggleLeft(Path.GetFileNameWithoutExtension(e.File), e.Selected, GUILayout.MinWidth(260));
-                if (sel != e.Selected) { e.Selected = sel; SaveSelection(); }
+                if (sel != e.Selected) { e.Selected = sel; SaveSelection(); if (sel) CheckImported(new List<Entry> { e }); }
                 GUILayout.Label(e.Publisher, EditorStyles.miniLabel, GUILayout.Width(140));
                 GUILayout.Label($"{e.Bytes / 1048576f:0.#} MB", EditorStyles.miniLabel, GUILayout.Width(60));
                 GUILayout.Label(e.Downloaded.ToString("dd.MM.yy"), EditorStyles.miniLabel, GUILayout.Width(60));
-                GUILayout.Label(e.Imported ? "importiert" : e.Selected ? "wird importiert" : "–", EditorStyles.miniBoldLabel, GUILayout.Width(90));
+                string state = !e.Selected ? "–" : e.ImportedShare < 0 ? "?" : e.Imported ? "importiert" :
+                    e.ImportedShare > 0.01f ? $"teilweise ({e.ImportedShare:P0})" : "fehlt";
+                GUILayout.Label(state, EditorStyles.miniBoldLabel, GUILayout.Width(110));
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndScrollView();
 
-            var todo = entries.Where(e => e.Selected && !e.Imported).ToList();
+            var todo = entries.Where(e => e.Selected && e.ImportedShare >= 0 && !e.Imported).ToList();
             EditorGUILayout.Space();
             EditorGUILayout.BeginHorizontal();
-            using (new EditorGUI.DisabledScope(todo.Count == 0 || !string.IsNullOrEmpty(SessionState.GetString(QueueKey, ""))))
-                if (GUILayout.Button($"Importieren und einsortieren ({todo.Count})", GUILayout.Height(28))) StartImport(todo.Select(t => t.Path).ToList());
-            if (GUILayout.Button("Nur Katalog + Inventur neu bauen", GUILayout.Height(28))) Finish();
-            if (GUILayout.Button("Aktualisieren", GUILayout.Width(100), GUILayout.Height(28))) Refresh();
+            using (new EditorGUI.DisabledScope(todo.Count == 0 || SessionState.GetBool(FinishKey, false)))
+                if (GUILayout.Button($"Importieren und einsortieren ({todo.Count})", GUILayout.Height(28))) StartImport(todo);
+            if (GUILayout.Button("Nur einsortieren + Katalog", GUILayout.Height(28))) Finish();
+            if (GUILayout.Button("Prüfen", GUILayout.Width(80), GUILayout.Height(28))) Refresh(true);
             EditorGUILayout.EndHorizontal();
         }
 
@@ -120,30 +134,50 @@ namespace CityBuilder.Editor
             AssetDatabase.ImportAsset(SelectionFile);
         }
 
-        static void StartImport(List<string> paths)
+        void StartImport(List<Entry> todo)
         {
-            Debug.Log($"[StoreImport] importiere {paths.Count} Pakete …");
-            SessionState.SetString(QueueKey, string.Join("|", paths));
-            SessionState.SetBool(FinishKey, true);
-            Continue();
-        }
-
-        static void Continue() => EditorApplication.delayCall += Step;
-
-        static void Step()
-        {
-            if (EditorApplication.isCompiling || EditorApplication.isUpdating) { Continue(); return; }
-            var queue = SessionState.GetString(QueueKey, "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            if (queue.Count > 0)
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                var next = queue[0];
-                queue.RemoveAt(0);
-                SessionState.SetString(QueueKey, string.Join("|", queue));
-                Debug.Log($"[StoreImport] {Path.GetFileName(next)}");
-                AssetDatabase.ImportPackage(next, false); // Abschluss → importPackageCompleted → Continue
+                EditorUtility.DisplayDialog("Store-Pakete", "Bitte zuerst den Play-Modus beenden.", "OK");
                 return;
             }
+            // Paketordner schon vor dem Import festhalten – Organize verschiebt genau diese
+            var roots = new HashSet<string>(ReadLines(ThirdPartySetup.RecordedRootsFile));
+            foreach (var e in todo)
+                foreach (var p in PackagePaths(e.Path))
+                {
+                    var parts = p.Split('/');
+                    if (parts.Length >= 3 && parts[0] == "Assets" && parts[1] != "_Project" && parts[1] != "ThirdParty") roots.Add("Assets/" + parts[1]);
+                }
+            Directory.CreateDirectory(Path.GetDirectoryName(ThirdPartySetup.RecordedRootsFile));
+            File.WriteAllLines(ThirdPartySetup.RecordedRootsFile, roots.OrderBy(s => s), new UTF8Encoding(false));
+
+            Debug.Log($"[StoreImport] importiere {todo.Count} Pakete: {string.Join(", ", todo.Select(t => t.File))}");
+            SessionState.SetBool(FinishKey, true);
+            SessionState.SetString(IdleSinceKey, "");
+            // Alle auf einmal übergeben – Unity arbeitet sie nacheinander ab (keine eigene Kette, die ein Reload abreißen kann)
+#pragma warning disable CS0618 // AssetDatabase.ImportPackage ist in Unity 6.6 als veraltet markiert, funktioniert aber
+            foreach (var e in todo) AssetDatabase.ImportPackage(e.Path, false);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>Wartet nach dem Import, bis Unity eine Weile ruhig ist, und sortiert dann ein (übersteht Domain-Reloads).</summary>
+        static void WatchFinish()
+        {
             if (!SessionState.GetBool(FinishKey, false)) return;
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                SessionState.SetString(IdleSinceKey, "");
+                return;
+            }
+            double now = EditorApplication.timeSinceStartup;
+            var s = SessionState.GetString(IdleSinceKey, "");
+            if (s == "" || !double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double since) || since > now)
+            {
+                SessionState.SetString(IdleSinceKey, now.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return;
+            }
+            if (now - since < IdleSeconds) return;
             SessionState.SetBool(FinishKey, false);
             Finish();
         }
@@ -155,34 +189,93 @@ namespace CityBuilder.Editor
             AssetCatalogBuilder.Build();
             WriteInventory();
             Debug.Log("[StoreImport] fertig. Neue Pakete jetzt im Katalog einsortieren (Inventur: " + InventoryFile + ").");
-            foreach (var w in Resources.FindObjectsOfTypeAll<StorePackageImporter>()) { w.Refresh(); w.Repaint(); }
+            foreach (var w in Resources.FindObjectsOfTypeAll<StorePackageImporter>()) { w.Refresh(true); w.Repaint(); }
         }
 
-        /// <summary>Merkt importierte Pakete (Name ohne Endung, so meldet ihn Unity) anhand der Cache-Dateinamen.</summary>
-        static void MarkImported(string packageName)
+        // ------------------------------------------------------------ Paket-Inhaltslisten (.unitypackage = tar.gz)
+
+        /// <summary>Zielpfade aller Dateien eines Pakets (aus den „pathname“-Einträgen), zwischengespeichert in Library/.</summary>
+        static List<string> PackagePaths(string packageFile)
         {
-            if (!Directory.Exists(CacheRoot)) return;
-            var file = Directory.GetFiles(CacheRoot, "*.unitypackage", SearchOption.AllDirectories)
-                .Select(Path.GetFileName)
-                .FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), packageName, StringComparison.OrdinalIgnoreCase));
-            if (file == null) return;
-            var set = ReadLines(ImportedFile);
-            if (!set.Add(file)) return;
-            Directory.CreateDirectory(Path.GetDirectoryName(ImportedFile));
-            File.WriteAllLines(ImportedFile, set.OrderBy(s => s), new UTF8Encoding(false));
+            var fi = new FileInfo(packageFile);
+            string key = $"{fi.Name}_{fi.Length}_{fi.LastWriteTimeUtc.Ticks}".Replace(' ', '_');
+            string cache = Path.Combine(IndexDir, key + ".txt");
+            if (File.Exists(cache)) return File.ReadAllLines(cache).ToList();
+
+            var paths = new List<string>();
+            try
+            {
+                using (var fs = File.OpenRead(packageFile))
+                using (var gz = new GZipStream(fs, CompressionMode.Decompress))
+                {
+                    var header = new byte[512];
+                    while (ReadFull(gz, header, 512))
+                    {
+                        if (header.All(b => b == 0)) break;
+                        string name = Ascii(header, 0, 100);
+                        string prefix = Ascii(header, 345, 155);
+                        if (prefix.Length > 0) name = prefix + "/" + name;
+                        long size = Convert.ToInt64(Ascii(header, 124, 12).Trim().TrimEnd('\0').Trim() is var o && o.Length > 0 ? o : "0", 8);
+                        long padded = (size + 511) / 512 * 512;
+                        if (name.EndsWith("/pathname") && size > 0 && size < 4096)
+                        {
+                            var data = new byte[padded];
+                            if (!ReadFull(gz, data, (int)padded)) break;
+                            var p = Encoding.UTF8.GetString(data, 0, (int)size).Split('\n')[0].Trim();
+                            if (p.Length > 0) paths.Add(p);
+                        }
+                        else Skip(gz, padded);
+                    }
+                }
+            }
+            catch (Exception ex) { Debug.LogWarning($"[StoreImport] Inhaltsliste von {fi.Name} nicht lesbar: {ex.Message}"); return paths; }
+            Directory.CreateDirectory(IndexDir);
+            File.WriteAllLines(cache, paths, new UTF8Encoding(false));
+            return paths;
         }
 
-        static void RecordNewRoots()
+        /// <summary>Anteil der Paketdateien, die im Projekt liegen (Originalort oder unter ThirdParty).</summary>
+        static float ImportedShare(List<string> paths)
         {
-            var before = new HashSet<string>(SessionState.GetString(FoldersBeforeKey, "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries));
-            if (before.Count == 0) return;
-            var created = AssetDatabase.GetSubFolders("Assets").Where(f => !before.Contains(f) && !f.StartsWith("Assets/_Project")).ToList();
-            if (created.Count == 0) return;
-            var set = ReadLines(ThirdPartySetup.RecordedRootsFile);
-            foreach (var c in created) set.Add(c);
-            Directory.CreateDirectory(Path.GetDirectoryName(ThirdPartySetup.RecordedRootsFile));
-            File.WriteAllLines(ThirdPartySetup.RecordedRootsFile, set.OrderBy(s => s), new UTF8Encoding(false));
-            Debug.Log($"[StoreImport] neue Paketordner: {string.Join(", ", created)}");
+            var files = paths.Where(p => Path.HasExtension(p)).ToList();
+            if (files.Count == 0) return 0f;
+            int found = 0;
+            foreach (var p in files)
+            {
+                if (File.Exists(p)) { found++; continue; }
+                if (p.StartsWith("Assets/") && File.Exists(ThirdPartySetup.Root + "/" + p.Substring("Assets/".Length))) found++;
+            }
+            return (float)found / files.Count;
+        }
+
+        static string Ascii(byte[] b, int offset, int count)
+        {
+            int end = offset;
+            while (end < offset + count && b[end] != 0) end++;
+            return Encoding.ASCII.GetString(b, offset, end - offset);
+        }
+
+        static bool ReadFull(Stream s, byte[] buffer, int count)
+        {
+            int read = 0;
+            while (read < count)
+            {
+                int n = s.Read(buffer, read, count - read);
+                if (n <= 0) return false;
+                read += n;
+            }
+            return true;
+        }
+
+        static void Skip(Stream s, long count)
+        {
+            var buf = new byte[81920];
+            while (count > 0)
+            {
+                int n = s.Read(buf, 0, (int)Math.Min(buf.Length, count));
+                if (n <= 0) return;
+                count -= n;
+            }
         }
 
         static HashSet<string> ReadLines(string path) =>
@@ -190,12 +283,14 @@ namespace CityBuilder.Editor
                 ? new HashSet<string>(File.ReadAllLines(path).Select(l => l.Trim()).Where(l => l.Length > 0), StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // ------------------------------------------------------------ Inventur
+
         /// <summary>Alle Prefabs unter ThirdParty mit Maßen (Breite × Höhe × Tiefe in Prefab-Einheiten) – Grundlage fürs Einsortieren.</summary>
         [MenuItem("City Builder/Third Party/Write Inventory")]
         public static void WriteInventory()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("# Inventur der Store-Prefabs: Pfad | Breite x Höhe x Tiefe (Prefab-Einheiten) | Meshes");
+            sb.AppendLine("# Inventur der Store-Prefabs: Pfad | Breite x Höhe x Tiefe (Prefab-Einheiten, inkl. Wurzel-Drehung) | Meshes");
             foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { ThirdPartySetup.Root }).OrderBy(AssetDatabase.GUIDToAssetPath))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
@@ -209,7 +304,8 @@ namespace CityBuilder.Editor
                 {
                     if (mf.sharedMesh == null) continue;
                     meshes++;
-                    var m = go.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                    // inkl. Drehung der Prefab-Wurzel (Z-up-Exporte werden dort aufgerichtet), ohne ihre Position
+                    var m = Matrix4x4.Translate(-go.transform.position) * mf.transform.localToWorldMatrix;
                     var mb = mf.sharedMesh.bounds;
                     for (int i = 0; i < 8; i++)
                     {

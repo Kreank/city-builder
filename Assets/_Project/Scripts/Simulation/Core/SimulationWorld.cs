@@ -110,6 +110,15 @@ namespace CityBuilder.Simulation.Core
             world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Utilities);
             // --- Ende G3
+
+            // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
+            world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
+            world.Roads.Budget = world.Economy;
+            world.Terrain.Budget = world.Economy;
+            world.Utilities.Budget = world.Economy;
+            world.City.DemandModifier = world.Economy.DemandFactor;
+            world.AddSystem(world.Economy);
+            // --- Ende Stadtkasse
             return world;
         }
 
@@ -121,6 +130,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Strom &amp; Wasser (G3). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public UtilitySystem Utilities { get; private set; }
+
+        /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Economy.EconomySystem Economy { get; private set; }
 
         public void AddSystem(ISimulationSystem system)
         {

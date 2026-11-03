@@ -169,6 +169,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Utilities.UtilityAlerts>().Init(runner); // Meldungen (Toasts) zur Versorgung
             // --- Ende G3
 
+            // --- Stadtkasse: Fenster (Taste M)
+            Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
+            // --- Ende Stadtkasse
+
             // Spiel-UI (UI Toolkit) zuletzt – sie greift auf die Begleiter oben zu. Fehlen Theme/USS in Resources,
             // bleibt die alte IMGUI-Bauleiste als Rückfall.
             if (!Ensure<CityBuilder.Game.UI.Hud.GameHud>().Init(this)) Ensure<RoadToolbar>().Init(this);
@@ -716,7 +720,7 @@ namespace CityBuilder.Game.Roads
             ShowSegmentHighlight(segment, segment.Type.Width + 1f, false);
             if (clicked)
             {
-                roads.RemoveSegment(segment.Id);
+                RoadBuilder.Demolish(roads, segment); // Stadtkasse: Abrisserlös
                 previewRenderer.enabled = false;
             }
         }
@@ -827,6 +831,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.InsufficientClearance: return $"Zu wenig Durchfahrtshöhe (min. {RoadBuilder.Clearance:0.#} m)";
                 case RoadBuildError.InvalidHeight: return $"Höhe {RoadBuilder.MinHeight:0} bis {RoadBuilder.MaxHeight:0} m über Gelände";
                 case RoadBuildError.OverWater: return "Über Wasser nur als Brücke – Bauhöhe erhöhen (Bild↑)";
+                case RoadBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 default: return null;
             }
         }

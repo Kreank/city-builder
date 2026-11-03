@@ -19,9 +19,9 @@ namespace CityBuilder.Simulation.Utilities
         public float Capacity { get; }
         public float Width { get; }
         public float Depth { get; }
-        /// <summary>Baukosten in € (noch ohne Stadtkasse – nur Anzeige).</summary>
+        /// <summary>Baukosten in € (abgebucht von der Stadtkasse, Abriss bringt einen Teil zurück).</summary>
         public float Cost { get; }
-        /// <summary>Unterhalt in € pro Spieltag (nur Anzeige).</summary>
+        /// <summary>Unterhalt in € pro Spieltag (täglich von der Stadtkasse abgebucht).</summary>
         public float UpkeepPerDay { get; }
         /// <summary>Lärm 0..1 und Radius in m (wird ins Lärm-Raster gestempelt).</summary>
         public float NoiseLevel { get; }
