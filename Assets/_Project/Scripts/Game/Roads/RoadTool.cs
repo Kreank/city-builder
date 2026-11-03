@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect, Service }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect, Service, Transit }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -181,6 +181,11 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Services.ServicePanel>().Init(this, serviceOverlay);
             // --- Ende G4
 
+            // --- ÖPNV: Werkzeug (Modus Transit, Taste 5), Haltestellen/Depots/Linien/Busfarben, Linienfenster (F6)
+            Ensure<CityBuilder.Game.Transit.TransitTool>().Init(this, previewMaterial);
+            if (litBase != null) Ensure<CityBuilder.Game.Transit.TransitView>().Init(runner, litBase, previewMaterial);
+            // --- Ende ÖPNV
+
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
             // --- Ende Stadtkasse
@@ -320,6 +325,7 @@ namespace CityBuilder.Game.Roads
                 case Mode.Terraform: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // TerraformTool
                 case Mode.Utility: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G3: UtilityTool übernimmt
                 case Mode.Service: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G4: ServiceTool übernimmt
+                case Mode.Transit: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // ÖPNV: TransitTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;

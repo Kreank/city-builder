@@ -99,7 +99,7 @@ namespace CityBuilder.Game.Inspect
                     if (v == null) break;
                     var c = world.Citizens.CitizenForTrip(v.TripId);
                     string sub = c != null ? $"Fahrer: {c.FullName} · {PurposeName(c.Purpose)}"
-                        : v.TripId != 0 ? "Bürgerfahrt (beendet)" : "Durchgangs-/Hintergrundverkehr";
+                        : v.TripId != 0 ? "Bürgerfahrt (beendet)" : BusSubtitle(world, v) ?? "Durchgangs-/Hintergrundverkehr"; // ÖPNV
                     StandardHead(ui, "Fahrzeug", Tone.Info, $"{VehicleClasses.DisplayName(v.Class)} #{v.Id}", sub, true);
                     return;
                 }
@@ -121,6 +121,7 @@ namespace CityBuilder.Game.Inspect
                     return;
                 }
             }
+            if (TransitHead(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
             // Keine (gültige) Auswahl: Stadtübersicht
             Head(ui, "Info-Modus (C)", Tone.Accent, GameHud.CityName, "Stadtübersicht · Klick auf Gebäude, Fahrzeug oder Bauwerk");
         }
@@ -183,6 +184,7 @@ namespace CityBuilder.Game.Inspect
                     break;
                 }
             }
+            if (TransitBody(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
             CityBody(ui, world);
         }
 

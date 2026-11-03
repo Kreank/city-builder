@@ -21,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */ }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -72,6 +72,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Strom und Wasser (J): Kraftwerke, Pumpen, Leitungen, Rohre");
             CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll · ⇧4 Abdeckungs-Ansicht");
+            CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
             CategoryButton(cats, Category.Traffic, HudIconKind.TrafficLight, "Verkehr", "Verkehrsregeln (T), Stau-Ansicht (V), Verkehrsaufkommen");
             var bulldoze = CategoryButton(cats, Category.Bulldoze, HudIconKind.Bulldoze, "Abriss", "Abriss (B): Straßen, Leitungen und Bauwerke");
@@ -103,6 +104,7 @@ namespace CityBuilder.Game.UI.Hud
                     return utilityTool != null && utilityTool.Current == UtilityTool.UtilityAction.Remove ? Category.Bulldoze : Category.Utilities;
                 case RoadTool.Mode.Service:
                     return serviceTool != null && serviceTool.Current == ServiceTool.ServiceAction.Remove ? Category.Bulldoze : Category.Services;
+                case RoadTool.Mode.Transit: return TransitCategory(); // ÖPNV
                 case RoadTool.Mode.Bulldoze: return Category.Bulldoze;
                 case RoadTool.Mode.Inspect: return null;
                 default: return tool.SelectedType.Category == RoadCategory.City ? Category.Roads : Category.Highway;
@@ -136,6 +138,7 @@ namespace CityBuilder.Game.UI.Hud
                     if (terraform != null) terraform.Activate(terraform.Mode);
                     else tool.SetMode(RoadTool.Mode.Terraform);
                     break;
+                case Category.Transit: SelectTransitCategory(); break; // ÖPNV
                 case Category.Traffic: if (mode != RoadTool.Mode.Traffic) tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Category.Bulldoze: if (mode != RoadTool.Mode.Bulldoze) tool.SetMode(RoadTool.Mode.Bulldoze); break;
             }
@@ -212,6 +215,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Terrain: BuildTerrainPanel(); break;
                 case Category.Traffic: BuildTrafficPanel(); break;
                 case Category.Bulldoze: BuildBulldozePanel(); break;
+                case Category.Transit: BuildTransitPanel(); break; // ÖPNV
             }
             refreshNow = true;
         }
@@ -643,6 +647,7 @@ namespace CityBuilder.Game.UI.Hud
                     () => serviceTool.Select(ServiceTool.ServiceAction.Remove),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Remove,
                     "Polizei, Schule, Park … anklicken – 25 % der Baukosten zurück"));
+            AddTransitBulldozeTile(tiles); // ÖPNV
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt."));
         }
