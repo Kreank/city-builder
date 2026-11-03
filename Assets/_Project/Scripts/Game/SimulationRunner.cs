@@ -22,6 +22,14 @@ namespace CityBuilder.Game
         [Tooltip("Sandbox: Kosten werden gebucht, aber Bauen wird nie wegen Geld blockiert.")]
         [SerializeField] bool unlimitedFunds = false;
         [SerializeField] double startingFunds = 100000.0;
+        // --- Welt (Etappe 5)
+        [Header("Welt")]
+        [Tooltip("Fiktive Erde erzeugen; die Stadtkarte wird ein Ausschnitt der Startregion (Gelände, Klima, Ressourcen).")]
+        [SerializeField] bool generateWorld = true;
+        [SerializeField] int worldSeed = 2024;
+        [Tooltip("Region der Stadt (−1 = automatisch: gemäßigt, fruchtbar, Fluss/Küste).")]
+        [SerializeField] int startRegion = -1;
+        // --- Ende Welt
 
         static readonly int[] SpeedMultipliers = { 0, 1, 3, 10 };
 
@@ -44,7 +52,13 @@ namespace CityBuilder.Game
                 TerrainSeed = terrainSeed,
                 UnlimitedFunds = unlimitedFunds,
                 StartingFunds = startingFunds,
+                GenerateWorld = generateWorld,   // Welt (Etappe 5)
+                WorldSeed = worldSeed,
+                StartRegion = startRegion,
             });
+            if (World.Planet != null)
+                Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
+                          $"{World.Planet.GenerationMilliseconds:0} ms. Start: {World.StartRegion.Name} ({World.Planet.PlayerCountry.Name})");
         }
 
         void Update()
