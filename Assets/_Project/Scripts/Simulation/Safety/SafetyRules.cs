@@ -112,7 +112,7 @@ namespace CityBuilder.Simulation.Safety
         public const float RebuildCostShare = 0.6f;
         public const float RebuildDays = 3f;
         /// <summary>Verletzte: Chance je anwesender Person = Grund + Faktor × Stärke, höchstens so viele je Brand.</summary>
-        public const float InjuryBase = 0.01f, InjuryPerIntensity = 0.12f;
+        public const float InjuryBase = 0.003f, InjuryPerIntensity = 0.06f;
         public const int MaxInjuredPerFire = 4;
         /// <summary>Gesundheit sinkt um Grund + Faktor × Stärke.</summary>
         public const float InjurySeverityBase = 0.25f, InjurySeverityPerIntensity = 0.2f;

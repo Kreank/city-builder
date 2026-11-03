@@ -309,12 +309,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.NotNull(w.Services.Build(w.Services.PlanAligned(ServiceCatalog.Newspaper, new Vector2(450, -30))));
             Run(w, 12);
             int injured = 0;
-            foreach (var house in w.City.Buildings.Where(b => b.IsPlayerPlaced && b.IsConstructed).OrderBy(b => b.Id).Take(8).ToList())
+            foreach (var house in w.City.Buildings.Where(b => b.IsConstructed).OrderBy(b => b.Id).ToList())
             {
-                if (house.OutOfService) continue;
+                if (house.OutOfService || w.City.GetBuilding(house.Id) == null) continue;
                 var f = w.Safety.Ignite(house, w.Clock.Tick);
                 if (f == null) continue;
-                f.Intensity = 0.7f;
+                f.Intensity = 0.95f;
                 BurnOut(w, f);
                 injured = w.Safety.Today.Injured + w.Safety.Yesterday.Injured + w.Safety.Total.Injured;
                 if (injured > 0) break;
@@ -367,11 +367,11 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(fac.Patrol > 0f, "echte Streifenfahrten erzeugen Präsenz");
             Assert.True(cops.ServiceVehicles.Today.PatrolStops + cops.ServiceVehicles.Yesterday.PatrolStops > 0);
             // Straftaten (Würfel an) – mit Polizei weniger
-            none.Safety.CrimeScale = cops.Safety.CrimeScale = 20f;
+            none.Safety.CrimeScale = cops.Safety.CrimeScale = 60f;
             Run(none, 2 * SimulationClock.TicksPerDay);
             Run(cops, 2 * SimulationClock.TicksPerDay);
             int ca = none.Safety.Today.Crimes + none.Safety.Yesterday.Crimes, cb = cops.Safety.Today.Crimes + cops.Safety.Yesterday.Crimes;
-            output.WriteLine($"Straftaten (×20) ohne Polizei {ca}, mit Polizei {cb}; aufgeklärt {cops.Safety.Yesterday.Solved + cops.Safety.Today.Solved}, " +
+            output.WriteLine($"Straftaten (×60) ohne Polizei {ca}, mit Polizei {cb}; aufgeklärt {cops.Safety.Yesterday.Solved + cops.Safety.Today.Solved}, " +
                              $"in Zellen {cops.Safety.InCustody}/{cops.Safety.CustodyCapacity}");
             Assert.True(cb < ca);
         }

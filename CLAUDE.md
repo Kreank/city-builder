@@ -141,7 +141,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -343,7 +343,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Arbeitsloser = bester `JobUtility` (ohne Würfeln).
 - **Gedächtnis** (`MemoryList`, max. 6, gleiche Art + Bezug wird aufgefrischt, schwächste ersetzt; tägliches Abklingen
   je Art, Ängstliche vergessen Schlechtes langsamer): Stau (Autofahrt > 2,2 × freie Fahrzeit oder abgebrochen),
-  Strom-/Wasserausfall, Lärm, Abgas, Unsicherheit, schöner Park, Bummel, kein Laden, Lebensereignisse u. a.
+  Strom-/Wasserausfall, Lärm, Abgas, Unsicherheit, schöner Park, Bummel, kein Laden, Lebensereignisse u. a.; seit „Sicherheit“ auch
+  Brand (`Fire`) und Einbruch (`Burglary`).
 - **Lebensereignisse** (Vorlagen in `Content/LifeEvents.cs`: Tageschance, Alter, Zug-Einfluss, Erinnerungen, Meldungen):
   Partnersuche (Singles werden täglich gepaart, kleinerer Haushalt zieht um), Hochzeit, Geburt (Paar mit Frau 20–44,
   ≤ 4 Kinder, Platz zählt), Auszug erwachsener Kinder (18–35, eigene Wohnung per `HomeScore`), Trennung (häufiger bei
@@ -425,7 +426,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, **Nachfrage W/L/B/I** mit Tooltip „warum“ (Setzen statt Zonen, `GameHud.Demand.cs`), Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Brandgefahr, Kriminalität, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
@@ -685,7 +686,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Direkte Folgen** (keine Bürgerwirkungen – Gesundheit/Kriminalität/Bildung baut das Bedürfnissystem über die API):
   Müll (Einwohner 10 kg/Tag, Arbeitsplätze 5 kg, Industrie 20 kg – Spielmaßstab) stapelt sich am Gebäude, abgeholt wird
   Abdeckung × höchstens 4× die laufende Menge (Rückstau baut sich ab); Müllhalde läuft voll (25 000 t → wirkt nicht mehr).
-  `FireRisk` = Grundrisiko je Zone × (1 − 0,8 × Feuerwehr) + 0,2 × Müllstand – noch ohne Brände.
+  `FireRisk` = Grundrisiko je Zone × (1 − 0,8 × Feuerwehr) + 0,2 × Müllstand – alter Kennwert (Inspektor nur bei ausgeschalteter
+  Sicherheit); echte Brandgefahr/Brände/Kriminalität: s. „Sicherheit: Brände & Kriminalität“.
 - Platzregeln wie G3: nicht auf Straße/Wasser/anderen Bauwerken/Strommasten, max. 8 m Gefälle (wird eingeebnet), Gebäude
   darunter werden abgerissen. **Straßen durchs Dienstgebäude sind gesperrt** (Bauwerks-Sperre, `OnSegmentAdded` reißt nichts
   mehr ab). **Ausrichtung (UX):** `ServiceType.NeedsRoadFront` (= nicht `Walking`; Parks nicht) – `PlanAligned(type, cursor,
@@ -714,7 +716,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
   Freizeit/Wahrzeichen aus `Models/Leisure/` bzw. `Models/Landmarks/` (s. „Freizeit, Wahrzeichen & Lärmschutzwand“); Zuordnung
   zentral in `Editor/OwnModelDescriptions.cs`, `Name.json` geht vor (s. „Eigene Assets“).
-- Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (✅ Grundstufe: Müllwagen/Streife/Feuerwehr/Rettung, s. „Energie erweitert & Dienstfahrzeuge“; Reichweite weiter per Dijkstra-Schätzung), Sperrungen/
+- Später: ~~Brände/Kriminalität als Ereignisse~~ ✅ (s. „Sicherheit: Brände & Kriminalität“), Dienstfahrzeuge im Verkehr (✅ Grundstufe: Müllwagen/Streife/Feuerwehr/Rettung, s. „Energie erweitert & Dienstfahrzeuge“; Reichweite weiter per Dijkstra-Schätzung), Sperrungen/
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
 
@@ -799,10 +801,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
     „teilweise“:** solange Müllwagen fahren, holt die Pauschale nur noch 50 % der laufenden Menge **ohne Nachholen**
     (`ServiceSystem.GarbageBaseShare`, Standard 1 = bitgleich wie vorher), Rückstau wartet auf den Wagen (Test: Stichstraße für Lkw
     gesperrt → 4,7× so viel Müll). Nicht jede Tonne als Fahrt (große Städte bräuchten Tausende Halte am Tag).
-  - **Streife:** Runden über 3 zufällige Gebäude im Einzugsgebiet der Wache, 20 s Halt, 1 h Pause. Ohne Kriminalitätsmodell nur
-    sichtbare Präsenz (ändert keine Abdeckung).
-  - **Feuerwehr: Platzhalter-Einsätze** (es gibt noch keine Brände): je Stunde und Gebäude Chance Brandrisiko × 1 %/24 (stabiler
-    Hash), 5 min vor Ort, kein Schaden; ohne freies Fahrzeug „verpasst“.
+  - **Streife:** Runden über 3 zufällige Gebäude im Einzugsgebiet der Wache, 20 s Halt, 1 h Pause. **Seit „Sicherheit“** (an):
+    Halte erzeugen Streifenpräsenz (senkt die Kriminalität), Ziele gewichtet nach Kriminalitätsrate (`PatrolWeight`), 1 Wagen je Wache
+    bleibt in Reserve (`PatrolReserve`), Notrufe unterbrechen eine am Halt stehende Streife.
+  - **Feuerwehr: Platzhalter-Einsätze** nur noch bei ausgeschalteter Sicherheit (`PlaceholderFireCalls`): je Stunde und Gebäude Chance
+    Brandrisiko × 1 %/24 (stabiler Hash), 5 min vor Ort, kein Schaden. Mit Sicherheit: echte Brände, Fahrzeug bleibt bis zum Ende
+    am Brand (`HoldAtStop`).
   - **Rettungswagen: echtes Ereignis** – neues Event `CitizenSystem.BecameIll` (eine Zeile in `.Life.cs`): ab 65 immer, sonst 30 %
     schwer → Wagen der zuständigen Klinik/des Krankenhauses fährt zur Wohnung (3 min) und zurück; noch ohne Wirkung auf die Genesung.
   - **Taxi:** wartet auf Funktion (bräuchte Taxi-Depot + Verkehrsmittel „Taxi“ in der Wahl der Bürger – zu großer Umbau für diese Runde).
@@ -832,6 +836,76 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Offshore-Raster, Klippen an Hängen, geparkte Dienstfahrzeuge am Gehwegrand, Transporter statt Lkw, Bus-Dachplatte auf dem neuen
   Bus-Modell. Offen: Wehrbreite an die Flussbreite anpassen, Talsperre mit Stausee, Seekabel-Darstellung über dem Meeresgrund,
   Brände/Kriminalität als echte Ereignisse (dann Feuerwehr/Streife mit Wirkung), Müllwagen-Halte entlang der Route bündeln, Taxi.
+
+## Sicherheit: Brände & Kriminalität (agent/safety, 2026-11-04)
+- **Simulation** `Simulation/Safety` (`SafetySystem` + `.Fire.cs`/`.Crime.cs`/`.Save.cs`, Zahlen in `SafetyRules`, Typen `SafetyTypes`;
+  `world.Safety`, jeden Tick nach den Dienstfahrzeugen). **Standard aus** (`Enabled`; Tests/alte Welten bitgleich, Platzhalter-
+  Brandeinsätze bleiben), `SimulationRunner.safetyEvents` schaltet ein (auch nach dem Laden). Zufall nur über stabile Hashes
+  (`SafetyRules.Roll(id, tick/stunde, salt)`), keine gemeinsame Zufallsfolge. `IgnitionScale`/`CrimeScale` (gespeichert) für Tests/Balancing.
+- **Brandgefahr** `FireRiskOf(b)` → `FireRiskInfo` = Bauart (EFH 1, MFH 1,15, Block 1,3, Laden 1,1, Mischgebiet 1,2, Büro 0,8, Industrie 1,8)
+  × Rezept (Raffinerie 2,2, Ölförderung 1,8, Sägewerk 1,6, Zeche 1,5, Möbel/Textil 1,4, Stahl/Glas 1,3, Mühle/Lebensmittel 1,2) × Zustand
+  (1 + 1,2 × (1 − Condition)) × Müll (1 + 0,8 × Müllstand) × Stromausfall 1,25 × Größe (0,6 + 0,1 × Zellen) × Brandschutz (1 − 0,35 ×
+  Feuerwehr-Abdeckung). Entstehung stündlich: Faktor × `IgnitionsPerDay` 0,00015 / 24 (≈ 5 % je Gebäude und Spieljahr bei Faktor 1).
+- **Verlauf** (je Tick = 0,1 h): Stärke 0,1 → `dI = (1,5 × Brandlast × I + 0,03)(1 − I)` (Vollbrand ohne Feuerwehr ≈ 3 h, Totalschaden
+  ≈ 4,6 h); Schaden 0,28 × I je Stunde, Zustand sinkt mit (min. 0,05). Notruf nach 1 Tick (Menschen im Haus) bzw. 3 Ticks. Entstehungsbrand
+  (< 0,16) mit Anwesenden: 6 %/Tick selbst gelöscht. **Löschen erst bei Ankunft**: je Löschfahrzeug vor Ort −0,9 × Wasser je Stunde;
+  Wasser = 1 mit Wassernetz am Gebäude (Hydrant, `GetStatus(b).HasWater`), sonst Tankwasser 0,35. Alarmierung je Stärke 1/2/3 Fahrzeuge
+  (`ServiceVehicleSystem.Dispatch`: zuständige Wache, sonst schnellste andere im 1,5-fachen der Reichweite). Ohne Dienstfahrzeuge (Tests):
+  geschätzte Ankunft aus der Dijkstra-Fahrzeit (`ServiceSystem.ResponseSeconds`). Antwortzeit in Verkehrszeit (`ReportTime`/
+  `FirstArrivalTime`) → Spielminuten. **Langsamer Verkehr verzögert** (Test: Tempo 10 km/h auf allen Straßen → Ankunft 6 → 23 min,
+  Schaden 1 % → 5 %). **Übergreifen** ab Stärke 0,45 auf Nachbarn ≤ 12 m (Kante zu Kante): 3 %/Tick × Stärke × Nähe × Brandlast,
+  Feuerwehr vor Ort × 0,3. Wind: nicht modelliert.
+- **Folgen:** Verletzte (je Anwesendem 0,3 % + 6 % × Stärke, beim Notruf und bei Stärke 0,5, max. 4; Gesundheit −0,25…−0,45, keine Toten)
+  → Rettungswagen; Erinnerung `MemoryKind.Fire` (Bewohner/Anwesende stark, Nachbarn in 80 m schwach); Schlagzeilen `Fire` (ab Stärke 0,4)
+  und `FireRuin`; Lager der Firma brennt anteilig mit; Bodenwert-Abzug (s. G6). **Schwer (Schaden ≥ 0,4):** Sanierung 1 + 6 × Schaden Tage,
+  `Building.OutOfService` (Baufortschritt ruht, Construction 0), Haushalte ziehen **vorübergehend** in freie Wohnungen
+  (`CitizenSystem.Vacate`, ohne freie Wohnung Wegzug) und **kehren danach zurück** (`ReturnHouseholds`), Beschäftigte verlieren den Job.
+  **Totalschaden:** Zonengebäude → Abriss (Zone wird neu bebaut, wie Verfall). **Entscheidung gesetzte Gebäude: Brandruine statt still
+  verschwinden** – der Spieler hat sie bezahlt und platziert; sie bleiben als Ruine stehen (Bewohner ausgezogen), **Wiederaufbau** im
+  Inspektor für 60 % der Baukosten (Rest Versicherung, Kasse „Bau Gebäude (gesetzt)“, 3 Tage) oder Abriss wie gewohnt. So bleibt die
+  Stadtgestalt erhalten und ein Brand kostet spürbar Geld, ohne eine Reihe still zu zerreißen.
+- **Kriminalität** stündlich je Gebäude (`CrimeFactorsOf(b)` → `CrimeFactors`): Viertel = 3×3 Zellen à 96 m (Mitte voll, Rand ½).
+  Druck = 0,06 + 0,30 Arbeitslosigkeit (Quote/25 %) + 0,22 Unzufriedenheit ((0,7 − Ø)/0,5) + 0,12 wenig Bildung (Anteil ohne/mit
+  Grundschulabschluss 20 → 70 %) + 0,10 Dichte (Wohnungen + Jobs / 600) + 0,12 niedriger Bodenwert (1 − Wert/0,6) + 0,05 Laden;
+  Rate = Druck × (1 − 0,6 × Polizeiabdeckung) × (1 − 0,35 × Streifenpräsenz) (`SafetyRules.CrimeRate`). **Streifenpräsenz** aus echten
+  Streifen-Halten (+1 in der Zelle, Nachbarn +0,4, stündlich × 0,8, Präsenz = 1 − e^(−x/2)). Straftaten stündlich: Rate × 0,03 × Größe
+  (0,4 + (Wohnungen + Jobs)/15, max. 3) × Tageszeit (0–5 Uhr 1,8 … tagsüber 0,7) / 24. Art nach Bauart (Wohnen: Einbruch/Vandalismus,
+  Laden: Ladendiebstahl/Einbruch/Vandalismus, Büro/Industrie: Vandalismus/Einbruch); Schaden 80–4 000 € (Firmenkasse, Ladenlager,
+  Vandalismus senkt den Zustand; Haushalte haben noch kein Vermögen → Schaden nur als Zahl), Erinnerung `Burglary` (Opfer-Haushalt) bzw.
+  `FeelsUnsafe` (Mitbewohner/Beschäftigte). **Anzeige** (Einbruch 85 %, Vandalismus 60 %, Laden 50 %) → Streifenwagen
+  (`ServiceMission.CrimeCall`, 120 s vor Ort) → **Aufklärung** bei Ankunft: Grundquote (Einbruch 25 %, Laden 45 %, Vandalismus 15 %) ×
+  (0,5 + 0,5 × Abdeckung) + bis 25 % für schnelle Ankunft (0 ab 45 min); kein Wagen frei → spätere Ermittlung (halbe Quote).
+  **Festnahme** → Zelle der Wache (20 je Wache, Platzhalter bis zum Gefängnis; voll → wieder frei; täglich 30 % Abgang). Schlagzeilen
+  `CrimeWave` (≥ 6 Taten am Tag rund um eine Straße, auch HUD) und `Arrest`.
+- **Bürger:** Hook `CitizenSystem.CrimeLevel` → Sicherheit −0,45 × Rate, −0,25 × (Einbruch + ½ Brand-Erinnerung); Umzug zählt `Burglary`
+  + ½ `Fire` zu den Unsicherheits-Erinnerungen. Neue Erinnerungen `Fire`, `Burglary` (+ Gedankensätze in `Thoughts`).
+- **Dienstfahrzeuge (kleine markierte Erweiterungen):** `Dispatch(mission, b, now)`, `UnitsAt`, Events `ArrivedAtStop`/`StopFinished`,
+  Hooks `HoldAtStop`, `PatrolWeight`, `PatrolReserve`, `PlaceholderFireCalls`; neuer Auftrag `ServiceMission.CrimeCall`.
+- **Darstellung** (`Game/Services/SafetyView`, nur lesend): flackernde Flammen-Quader auf dem Dach (Anzahl/Größe nach Stärke), Rauchsäule,
+  verkohlte Mauerreste + Glut an Ruinen, grauer Rohbau mit Gerüst während der Sanierung (`BuildingView` zeichnet `OutOfService`-Gebäude
+  nicht), Blaulicht (wechselnde blaue Leuchte) auf Löschfahrzeug/Streife/Rettung im Einsatz. Linke Ansichtsleiste **„Brandgefahr“**
+  (Flamme) und **„Kriminalität“** (Schild) über `ServiceOverlayView` (`SafetyOverlays.FireRisk/Crime`, grün → rot, brennende Gebäude bzw.
+  Tatorte der letzten 6 h groß rot, Wachen blau; ohne neue Tasten). Inspektor (`InspectorWindow.Safety.cs`): Brand (Stärke, Schaden,
+  Löschfahrzeuge vor Ort/unterwegs, geschätzte Ankunft, Wasser, Verletzte), Ruine/Sanierung mit Knopf **Wiederaufbauen**, Sicherheit
+  (Kriminalität, Brandgefahr, letzte 3 Vorfälle), Reiter Umfeld mit allen Faktoren; Stadtübersicht „Sicherheit“ (Brände, Anfahrt,
+  Ruinen, Straftaten, Aufklärungsquote, Zellen, Schaden). HUD: `SafetyAlerts` → `HudMessages` (Feuer/übergegriffen/gelöscht/ausgebrannt/
+  saniert, Einbruchserie; ein Schlüssel je Brand).
+- **Spielstand** `safety` v1 (Schalter, Faktoren, Zähler, laufende Brände inkl. Verkehrszeiten, Verlauf, Sanierungen/Ruinen – setzt
+  `Building.OutOfService`, das der Stadt-Abschnitt nicht kennt –, Straftaten, offene Einsätze, Raten der letzten Stunde, Streifenpräsenz,
+  Zellen, HUD-Ereignisse). Fehlt → aus. `SaveLoadTests.BuildCity` hat Sicherheit an (Entstehung × 20, Feuerwache).
+- **Tests** `SafetyTests` (15): aus = neutral, Brandgefahr-Faktoren, wächst ohne Feuerwehr → Ruine → Wiederaufbau kostet, Zonengebäude
+  wird abgerissen, Übergreifen in der Reihe (nicht weit), echtes Löschfahrzeug löscht bei Ankunft + langsamer Verkehr verzögert, ohne
+  Wasser mehr Schaden/länger, schwerer Schaden → vorübergehender Auszug + Rückkehr, Verletzte/Rettung/Schlagzeile, Kriminalität monoton
+  in den Faktoren und sinkt mit Polizei + Streife (Ø 0,505 → 0,125), Einbruch → Erinnerung/Sicherheit sinkt/Streifenwagen am Tatort,
+  Speichern mitten im Brand mit Ruine bitgleich, Migration ohne Abschnitt, **Balance-Info** (175 Gebäude, ≈ 2 750 Einwohner, Feuerwache +
+  Polizei, 20 Tage, Entstehung × 30): 16 Brände, 14 gelöscht, 1 selbst gelöscht, 0 schwer, 0 Totalschaden, Ø Anfahrt ≈ 6 min,
+  hochgerechnet ≈ 18 Brände je Spieljahr; Kriminalität Ø 0,19, ≈ 1,3 Taten/Tag, Aufklärung ≈ 24 %; ≈ 2,3 ms je Tick (alle Systeme).
+- **Optisch ungeprüft** (Unity nicht gestartet): Flammen/Rauch/Ruinen/Gerüst/Blaulicht (Größen, Emission im URP-Lit), Icons Flamme/Schild,
+  Inspektor-Abschnitte, Ansichten.
+- **Offen:** Gefängnis (Zellen sind Platzhalter), echter Stau-Test (heute Tempo-Begrenzung als Ersatz), Wind/Wetter beim Übergreifen,
+  Straßenbeleuchtung als Kriminalitätsfaktor, Haushaltsvermögen (Einbruchsschaden trifft heute nur Firmen), Brände an Dienst-/
+  Versorgungsbauwerken, Firma während der Sanierung ruhen lassen (läuft heute ohne Beschäftigte weiter, ggf. Pleite), Brandschutz-
+  Verordnung/Rauchmelder-Förderung, Budgetregler Polizei/Feuerwehr, Martinshorn-Vorfahrt im Verkehr.
 
 ## Bodenwert & Ausbaustufen (G6)
 - `Simulation/LandValue`: `LandValueRules` (alle Formeln/Zahlen, Platzhalter fürs Balancing), `LandValueSystem`
@@ -877,7 +951,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Darstellung: `EnvironmentOverlayView` Overlay „Bodenwert“ (**F2**, rot → gelb → grün); `BuildingView` sortiert die
   Katalogmodelle einer Zone nach Höhe und wählt je Stufe aus einem Drittel (bei nur einem Modell dieses), Platzhalter
   +30 % Höhe je Stufe. Knopf in der HUD-Ansichtsleiste/Inspektor-Anzeige baut `ui2` an diese API.
-- Später: Stufenaufstieg auch nach Wohlstand/Einkommen (G5), Brände/Kriminalität senken den Wert, Bodenwert als
+- **Sicherheit** (Hook `SafetyPenaltyAt`, Faktor „Brände/Kriminalität“ −0,15 × Wert, ohne Sicherheit 0 = bitgleich): frische Brände in
+  120 m (klingen in ≈ 6 Tagen ab) + Kriminalitätsrate des Gebäudes auf der Zelle.
+- Später: Stufenaufstieg auch nach Wohlstand/Einkommen (G5), ~~Brände/Kriminalität senken den Wert~~ ✅, Bodenwert als
   Preis beim Kauf von Grundstücken, Denkmalschutz/Stilrichtungen, Abriss-Meldung im HUD.
 
 ## Wohnhäuser setzen (Anno-Stil)
@@ -1712,7 +1788,8 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   `System.Random` gibt es in der Simulation nicht mehr → `Core.CompatRandom` (gleiche Zahlenfolge, speicherbar) bzw. `SimRandom`.
 - **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s;
   `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände;
-  `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge).
+  `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge;
+  `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -1776,8 +1853,10 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
      (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. ✅ Dienstfahrzeuge
-     (Grundstufe: Müllwagen-Touren mit Abholung bei Ankunft, Streife, Platzhalter-Brandeinsätze, Rettung bei Krankheit). Später: Brände/Kriminalität
-     als Ereignisse, Dienstfahrzeuge mit Wirkung (Brände löschen, Kriminalität), Taxi
+     (Grundstufe: Müllwagen-Touren mit Abholung bei Ankunft, Streife, Platzhalter-Brandeinsätze, Rettung bei Krankheit).
+     ✅ Sicherheit: Brände (Entstehung, Wachstum, Übergreifen, echte Löschfahrzeuge, Wasser, Sanierung/Ruine/Wiederaufbau) und
+     Kriminalität (Faktoren, Streifenpräsenz, Einsätze, Aufklärung, Zellen), Ansichten/Flammen/Blaulicht/Inspektor/HUD, Spielstand
+     safety v1 (im Editor noch nicht visuell abgenommen). Später: Gefängnis, Brandschutz-Verordnungen, Wind, Taxi
    - ✅ G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
      - ✅ Güterkatalog + Rezepte, Firmen mit Lager/Kasse/Gewinn, Industrie-Unterarten nach Vorkommen/Nachfrage, Märkte mit
