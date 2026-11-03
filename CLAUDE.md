@@ -164,8 +164,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Gestaffelt:** je Tick 1/`NeedsSpreadTicks` (24) der Bürger → jeder 10× am Tag. Umfeld je Wohngebäude
   (`HomeContext`: Lärm, Abgas, Versorgung, 7 Dienste) einmal je Runde berechnet und von allen Bewohnern geteilt.
   Leistung (Testprojekt, Info): 20 000 Bürger ≈ 2,5–3 ms/Tick für alle Systeme, Bedürfnis-Staffel ≈ 0,25 ms/Tick.
-- **Dienste (G4) nur über Delegat:** `CitizenSystem.ServiceCoverage(id, building)` → 0..1, Standard 0,5 (neutral).
-  Ids „police“, „fire“, „health“, „education“, „library“, „park“, „garbage“. Wird beim Mergen mit dem Dienste-System verbunden.
+- **Dienste (G4) über Delegaten**, verbunden in `CitizenServiceBinding.Connect` (aufgerufen in `CreateDefault`):
+  `ServiceCoverage(id, building)` → `world.Services.Coverage` (Ids „police“, „fire“, „health“, „education“, „library“,
+  „park“, „garbage“, zusätzlich „education_primary/secondary“: Kinder 6–11 bzw. 12–17 nutzen ihre Schulart). Gibt es von
+  einer Art noch kein Dienstgebäude, liefert sie neutral 0,5 (Startphase, wie Strom/Wasser). `GarbageLevel` (liegender
+  Müll, erst mit Müllabfuhr in der Stadt) senkt Ruhe/Umwelt um bis zu 0,3. `ParkFinder` = bester Park nach
+  Fußweg-Wirkung × Auslastung. Rückrichtung: `Services.DemandProvider` ← echte Schülerzahlen (`CountResidents`).
+  Abdeckung wird je Bewertungsrunde und Gebäude im `HomeContext` zwischengespeichert. Ohne Bindung (reine Tests): 0,5.
 - **Persönlichkeit** (`Personality`, 8 Züge 0..1: gesellig, sparsam, ehrgeizig, ängstlich, naturverbunden,
   lärmempfindlich, familienorientiert, abenteuerlustig): Zuzügler aus einem von 16 Archetypen (± 0,15), Kinder = Mischung
   der Eltern (± 0,18). `NeedWeight(k)` multipliziert die Lebensphasen-Gewichte (bei 0,5 überall ≈ 1).
@@ -174,7 +179,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   der Erinnerungen) + 0,2·(Zufriedenheit − 0,6) − 0,1 krank, geglättet. Je Gebäude: `ResidentSatisfaction(id)`,
   `WorkerSatisfaction(id)` (0,6 Arbeit + 0,4 Mobilität der Beschäftigten), je Haushalt `Household.Satisfaction`.
 - **Utility AI** (`UtilityChoice.Choose`, Softmax, Temperatur aus der Persönlichkeit, Zufall nur aus `SimRandom`):
-  Freizeit 15–21 Uhr (zu Hause / Park = `Activity.Leisure` an der Wohnung, bis G4 Parkorte liefert / Bummeln = Ladenfahrt),
+  Freizeit 15–21 Uhr (zu Hause / Park = `Activity.Leisure`: echter G4-Park in Reichweite (`Citizen.LeisureParkId`, Fußweg
+  hin/zurück verlängert die Dauer, Qualität = Parkwirkung), sonst Spaziergang im Viertel / Bummeln = Ladenfahrt),
   Verkehrsmittel (`CarProbability`: Grundanteil × Demand × 2 × logistisch(Nutzen Auto) – neutral = alter Anteil; sparsam,
   naturverbunden, Stau-Erinnerung senken), Umzug (alle 5 Tage je Haushalt bei Leidensdruck: bleiben mit Trägheit und
   Abzug für Lärm-/Ausfall-/Unsicher-Erinnerungen vs. bis 6 zufällige freie Wohnungen, `HomeScore`, halbe Temperatur),
@@ -197,12 +203,14 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Stadt-Hook:** `PopulationInfo.AverageSatisfaction` → `CitySystem.MoveInPull` ± (Zufriedenheit − 0,6) × 40 (wirkt auch
   auf die Wohn-Nachfrage); Zuzügler meiden Häuser mit Bewohner-Zufriedenheit < 0,45. `Household.Income` (Lohn/Rente je
   Tag, ohne Steuern) für die Wirtschaft.
-- **Abfragen für den Inspektor** (Platzhalter dort beim Mergen ersetzen): `c.Need(k)` + `Needs.DisplayName/Describe`,
+- **Abfragen für den Inspektor** (im Inspektor verdrahtet): `c.Need(k)` + `Needs.DisplayName/Describe`,
   `c.Personality` (`Describe(gender)`, Indexer je `Trait`), `MemoryTexts(c, list)` / `MemoryText(c, m)`, `c.Satisfaction`
   + `SatisfactionText`, `Concerns(c)`, `c.Mood` + `MoodText`, `c.Health`/`IsIll` + `HealthText`, `FamilyStatusText(c)`,
   `PartnerOf(c)`, `c.FullName`, `ResidentSatisfaction/WorkerSatisfaction(buildingId)`, `Stats.AverageNeeds` u. a.
-  Hinweis: neuer Wert `Activity.Leisure` – der bisherige Inspektor zeigt ihn als „außerhalb“ (Default-Zweig).
-- Später: echte Parkziele/Freizeitorte (G4), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
+  Dazu `BuildingCondition(b)`, `SurroundingsScore(b)`, `LeisurePlaceText(c)`, `CountResidents(id, min, max)`.
+- **HUD:** `Game/Citizens/CitizenAlerts` (Begleiter am RoadTool) meldet einmal je Spieltag Geburten/Hochzeiten des
+  Vortags mit einem Beispielsatz (`HudMessages.Info`, Schlüssel „citizens-daily“).
+- Später: Kinder gehen wirklich zur Schule (Tagesablauf), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
   aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter (Stau → „eher ÖPNV“ wirkt bisher
   auf den Platzhalter „zu Fuß/ÖPNV“). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
   für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
@@ -247,11 +255,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   **Dienstgebäude** (G4, `SelectionKind.Service`): Dienstart, Kapazität, Auslastung/Überlastungsfaktor, versorgte Gebäude,
   Reichweite/Zufahrt, Lager, Kosten/Unterhalt, Lärm. Gebäude-Reiter Umfeld: **Dienste in Reichweite** = Abdeckung je
   Dienstart (Bildung mit Grund-/Oberschule), Müll am Gebäude, Brandrisiko.
-- **Platzhalter fürs Bedürfnismodell** (zeigen „— (kommt mit Bedürfnismodell)“, keine Zahlen): Bürger Gesundheit,
-  Zufriedenheit, Gemüt, Familienstand; Gebäude Zustand, Zufriedenheit Bewohner/Mitarbeiter/Umfeld; Bodenwert (G6),
-  Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
-  Versorgung an der Wohnung, Arbeitslosigkeit, Einkaufsbedürfnis), die das Modell später bewerten kann.
-  Neue Werte: dort statt `Pending` einsetzen.
+- **Bedürfnismodell im Inspektor:** Bürger mit Namen, Familienstand + Partner (anklickbar), Persönlichkeit/Charakterzüge;
+  „Befinden“: Gesundheit/krank, Zufriedenheit, Gemüt, Sorgen, Bedürfnisbalken (Erfüllung rot→grün), Erinnerungen als
+  Sätze, Rohwerte + Haushaltseinkommen; Freizeit „im Park“/„Spaziergang im Viertel“. Gebäude: Zustand, Zufriedenheit
+  Bewohner/Mitarbeiter/Umfeld. Noch offen: Bodenwert (G6), Zustand von Bauwerken.
 
 ## Strom & Wasser (G3)
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
