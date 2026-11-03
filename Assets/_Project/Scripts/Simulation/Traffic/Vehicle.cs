@@ -55,6 +55,20 @@ namespace CityBuilder.Simulation.Traffic
         public float PrevHeight { get; internal set; }
         public Vector2 PrevDirection { get; internal set; }
 
+        // --- ÖPNV: Linienfahrzeuge (Bus), gesteuert vom TransitSystem (s. TrafficSystem.Scheduled.cs)
+        /// <summary>Linienfahrzeug: verschwindet am Ziel nicht, sondern hält (Haltestelle) und bekommt das nächste Ziel.</summary>
+        public bool IsScheduled { get; internal set; }
+        /// <summary>Id des Busses im <c>TransitSystem</c> (0 = kein Linienfahrzeug).</summary>
+        public int TransitId { get; internal set; }
+        /// <summary>Steht gerade an einer Haltestelle (Ein-/Aussteigen).</summary>
+        public bool IsAtStop => AtStop;
+        internal bool AtStop;
+        /// <summary>Verkehrszeit, bis zu der das Fahrzeug an der Haltestelle stehen bleibt.</summary>
+        internal float HoldUntil;
+        /// <summary>Zielrichtung auf dem Zielsegment: 0 = beliebig, 1 = in Segmentrichtung, 2 = dagegen.</summary>
+        internal byte DestinationDirection;
+        // --- Ende ÖPNV
+
         public bool IsOnFinalEdge => RouteIndex >= Route.Count - 1;
         public EdgeKey CurrentEdge => Route[RouteIndex];
         public EdgeKey? NextEdge => RouteIndex + 1 < Route.Count ? Route[RouteIndex + 1] : (EdgeKey?)null;

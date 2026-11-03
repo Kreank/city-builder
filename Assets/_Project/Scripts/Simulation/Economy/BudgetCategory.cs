@@ -21,6 +21,8 @@ namespace CityBuilder.Simulation.Economy
         Fees,
         /// <summary>Erlös aus dem Abriss eigener Bauten (Teil der Baukosten).</summary>
         Demolition,
+        /// <summary>ÖPNV: Fahrgeld je Einstieg in einen Linienbus.</summary>
+        TransitFares,
 
         // --- Ausgaben
         RoadConstruction,
@@ -37,6 +39,8 @@ namespace CityBuilder.Simulation.Economy
         Interest,
         /// <summary>Bau von Dienstgebäuden (G4).</summary>
         ServiceConstruction,
+        /// <summary>ÖPNV: Bau von Haltestellen und Depots.</summary>
+        TransitConstruction,
 
         // --- Etappe 8 Handel (hinten angefügt, damit bestehende Werte gleich bleiben; Einnahme/Ausgabe s. Budget.IsIncome)
         /// <summary>Einnahme: Zölle auf Importe (Weltmarkt und Vertragsware).</summary>
@@ -63,7 +67,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.PenaltiesPaid + 1; // Etappe 8: letzte Kategorie
+        public const int Count = (int)BudgetCategory.PenaltiesPaid + 1; // letzte Kategorie (Etappe 8 hinter ÖPNV)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -100,6 +104,8 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.Services: return "Dienste";
                 case BudgetCategory.Interest: return "Zinsen";
                 case BudgetCategory.ServiceConstruction: return "Bau Dienste";
+                case BudgetCategory.TransitFares: return "Fahrgeld ÖPNV";
+                case BudgetCategory.TransitConstruction: return "Bau ÖPNV";
                 // --- Etappe 8 Handel
                 case BudgetCategory.Tariffs: return "Zölle";
                 case BudgetCategory.TradeSales: return "Handel: Verkauf";

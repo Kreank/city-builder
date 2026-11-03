@@ -15,7 +15,7 @@ namespace CityBuilder.Game.Utilities
     /// </summary>
     public sealed class UtilityTool : MonoBehaviour
     {
-        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove }
+        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove, SewagePipe } // SewagePipe: Abwasser (G3 erweitert)
 
         /// <summary>Höhe der Leiterseile über Gelände (Vorschau) bzw. Rohrtiefe darunter.</summary>
         public const float WireHeight = 12f;
@@ -115,7 +115,7 @@ namespace CityBuilder.Game.Utilities
         {
             label = null;
             if (tool == null) return;
-            tool.ForceUnderground = Active && Current == UtilityAction.WaterPipe;
+            tool.ForceUnderground = Active && (Current == UtilityAction.WaterPipe || Current == UtilityAction.SewagePipe);
             if (!Active || !tool.HasCursor || tool.Runner.World == null) { Hide(); placingLine &= Active; return; }
 
             var mouse = Mouse.current;
@@ -126,6 +126,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityAction.Facility: UpdateFacility(p, clicked); break;
                 case UtilityAction.PowerLine: UpdateLine(UtilityKind.Power, p, clicked); break;
                 case UtilityAction.WaterPipe: UpdateLine(UtilityKind.Water, p, clicked); break;
+                case UtilityAction.SewagePipe: UpdateLine(UtilityKind.Sewage, p, clicked); break;
                 case UtilityAction.Remove: UpdateRemove(p, clicked); break;
             }
         }
@@ -201,7 +202,9 @@ namespace CityBuilder.Game.Utilities
                 lineRenderer.SetPosition(1, SimConvert.ToWorld(p, Ground(p) + offset));
                 string hint = kind == UtilityKind.Power
                     ? " · Stadtstraßen führen Strom schon mit – Leitung nur für Lücken/Überland"
-                    : " · Stadtstraßen führen Wasser schon mit – Rohr nur für Lücken";
+                    : kind == UtilityKind.Sewage
+                        ? $" · Kanäle selbst verlegen (Straßen führen keinen mit) – entlang der Straße einrasten, Gebäude ≤ {ConnectionRules.BuildingReach:0} m sind angeschlossen"
+                        : " · Stadtstraßen führen Wasser schon mit – Rohr nur für Lücken";
                 SetLabel($"{UtilityCatalog.LineName(kind)}: Startpunkt wählen{SnapText(snap)}{hint}", false, SimConvert.ToWorld(p, Ground(p) + WireHeight));
                 if (clicked) { lineStart = p; placingLine = true; }
                 return;
@@ -358,6 +361,7 @@ namespace CityBuilder.Game.Utilities
             GUILayout.BeginHorizontal();
             if (Button("Stromleitung", Active && Current == UtilityAction.PowerLine, 110f)) Select(UtilityAction.PowerLine);
             if (Button("Wasserrohr", Active && Current == UtilityAction.WaterPipe, 110f)) Select(UtilityAction.WaterPipe);
+            if (Button("Abwasserkanal", Active && Current == UtilityAction.SewagePipe, 110f)) Select(UtilityAction.SewagePipe); // G3 erweitert
             if (Button("Abriss", Active && Current == UtilityAction.Remove, 80f)) Select(UtilityAction.Remove);
             if (GUILayout.Button("⟲ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(-15f);
             if (GUILayout.Button("⟳ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(15f);
@@ -392,6 +396,9 @@ namespace CityBuilder.Game.Utilities
                 case "power_solar": return "Solar";
                 case "water_pump": return "Pumpe (Ufer)";
                 case "water_tower": return "Wasserturm";
+                case "power_nuclear": return "Atom";
+                case "sewage_plant": return "Kläranlage";
+                case "sewage_outlet": return "Auslass (Ufer)";
                 default: return t.DisplayName;
             }
         }
