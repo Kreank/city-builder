@@ -263,7 +263,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
 - Noch IMGUI: nur die Rückfall-`RoadToolbar` und die Rückfall-Fenster (s. Phase 2); neue IMGUI-Fenster anderer Agenten
-  (Wirtschaft, Weltkarte) sollen auf den Baukasten umziehen.
+  (Wirtschaft F5, Weltkarte F4) sind auf den Baukasten umgezogen, ihr IMGUI bleibt Rückfall.
 
 ## Spiel-UI Phase 2 (Fenster)
 - **Baukasten** `Game/UI/Panels`: `Ui` (Sofort-Modus: Fenster beschreiben ihren Inhalt bei jeder Aktualisierung neu,
@@ -516,7 +516,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fahrzeuge, Baustoffe; je Gut Weltmarkt-Grundpreis €/Einheit, m³/t (Lkw-Ladung 25 m³/20 t), Verderb/Tag, Bedarfsstufe,
   Verbrauch je Haushalt, Absatz je Verkäufer), `RecipeCatalog` (18 Industrie-Rezepte + Einzelhandel + Büro: Eingänge →
   Ausgänge **je Arbeitsplatz und Tag**, `Workforce` = Anteil Jobs einfach/mittlerer Abschluss/Studium, Strom kW/Wasser je Job
-  (nur Daten, noch ohne Rückwirkung aufs Netz), Vorkommen + Mindestgüte; Faustregel Wertschöpfung ≈ 175 €/Job zu Grundpreisen),
+  (Industriebedarf im Netz, s. u.), Vorkommen + Mindestgüte; Faustregel Wertschöpfung ≈ 175 €/Job zu Grundpreisen),
   `GoodsRules` (alle Zahlen), `Firm`, `GoodMarket`, `Shipment`, `GoodsSystem` (partial: Kern, `.Trade`, `.Households`,
   `.Siting`), `GoodsBinding.Connect` (in `CreateDefault`). Läuft nach den Diensten, vor der Stadtkasse.
 - **Takt:** jeden Tick Lkw-Abfahrten, jede Spielstunde (10 Ticks) Lieferungen → Produktivität → Produktion → Bestellungen →
@@ -525,7 +525,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Firmen** in Industrie, Einzelhandel, Mischgebiet (Rolle Einzelhandel) und Büro – angelegt bei `BuildingAdded`. Lager:
   Eingang 3 Tage Verbrauch, Ausgang 3 Tage Produktion (bei voller Belegschaft), Erstausstattung 50 % Eingang aus dem
   Startkapital (400 €/Job). Produktivität = Belegschaft × (1 − 0,5 × fehlende Fachkräfte) × (0,2 ohne Strom/Wasser) ×
-  Vorkommen (0,5 + Güte); Produktion je Stunde begrenzt durch Eingänge und freien Ausgang (Status `MissingInput`/`OutputFull`).
+  Vorkommen (0,5 + Güte) × Ernte (nur Landwirtschaft); Produktion je Stunde begrenzt durch Eingänge und freien Ausgang (Status `MissingInput`/`OutputFull`).
   Gewinn = Erlös − Wareneinsatz (verbrauchte/verkaufte Eingänge zum Ø-Einkaufspreis) − Löhne (echte Löhne der Beschäftigten,
   `CitizenSystem.WageBillOf`) − Transport. Büro: Erlös 185 €/Beschäftigtem × Dienstleistungsnachfrage (0,75–1,3).
 - **Standortwahl der Industrie** (eine Unterart je Grundstück, beim Entstehen): Score = Bedarf × (0,6 + Güte) + 0,2 × Güte +
@@ -560,19 +560,36 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   → Pleite, Gebäude wird verlassen (`AbandonBankruptBuildings`).
 - **Stadtkasse:** Gewerbesteuer = max(0, Tagesgewinn) × 2,5 × Satz (`EconomyRules.ProfitTaxMultiplier`; deckt vorerst auch
   den Lohnsteueranteil der alten Pauschale). Firmen haben eigene Kassen; Handel läuft nicht über die Stadtkasse.
-- **Vorkommen (Agent „world“, beim Mergen verbinden):** `GoodsSystem.DepositAt(id, pos)` → 0..1 (Standard „fertility“ 0,6,
-  „wood“ 0,4, sonst 0 – ohne Weltkarte also nur Bauernhof/Forst als Gewinnung), `Extract(id, pos, menge)` → tatsächlich
-  entnommen (Standard unbegrenzt). Ids in `ResourceIds`.
+- **Vorkommen & Ernte aus der Welt** (`GoodsBinding.ConnectWorld` in `CreateDefault`): `DepositAt` = `world.Resources.DepositAt`,
+  Güte einer Firma = Mittel über das 3×3-Entnahmefenster (`DepositSampleSpacing` = Zellgröße, `DepositQualityAt`), täglich neu
+  → erschöpfte Vorkommen senken die Produktivität, unter der Mindestgüte `NoDeposit`. `Extract` rechnet Wareneinheiten in
+  Karteneinheiten um (`GoodsBinding.MapUnitsPerGood`): Erz/Kohle t = Gewicht der Ware (1,0/0,9), Erdöl/Sand m³ = Volumen
+  (1,1/0,6); Holz 0,01 m³ und Boden 0,001 Punkte je Einheit **im Spielmaßstab** (die Karte entnimmt nur im ~48×48-m-Fenster,
+  ein Forst/Hof bewirtschaftet viel mehr Fläche – physisch wäre der Wald in Stunden weg). Erneuerung macht `WorldSystem`.
+  **Ernte** (`HarvestFactor`, Landwirtschaft): (0,6 Grundertrag + 0,4 × `Climate.HarvestFactor(Tag)`/Jahresmittel) ×
+  clamp(Jahresmittel/0,5, 0,4, 1,2) – Jahreszeit schwankt um 1 (Winter ≈ 0,6, Sommer ≈ 1,4), das Klima der Region hebt/senkt
+  das Mittel; ohne Grundertrag stünden Höfe im Winter still und gingen pleite. Ohne Bindung (Tests): Standard „fertility“ 0,6,
+  „wood“ 0,4, sonst 0, Entnahme unbegrenzt. `ResourceIds` = Verweis auf `World.ResourceIds`.
+- **Strom/Wasser der Industrie** (Hook `UtilitySystem.DemandProvider` + `DemandOf(b, kind)`, markiert): Industriefirmen
+  verbrauchen Rezept × Arbeitsplätze (`GoodsSystem.UtilityDemand`), alle anderen Gebäude weiter `UtilityCatalog.Demand`;
+  der Inspektor zeigt denselben Wert.
+- **Verkehrsstatistik:** `TrafficStats.CitizenVehicles`/`CitizenTrips*` zählen nur positive Fahrt-Ids, Lkw stehen in
+  `DeliveryVehicles`.
 - **Abfrage-API:** `FirmAt(buildingId)` (Rolle, `Recipe`, `Form`, `Status` + `Firm.StatusText`, `InputOf/OutputOf/…CapacityOf/
   IncomingOf`, `Cash`, `Yesterday`/`Today` (Erlös, Wareneinsatz, Löhne, Transport, Gewinn), `ProfitEma`, `Margin`, `Workers/Jobs`,
   `Productivity`, `SkillCoverage`, `DepositQuality`), `Firms`, `Market(good)`/`Markets` (lokal/Welt, Bestand/Ziel, Bedarf,
   `Yesterday` Produktion/Verbrauch/Haushalte/Import/Export), `TradeYesterday`/`TradeTotal`, `Shipments`, `ShipmentsOf(id, list)`,
   `ShipmentForTrip(tripId)` (Lkw im Inspektor), `Stats`, `DemandOffset(zone)`, `RetailPrice`, `HighestTier`, `Restructure`.
-- **Darstellung:** `Game/Goods/GoodsPanel` (IMGUI, **Taste F3**, Begleiter am `RoadTool`): Reiter Güter (Preis, Welt,
-  Bestand/Ziel, Produktion/Verbrauch, Haushalte, Import/Export), Firmen (Zustand, Gewinn, Kasse, Nachfrage-Zuschlag),
-  Lieferungen. Inspektor/HUD (Agent „ui2“) nutzen die Abfrage-API.
+- **Darstellung:** Fenster „Wirtschaft“ (**Taste F5** – F3 ist die Rohstoff-Ansicht; Koffer-Knopf in der oberen Leiste):
+  `UI/Windows/GoodsWindow` (mittig, Baukasten) mit Reitern Güter (lokal/Welt, Import/Export, Bestand/Ziel,
+  erzeugt/verbraucht, Haushalte), Firmen (Übersicht, Nachfrage-Zuschläge, Erntefaktor, Liste mit Gewinn/Kasse, blätterbar),
+  Lieferungen (Lkw/Platzhalter/fehlgeschlagen/verloren, Liste). Zustand (offen, Reiter, Taste) im `Game/Goods/GoodsPanel`
+  (Begleiter am `RoadTool`), das nur noch als IMGUI-Rückfall zeichnet. **Inspektor:** Gebäude mit Firma haben den Reiter
+  „Firma“ (`InspectorWindow.Goods.cs`: Gewinn gestern/heute, Marge, Produktivität + Zustand, Betrieb/Rolle, Vorkommen,
+  Strom/Wasser, Kasse, Gewinnrechnung, Eingangslager/Regale und Ausgangslager als Balken, laufende Lieferungen mit
+  anklickbarem Lkw); Lkw zeigen „Ladung“ (Gut, Menge, Art, Von/Nach anklickbar, Wert, Transport).
 - **Leistung** (Testprojekt, Info): ~190 Firmen, ~15 000 Bürger ≈ 4 ms/Tick für alle Systeme; Warensystem allein ≈ 2 ms je Spieltag.
-- Später: Strom/Wasser-Bedarf der Rezepte ins Netz, Vorkommen regenerieren (Agent „world“), Baustoffe für den Bau, Brennstoffe
+- Später: Baustoffe für den Bau, Brennstoffe
   für Kraftwerke, Lagerhallen/Güterbahnhof/Hafen, Verträge statt Spotmarkt, Zölle/Subventionen, Löhne nach Gewinn, Ladenwahl
   nach Preis/Sortiment, Abfahrt-Puffer für Lkw, Spieler-Spezialisierung über `Restructure`.
 
@@ -713,8 +730,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
      - ✅ Güterkatalog + Rezepte, Firmen mit Lager/Kasse/Gewinn, Industrie-Unterarten nach Vorkommen/Nachfrage, Märkte mit
        Preisen und Weltmarkt, Import/Export, Lkw-Lieferverkehr, Konsum nach Bedarfsstufen, Gewinn → Nachfrage/Pleite,
-       Gewerbesteuer aus Gewinn, Fenster „Wirtschaft“ (F3; im Editor noch nicht visuell abgenommen). Offen: Vorkommen aus der
-       Weltkarte verbinden, Strom/Wasser der Rezepte ins Netz, Baustoffe/Brennstoffe nutzen, Verträge
+       Gewerbesteuer aus Gewinn, Vorkommen/Ernte aus der Welt, Industrie-Strom/Wasser nach Rezept, Fenster „Wirtschaft“
+       (F5, Baukasten) und Inspektor-Reiter „Firma“/Lkw-Ladung (im Editor noch nicht visuell abgenommen).
+       Offen: Baustoffe/Brennstoffe nutzen, Verträge
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit

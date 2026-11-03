@@ -189,7 +189,7 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.WorldMap.WorldMapWindow>().Init(this);
             // --- Ende Welt
 
-            // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F3)
+            // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
             // --- Ende G5
 

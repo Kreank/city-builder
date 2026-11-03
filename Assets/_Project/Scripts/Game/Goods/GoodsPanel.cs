@@ -9,7 +9,8 @@ using UnityEngine.InputSystem;
 namespace CityBuilder.Game.Goods
 {
     /// <summary>
-    /// Fenster „Wirtschaft“ (IMGUI, Taste F3, verschiebbar): Güter mit lokalem Preis, Weltmarkt, Bestand/Ziel,
+    /// Fenster „Wirtschaft“ (Taste F5; Zustand + IMGUI-Rückfall, verschiebbar – mit neuer UI zeichnet
+    /// <see cref="CityBuilder.Game.UI.Windows.GoodsWindow"/>): Güter mit lokalem Preis, Weltmarkt, Bestand/Ziel,
     /// Produktion/Verbrauch und Import/Export des Vortags; Firmen je Rolle mit Gewinn; Lieferungen (Lkw/Platzhalter).
     /// Liest nur (Abfrage-API des <see cref="GoodsSystem"/>). Begleiter des <see cref="RoadTool"/>.
     /// </summary>
@@ -26,6 +27,8 @@ namespace CityBuilder.Game.Goods
         static readonly string[] Tabs = { "Güter", "Firmen", "Lieferungen" };
 
         public bool Visible { get => visible; set => visible = value; }
+        /// <summary>Gewählter Reiter (0 Güter, 1 Firmen, 2 Lieferungen) – geteilt mit dem UI-Toolkit-Fenster.</summary>
+        public int Tab { get => tab; set => tab = Mathf.Clamp(value, 0, Tabs.Length - 1); }
 
         public void Init(RoadTool roadTool) => tool = roadTool;
 
@@ -34,12 +37,13 @@ namespace CityBuilder.Game.Goods
         void Update()
         {
             var kb = Keyboard.current;
-            if (kb != null && kb.f3Key.wasPressedThisFrame) visible = !visible;
+            if (kb != null && kb.f5Key.wasPressedThisFrame) visible = !visible; // F3 = Rohstoff-Ansicht (Welt)
         }
 
         void OnGUI()
         {
             if (!visible || Goods == null) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: UI/Windows/GoodsWindow (IMGUI nur Rückfall)
             if (header == null)
             {
                 header = new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, richText = true };
@@ -54,7 +58,7 @@ namespace CityBuilder.Game.Goods
                 placed = true;
             }
             UiBlocker.Register(window);
-            window = GUI.Window(WindowId, window, Draw, "Wirtschaft (F3)");
+            window = GUI.Window(WindowId, window, Draw, "Wirtschaft (F5)");
         }
 
         void Draw(int id)
