@@ -19,8 +19,8 @@ namespace CityBuilder.Simulation.Core
     /// (Arbeitsbeginn-Fenster, Ankunft beendet erst die Fahrt).
     /// </para>
     /// <para>
-    /// Echtzeit (nur Unity-Seite, <c>SimulationRunner</c>): Tempo 1/2/3 = <see cref="TicksPerRealSecond"/> × 1/3/6
-    /// (1 Spieltag = 36 / 12 / 6 Minuten).
+    /// Echtzeit (nur Unity-Seite, <c>SimulationRunner</c>): Tempo 1–4 = <see cref="TicksPerRealSecond"/> × 1/5/30/90
+    /// (1 Spieltag = Echtzeit 3 h / 36 / 6 / 2 Minuten).
     /// Die Verkehrsschritte eines Ticks werden über die Frames verteilt (<c>SimulationWorld.Substep</c>).
     /// </para>
     /// </summary>
@@ -67,13 +67,13 @@ namespace CityBuilder.Simulation.Core
 
         // ------------------------------------------------------------ Echtzeit (Unity-Seite, nur Darstellung/Takt)
 
-        /// <summary>Echtzeit je Spieltag bei Tempo 1 (36 Minuten; Entscheidung des Spielers 2026-11-03: Verkehr sichtbar
-        /// nur ~5× schneller als echt statt 30×).</summary>
-        public const float RealSecondsPerDayAtSpeed1 = 2160f;
-        /// <summary>Kalender-Ticks je Echtzeitsekunde bei Tempo 1 (240 / 2160 s = 0,111 → 5 s Verkehrszeit je Sekunde).</summary>
+        /// <summary>Echtzeit je Spieltag bei Tempo 1 = <b>Echtzeit</b>: Fahrzeuge/Fußgänger bewegen sich mit echter
+        /// Geschwindigkeit (1 Verkehrssekunde je Sekunde), 1 Spieltag = 3 Stunden (Entscheidung des Spielers 2026-11-03).</summary>
+        public const float RealSecondsPerDayAtSpeed1 = TrafficSecondsPerDay;
+        /// <summary>Kalender-Ticks je Echtzeitsekunde bei Tempo 1 (240 / 10 800 s = 0,022 → 1 s Verkehrszeit je Sekunde).</summary>
         public const float TicksPerRealSecond = TicksPerDay / RealSecondsPerDayAtSpeed1;
-        /// <summary>Vervielfacher der Tempostufen (Pause, 1, 2, 3): 1 Tag = 36 / 12 / 6 Minuten, Verkehr 5× / 15× / 30× Echtzeit.</summary>
-        public static readonly int[] SpeedMultipliers = { 0, 1, 3, 6 };
+        /// <summary>Vervielfacher der Tempostufen (Pause, 1–4): 1 Tag = 180 / 36 / 6 / 2 Minuten, Verkehr 1× / 5× / 30× / 90× Echtzeit.</summary>
+        public static readonly int[] SpeedMultipliers = { 0, 1, 5, 30, 90 };
 
         // ------------------------------------------------------------ Umrechnungen
 

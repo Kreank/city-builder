@@ -31,6 +31,14 @@ namespace CityBuilder.Simulation.Utilities
         InsufficientFunds,
         /// <summary>Keine Zufahrt an der Vorderseite (nur Bauwerke mit <see cref="UtilityFacilityType.NeedsRoadFront"/>).</summary>
         NoRoadAccess,
+        // --- Energie erweitert (hinten angefügt)
+        /// <summary>Wasserkraft: Mitte muss im Fluss liegen (nicht an Land, nicht im Meer).</summary>
+        NeedsRiver,
+        /// <summary>Offshore: ganze Grundfläche im offenen Meer (genug Wassertiefe, weit genug vom Ufer).</summary>
+        NeedsSea,
+        /// <summary>Wasserkraft: Ufer zu niedrig für einen Aufstau (Fallhöhe unter dem Minimum) oder Fluss zu schmal/zu breit.</summary>
+        NoHydroSite,
+        // --- Ende Energie erweitert
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -48,6 +56,11 @@ namespace CityBuilder.Simulation.Utilities
         public int MovingId;
         /// <summary>Gebäude, die für das Bauwerk abgerissen würden.</summary>
         public readonly List<Building> Displaced = new List<Building>();
+        // --- Energie erweitert: Nennleistung des Standorts (Wasserkraft aus Abfluss/Fallhöhe, sonst Katalogwert)
+        public float Rated;
+        /// <summary>Wasserkraft: Querschnitt des Flusses am Standort (Breite m, mittlere Tiefe m), Abfluss m³/s, Fallhöhe m.</summary>
+        public HydroSite Hydro;
+        // --- Ende Energie erweitert
         public bool IsValid => Error == UtilityBuildError.None;
         /// <summary>Mitte der Vorderkante (Vorschau-Pfeil).</summary>
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
@@ -195,7 +208,7 @@ namespace CityBuilder.Simulation.Utilities
         /// </summary>
         public bool IsRequired(UtilityKind kind)
         {
-            foreach (var f in facilities.Values) if (f.Kind == kind && !f.IsSubstation) return true;
+            foreach (var f in facilities.Values) if (f.Kind == kind && f.IsGenerator) return true; // Umspannwerk/Speicher erzeugen nichts
             return false;
         }
 
@@ -254,9 +267,13 @@ namespace CityBuilder.Simulation.Utilities
                 Type = type, Position = position, Front = front, MovingId = movingId,
                 Cost = movingId > 0 ? type.Cost * MoveCostShare : type.Cost,
             };
+            plan.Rated = type.Capacity; // Energie erweitert: Wasserkraft überschreibt in CheckFacility (Standort)
             plan.Error = CheckFacility(plan);
             if (plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
             plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
+            // Energie erweitert: Offshore-Fundament auf dem Wasserspiegel, Wehr knapp darüber (Bodenplatte des Modells)
+            if (type.Site == FacilitySite.Sea) plan.Height = terrain.WaterLevel;
+            else if (type.Site == FacilitySite.River) plan.Height = terrain.WaterLevel + 0.4f;
             if (plan.Error == UtilityBuildError.None)
                 foreach (var b in city.Buildings)
                     if (RectsOverlap(position, plan.Front, type.Width, type.Depth, b.Position, b.Front, b.Width, b.Depth)) plan.Displaced.Add(b);
@@ -273,6 +290,10 @@ namespace CityBuilder.Simulation.Utilities
         /// </summary>
         public FacilityPlan PlanFacilityAligned(UtilityFacilityType type, Vector2 cursor, float rotationDegrees = 0f, int movingId = 0)
         {
+            // --- Energie erweitert: Wehr quer zum Fluss (schmalster Querschnitt am Cursor, Vorderseite flussabwärts)
+            if (type.Site == FacilitySite.River && TryAlignHydro(cursor, rotationDegrees, out var hc, out var hf))
+                return PlanFacility(type, hc, hf, movingId);
+            // --- Ende Energie erweitert
             if (type.NeedsRoadFront &&
                 RoadFront.TryAlign(roads, cursor, type.Width, type.Depth, rotationDegrees, type.Depth + AlignReach, out var center, out var front))
             {
@@ -306,7 +327,8 @@ namespace CityBuilder.Simulation.Utilities
             Budget?.Spend(Economy.BudgetCategory.UtilityConstruction, plan.Cost);
             foreach (var b in plan.Displaced) city.RemoveBuilding(b);
             f.Relocate(plan.Position, plan.Front, plan.Height);
-            if (!plan.Type.NeedsWater) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
+            ApplySite(f, plan); // Energie erweitert: Wasserkraft rechnet den neuen Standort
+            if (!plan.Type.NeedsWater && plan.Type.Site == FacilitySite.Land) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
             StructureVersion++;
             FacilityMoved?.Invoke(f);
             RerouteLines((p, h) => f.Contains(p, h));
@@ -322,6 +344,14 @@ namespace CityBuilder.Simulation.Utilities
             float lo = terrain.HeightAt(plan.Position), hi = lo;
             foreach (var c in corners) { float h = terrain.HeightAt(c); lo = MathF.Min(lo, h); hi = MathF.Max(hi, h); }
 
+            // --- Energie erweitert: Standort im Fluss (Wasserkraft) bzw. im Meer (Offshore), s. UtilitySystem.Energy.cs
+            if (type.Site != FacilitySite.Land)
+            {
+                var siteError = CheckWaterSite(plan, corners);
+                if (siteError != UtilityBuildError.None) return siteError;
+            }
+            else
+            // --- Ende Energie erweitert
             if (type.NeedsWater)
             {
                 // Pumpe steht an Land, Wasser muss in Reichweite sein (Ufer)
@@ -355,6 +385,11 @@ namespace CityBuilder.Simulation.Utilities
             if (type.NeedsRoadFront && NearCityRoad(plan.Position, plan.Front, type.Width, type.Depth) &&
                 !RoadFront.FindAccess(roads, new Footprint(plan.Position, plan.Front, type.Width, type.Depth), RoadReach, out _, out _))
                 return UtilityBuildError.NoRoadAccess;
+            // --- Energie erweitert: Zufahrt ist Pflicht (Biogas: Anlieferung von Mais/Gülle), auch ohne Straße in der Nähe
+            if (type.RequiresRoadAccess &&
+                !RoadFront.FindAccess(roads, new Footprint(plan.Position, plan.Front, type.Width, type.Depth), RoadReach, out _, out _))
+                return UtilityBuildError.NoRoadAccess;
+            // --- Ende Energie erweitert
             return UtilityBuildError.None;
         }
 
@@ -391,9 +426,11 @@ namespace CityBuilder.Simulation.Utilities
                 Position = plan.Position,
                 Front = plan.Front,
                 Height = plan.Height,
-                Output = plan.Type.Capacity,
+                Output = plan.Type.IsStorage ? 0f : plan.Rated,
             };
-            if (!plan.Type.NeedsWater || plan.Type.DryFootprint) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
+            ApplySite(f, plan); // Energie erweitert: Nennleistung/Standortwerte
+            if ((!plan.Type.NeedsWater || plan.Type.DryFootprint) && plan.Type.Site == FacilitySite.Land)
+                terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
             facilities[f.Id] = f;
             StructureVersion++;
             FacilityAdded?.Invoke(f);
@@ -606,7 +643,10 @@ namespace CityBuilder.Simulation.Utilities
                 StatusVersion++;
             }
             UpdateIncidents(world); // Atom (G3 erweitert): seltener Störfall, s. UtilitySystem.Nuclear.cs
-            foreach (var f in facilities.Values) f.Output = f.Type.Capacity * OutputFactor(f); // später: Wind/Sonne/Brennstoff
+            // Energie erweitert: Nennleistung je Bauwerk × Verfügbarkeit (Abfluss, Wind, Rohstoff; Onshore-Wind/Solar weiter konstant)
+            UpdateAvailability(world);
+            foreach (var f in facilities.Values)
+                if (!f.IsStorage) f.Output = f.Rated * f.Availability * OutputFactor(f);
             bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water) | Distribute(UtilityKind.Sewage);
             if (changed) StatusVersion++;
             UpdateDurations();
@@ -747,6 +787,7 @@ namespace CityBuilder.Simulation.Utilities
                     list[id].Substations++;
                     list[f.UpstreamNetworkId].Substations++;
                 }
+                else if (f.IsStorage) list[id].Storages++; // Energie erweitert: Speicher zählen nicht als Erzeuger
                 else list[id].Facilities++;
             }
             for (int i = 0; i < lList.Count; i++)
@@ -774,9 +815,10 @@ namespace CityBuilder.Simulation.Utilities
             {
                 n.Production = 0f; n.Generation = 0f; n.Imported = 0f; n.TransformerCapacity = 0f;
                 n.Demand = 0f; n.Delivered = 0f; n.SuppliedBuildings = 0;
+                n.StorageDischarge = 0f; n.StorageCharge = 0f; // Energie erweitert
             }
             foreach (var f in facilities.Values)
-                if (f.Kind == kind && !f.IsSubstation && f.NetworkId >= 0 && f.NetworkId < list.Count) list[f.NetworkId].Generation += f.Output;
+                if (f.Kind == kind && f.IsGenerator && f.NetworkId >= 0 && f.NetworkId < list.Count) list[f.NetworkId].Generation += f.Output;
 
             // Bedarf je Netz (älteste Gebäude zuerst – Reihenfolge der Mitglieder)
             var demands = new List<float[]>(list.Count);
@@ -792,7 +834,11 @@ namespace CityBuilder.Simulation.Utilities
                 demands.Add(d);
                 list[id].Production = list[id].Generation;
             }
+            // Energie erweitert: Speicher bieten an (Hochspannung vor der Umspannung, Ortsnetz danach = nach dem Bezug aus der
+            // Hochspannung), Ausgleich nach der Verteilung (s. UtilitySystem.Energy.cs)
+            bool storage = kind == UtilityKind.Power && OfferStorage(list, beforeTransform: true);
             if (kind == UtilityKind.Power) TransformPower(list);
+            if (storage) OfferStorage(list, beforeTransform: false);
 
             for (int id = 0; id < list.Count; id++)
             {
@@ -816,6 +862,7 @@ namespace CityBuilder.Simulation.Utilities
                     if (old != supplied) changed = true;
                 }
             }
+            if (storage) SettleStorage(list); // Energie erweitert: Entladen/Laden buchen
             return changed;
         }
 

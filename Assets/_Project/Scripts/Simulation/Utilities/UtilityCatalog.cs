@@ -1,3 +1,4 @@
+using System;
 using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Utilities
@@ -38,7 +39,40 @@ namespace CityBuilder.Simulation.Utilities
         /// größte Last (kW), die es ins Ortsnetz weitergeben kann.
         /// </summary>
         Substation = 1,
+        // --- Energie erweitert (Eigene Assets 2026-11-03)
+        /// <summary>
+        /// Batteriespeicher: erzeugt nichts, lädt bei Überschuss und liefert bei Unterdeckung (Netz-Puffer).
+        /// <see cref="UtilityFacilityType.Capacity"/> = Lade-/Entladeleistung (kW), <see cref="UtilityFacilityType.StorageKwh"/> = Energie.
+        /// </summary>
+        Storage = 2,
+        // --- Ende Energie erweitert
     }
+
+    // --- Energie erweitert (Eigene Assets 2026-11-03)
+    /// <summary>Wo ein Versorger stehen muss (zusätzlich zu <see cref="UtilityFacilityType.NeedsWater"/> = am Ufer).</summary>
+    public enum FacilitySite : byte
+    {
+        /// <summary>An Land (Standard; mit <see cref="UtilityFacilityType.NeedsWater"/> am Ufer).</summary>
+        Land = 0,
+        /// <summary>Im Fluss (Wasserkraft): Mitte im fließenden Gewässer, kein Meer; Leistung nach Abfluss und Fallhöhe des Standorts.</summary>
+        River = 1,
+        /// <summary>Im offenen Meer (Offshore-Wind): ganze Grundfläche im Meer, Anschluss per Hochspannungs-Seekabel an Land.</summary>
+        Sea = 2,
+    }
+
+    /// <summary>Woher ein Erzeuger seine Leistung bezieht (schwankende Erzeugung, s. UtilitySystem.Energy.cs).</summary>
+    public enum OutputModel : byte
+    {
+        /// <summary>Konstant = Nennleistung (bisherige Kraftwerke, Onshore-Wind/Solar unverändert).</summary>
+        Constant = 0,
+        /// <summary>Wasserkraft: P = ρ·g·Q·H·η mit Abfluss Q (Querschnitt × Fließgeschwindigkeit × Niederschlagslage) und Fallhöhe H des Standorts.</summary>
+        Hydro = 1,
+        /// <summary>Offshore-Wind: stündlich schwankendes Windangebot (stetiger Hash-Verlauf, deterministisch).</summary>
+        OffshoreWind = 2,
+        /// <summary>Biogas: Rohstoffanteil aus Landwirtschaft im Einzugsgebiet (Bauernhöfe) + Grundmenge Bioabfall/Gülle.</summary>
+        Biogas = 3,
+    }
+    // --- Ende Energie erweitert
 
     /// <summary>
     /// Leitungsart (Wasserrohr, Abwasserkanal, Hochspannung, Freileitung, Erdkabel). Datengetrieben wie die Bauwerke;
@@ -138,11 +172,37 @@ namespace CityBuilder.Simulation.Utilities
         public bool FeedsLocalGrid { get; }
         // --- Ende
 
+        // --- Energie erweitert (Eigene Assets 2026-11-03)
+        /// <summary>Standort: Land (Standard), Fluss (Wasserkraft) oder Meer (Offshore).</summary>
+        public FacilitySite Site { get; }
+        /// <summary>Erzeugungsmodell (konstant, Wasserkraft, Offshore-Wind, Biogas).</summary>
+        public OutputModel Output { get; }
+        /// <summary>Batteriespeicher: speicherbare Energie in kWh (0 = kein Speicher).</summary>
+        public float StorageKwh { get; }
+        /// <summary>
+        /// Zufahrt ist Pflicht (nicht nur „Vorderseite zur Straße, falls eine in der Nähe ist“): Biogas braucht Anlieferung
+        /// (Mais/Gülle per Traktor/Lkw) – ohne Stadtstraße an der Vorderseite <see cref="UtilityBuildError.NoRoadAccess"/>.
+        /// </summary>
+        public bool RequiresRoadAccess { get; }
+        /// <summary>Darstellung: so viele Anlagen (z. B. Windräder des Offshore-Parks) im Raster auf der Grundfläche.</summary>
+        public int Units { get; }
+        public bool IsStorage => Role == FacilityRole.Storage;
+        /// <summary>Erzeugt selbst Leistung (nicht Umspannwerk, nicht Speicher).</summary>
+        public bool IsGenerator => Role == FacilityRole.Producer;
+        // --- Ende Energie erweitert
+
         public UtilityFacilityType(string id, string name, UtilityKind kind, float capacity, float width, float depth, float cost,
             float upkeep, float noise = 0f, float noiseRadius = 0f, float pollution = 0f, float pollutionRadius = 0f, bool needsWater = false,
             bool untreated = false, bool dryFootprint = false, float concernRadius = 0f, bool roadFront = false,
-            FacilityRole role = FacilityRole.Producer, bool feedsLocalGrid = false)
+            FacilityRole role = FacilityRole.Producer, bool feedsLocalGrid = false,
+            FacilitySite site = FacilitySite.Land, OutputModel output = OutputModel.Constant, float storageKwh = 0f,
+            bool requiresRoadAccess = false, int units = 1)
         {
+            Site = site;
+            Output = output;
+            StorageKwh = storageKwh;
+            RequiresRoadAccess = requiresRoadAccess;
+            Units = Math.Max(1, units);
             Role = role;
             FeedsLocalGrid = feedsLocalGrid;
             NeedsRoadFront = roadFront;
@@ -215,10 +275,57 @@ namespace CityBuilder.Simulation.Utilities
             needsWater: true, untreated: true);
         // --- Ende Abwasser
 
+        // --- Energie erweitert (Eigene Assets 2026-11-03, Modelle Models/Energy). Werte im Spielmaßstab wie die übrigen
+        // Kraftwerke (Windrad 3 MW für 12 000 €), Leistungen realistisch: Biogas-BHKW 2 MW, Laufwasserkraftwerk 3–15 MW je
+        // Standort, Offshore-Park 4 × 5 MW, Großbatterie 10 MW / 20 MWh.
+        /// <summary>
+        /// Biogasanlage (Fermenter + BHKW): 2 MW, braucht Zufahrt (Anlieferung Mais/Gülle), Leistung nach Rohstoff aus den
+        /// Bauernhöfen im Umkreis (<see cref="UtilitySystem.BiogasFeedRadius"/>), Grundmenge aus Bioabfall/Gülle. Klein → darf ins Ortsnetz.
+        /// </summary>
+        public static readonly UtilityFacilityType BiogasPlant = new UtilityFacilityType(
+            "power_biogas", "Biogasanlage", UtilityKind.Power, 2000f, 40f, 32f, 16000f, 180f,
+            noise: 0.15f, noiseRadius: 50f, pollution: 0.006f, pollutionRadius: 90f, roadFront: true, feedsLocalGrid: true,
+            output: OutputModel.Biogas, requiresRoadAccess: true);
+
+        /// <summary>
+        /// Laufwasserkraftwerk mit Wehr: nur im Fluss (nicht im Meer), Leistung je Standort aus Abfluss (Querschnitt) und Fallhöhe
+        /// (Uferhöhe begrenzt den Aufstau), schwankt mit der Niederschlagslage. Der Fluss bleibt durchgängig (Wasser fließt durch das
+        /// Wehr, Gelände wird nicht verändert, Verschmutzung wandert weiter flussabwärts, Fischtreppe/Schleuse). Anschluss: Hochspannung.
+        /// <see cref="UtilityFacilityType.Capacity"/> = Richtwert, die echte Nennleistung steht im Bauwerk (<see cref="UtilityFacility.Rated"/>).
+        /// </summary>
+        public static readonly UtilityFacilityType HydroPlant = new UtilityFacilityType(
+            "power_hydro", "Laufwasserkraftwerk (Wehr)", UtilityKind.Power, 8000f, 66f, 56f, 90000f, 450f,
+            noise: 0.2f, noiseRadius: 60f, site: FacilitySite.River, output: OutputModel.Hydro);
+
+        /// <summary>
+        /// Offshore-Windpark: 4 Anlagen à 5 MW im offenen Meer, Wind schwankt stündlich (im Mittel ~50 % der Nennleistung),
+        /// nur Hochspannung – Anschluss an Land per Hochspannungs-Seekabel (<see cref="SubseaCable"/>).
+        /// </summary>
+        public static readonly UtilityFacilityType OffshoreWind = new UtilityFacilityType(
+            "power_offshore_wind", "Offshore-Windpark (4 Anlagen)", UtilityKind.Power, 20000f, 180f, 180f, 150000f, 1100f,
+            noise: 0.2f, noiseRadius: 80f, site: FacilitySite.Sea, output: OutputModel.OffshoreWind, units: 4);
+
+        /// <summary>
+        /// Batteriespeicher (Container-Park): 10 MW Lade-/Entladeleistung, 20 MWh. Lädt bei Überschuss im eigenen Netz, liefert bei
+        /// Unterdeckung (nach den Kraftwerken), 90 % Wirkungsgrad je Richtung. Hängt wie kleine Erzeuger am Ortsnetz oder an der Hochspannung.
+        /// </summary>
+        public static readonly UtilityFacilityType BatteryStorage = new UtilityFacilityType(
+            "power_battery", "Batteriespeicher", UtilityKind.Power, 10000f, 32f, 24f, 30000f, 120f,
+            noise: 0.08f, noiseRadius: 25f, roadFront: true, role: FacilityRole.Storage, feedsLocalGrid: true, storageKwh: 20000f);
+        // --- Ende Energie erweitert
+
         public static readonly UtilityFacilityType[] All =
         {
             CoalPlant, GasPlant, WindTurbine, SolarPark, NuclearPlant, Substation, WaterPump, WaterTower, SewagePlant, SewageOutlet,
+            BiogasPlant, HydroPlant, OffshoreWind, BatteryStorage, // Energie erweitert (hinten angefügt)
         };
+
+        /// <summary>Versorger zum gespeicherten Schlüssel (null = unbekannt).</summary>
+        public static UtilityFacilityType TypeById(string id)
+        {
+            foreach (var t in All) if (t.Id == id) return t;
+            return null;
+        }
 
         // --- Leitungsarten (Netze selbst verlegt)
         public static readonly UtilityLineType WaterPipe = new UtilityLineType(
@@ -240,7 +347,16 @@ namespace CityBuilder.Simulation.Utilities
         public static readonly UtilityLineType UndergroundCable = new UtilityLineType(
             "power_cable", "Erdkabel (Ortsnetz)", UtilityKind.Power, GridLevel.Distribution, 40f, underground: true);
 
-        public static readonly UtilityLineType[] LineTypes = { WaterPipe, SewerPipe, HighVoltageLine, OverheadLine, UndergroundCable };
+        // --- Energie erweitert: Hochspannung unterirdisch bzw. durchs Wasser (Offshore-Anschluss, auch Erdkabel an Land)
+        /// <summary>
+        /// Hochspannungs-Erd-/Seekabel: Ebene Hochspannung ohne Masten – kreuzt Wasser (Offshore-Park → Land) und Straßen,
+        /// braucht keinen Platz, kostet aber dreimal so viel wie die Freileitung. Keine Hausanschlüsse.
+        /// </summary>
+        public static readonly UtilityLineType SubseaCable = new UtilityLineType(
+            "power_hv_cable", "Hochspannungs-Seekabel/Erdkabel", UtilityKind.Power, GridLevel.HighVoltage, 90f, underground: true);
+        // --- Ende Energie erweitert
+
+        public static readonly UtilityLineType[] LineTypes = { WaterPipe, SewerPipe, HighVoltageLine, OverheadLine, UndergroundCable, SubseaCable };
 
         /// <summary>Leitungsart zum gespeicherten Schlüssel (null = unbekannt).</summary>
         public static UtilityLineType LineTypeById(string id)

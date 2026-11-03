@@ -504,12 +504,19 @@ namespace CityBuilder.Game.UI.Hud
                     // --- G3 erweitert: Atom/Abwasser
                     (t.ConcernRadius > 0f ? $" · kein Abgas, aber Anwohner im Umkreis {t.ConcernRadius:0} m sorgen sich · seltener Störfall" : "") +
                     (t.Untreated ? " · billig, leitet ungeklärt ins Gewässer → verschmutzt flussabwärts (Pumpen, Ufer)" : "") +
-                    (t.Kind == UtilityKind.Sewage && !t.Untreated ? " · klärt Abwasser vollständig" : "")));
+                    (t.Kind == UtilityKind.Sewage && !t.Untreated ? " · klärt Abwasser vollständig" : "") +
+                    // --- Energie erweitert
+                    (t.Output == OutputModel.Hydro ? " · nur im Fluss (Wehr quer zum Fluss) · Leistung je Standort aus Abfluss und Fallhöhe (Uferhöhe), schwankt mit dem Niederschlag · Fluss bleibt durchgängig" : "") +
+                    (t.Site == FacilitySite.Sea ? " · nur im offenen Meer · Wind schwankt stündlich (Ø ≈ 50 %) · Anschluss per Hochspannungs-Seekabel" : "") +
+                    (t.Output == OutputModel.Biogas ? $" · braucht Zufahrt (Anlieferung) · Rohstoff aus Bauernhöfen im Umkreis {UtilitySystem.BiogasFeedRadius / 1000f:0} km, sonst {UtilitySystem.BiogasBaseShare * 100f:0} % Grundlast" : "") +
+                    (t.IsStorage ? $" · speichert {t.StorageKwh / 1000f:0} MWh · lädt bei Überschuss, liefert bei Unterdeckung (nach den Kraftwerken)" : "")));
             }
             tiles.Add(Container("cb-tile-sep"));
             float reach = ConnectionRules.BuildingReach;
             LineTile(tiles, UtilityTool.UtilityAction.HighVoltageLine, PowerSwatch, HudIconKind.Power,
                 $"Hochspannung vom Kraftwerk zum Umspannwerk · große Masten (Spannweite bis {UtilityCatalog.HighVoltageLine.MaxSpan:0} m) · keine Hausanschlüsse");
+            LineTile(tiles, UtilityTool.UtilityAction.SubseaCable, PowerSwatch, HudIconKind.Underground, // Energie erweitert
+                "Hochspannung ohne Masten: Seekabel vom Offshore-Windpark zum Umspannwerk an Land oder Erdkabel unter Straßen · dreimal so teuer wie die Freileitung");
             LineTile(tiles, UtilityTool.UtilityAction.PowerLine, PowerSwatch, HudIconKind.Power,
                 $"Ortsnetz als Freileitung vom Umspannwerk entlang der Straße · billig · kleine Masten neben der Straße brauchen Platz " +
                 $"(Abstand ≤ {UtilitySystem.MaxPoleSpan:0} m, kein Abriss) · Gebäude ≤ {reach:0} m angeschlossen, Seil zum Haus");
@@ -553,6 +560,7 @@ namespace CityBuilder.Game.UI.Hud
             if (t == UtilityCatalog.HighVoltageLine) return "Hochspannung";
             if (t == UtilityCatalog.OverheadLine) return "Freileitung";
             if (t == UtilityCatalog.UndergroundCable) return "Erdkabel";
+            if (t == UtilityCatalog.SubseaCable) return "Seekabel"; // Energie erweitert
             return t.DisplayName;
         }
 

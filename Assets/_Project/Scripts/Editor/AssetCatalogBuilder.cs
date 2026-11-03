@@ -66,6 +66,9 @@ namespace CityBuilder.Editor
 
         static Spec[] OwnBuildings(string zone) => OwnDescribed(OwnModelDescriptions.Buildings(described, zone));
         static Spec[] OwnRole(string role) => OwnDescribed(OwnModelDescriptions.WithRole(described, role));
+        /// <summary>Eigene Assets 2: eigene Fahrzeuge einer Verwendung (Originalgröße, Front +Z nach Konvention – keine Front-Erkennung).</summary>
+        static Spec[] OwnVehicles(string use) =>
+            OwnDescribed(OwnModelDescriptions.WithRole(described, OwnModelRoles.Vehicle).Where(d => d.Use == use));
 
         /// <summary>Gültiger Zonenname (= Feld im <see cref="AssetCatalog"/>)?</summary>
         public static bool IsZoneName(string zone) =>
@@ -225,13 +228,20 @@ namespace CityBuilder.Editor
                 .OrderBy(p => p.EndsWith(".prefab") ? 0 : 1) // Prefab vor gleichnamigem Modell
                 .ToList();
 
+            // Eigene Blender-Modelle nach Beschreibungsdatei (Name.json: role building/tree/streetlamp/vehicle) oder Ordnerregel
+            // (Buildings/<Zone>, Nature/Tree_*, Props/StreetLamp*, Vehicles/*) – s. OwnModelDescriptions
+            described = OwnModelDescriptions.Scan();
             catalog.Cars = BakeAll(catalog, allPrefabs, Cars);
             catalog.Trucks = BakeAll(catalog, allPrefabs, Trucks);
-            catalog.Buses = BakeAll(catalog, allPrefabs, Buses);
+            // --- Eigene Assets 2: Linienbusse – das eigene Modell (Models/Vehicles/Bus) ersetzt die Store-Busse, solange es da ist.
+            // Entscheidung: ein Verkehrsbetrieb fährt eine einheitliche Flotte (Linienfarbe auf dem Dach bleibt), der Paletten-Stil
+            // passt zu den eigenen Gebäuden, und die Store-Busse sind uneinheitlich groß (9–12 m); Store-Busse nur als Rückfall.
+            var ownBuses = OwnVehicles("bus");
+            catalog.Buses = BakeAll(catalog, allPrefabs, ownBuses.Length > 0 ? ownBuses : Buses);
+            catalog.Vans = BakeAll(catalog, allPrefabs, OwnVehicles("delivery_van"));
+            catalog.ServiceVehicles = BakeAll(catalog, allPrefabs, OwnModelDescriptions.ServiceVehicleUses.SelectMany(OwnVehicles).ToArray());
+            // --- Ende Eigene Assets 2
             catalog.Trams = BakeAll(catalog, allPrefabs, Trams);
-            // Eigene Blender-Modelle nach Beschreibungsdatei (Name.json: role building/tree/streetlamp) oder Ordnerregel
-            // (Buildings/<Zone>, Nature/Tree_*, Props/StreetLamp*) – s. OwnModelDescriptions
-            described = OwnModelDescriptions.Scan();
             catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps.Concat(OwnRole(OwnModelRoles.StreetLamp)).ToArray());
             catalog.TrafficLights = BakeAll(catalog, allPrefabs, Lights).Take(1).ToArray();
             catalog.Trees = BakeAll(catalog, allPrefabs, Trees.Concat(OwnRole(OwnModelRoles.Tree)).ToArray());

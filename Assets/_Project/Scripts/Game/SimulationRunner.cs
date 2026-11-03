@@ -7,7 +7,7 @@ namespace CityBuilder.Game
     /// <summary>
     /// Brücke zwischen Unity und Simulation: erzeugt die Welt und führt pro Frame so viele <b>Verkehrsschritte</b>
     /// (<see cref="SimulationWorld.Substep"/>) aus, wie es die Spielgeschwindigkeit verlangt – je 120 Schritte folgt ein
-    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1/2/3 = 1 Spieltag in 36 / 12 / 6 Minuten.
+    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1–4 = 1 Spieltag in Echtzeit (3 h) / 36 / 6 / 2 Minuten.
     /// Überlast: höchstens <see cref="maxSimMillisecondsPerFrame"/> Rechenzeit je Frame; was nicht passt, entfällt
     /// (die Simulation läuft dann langsamer, der Frame friert nicht ein).
     /// </summary>
@@ -38,6 +38,9 @@ namespace CityBuilder.Game
         // --- Spielstart & Startregion
         [Tooltip("Erster Start ohne Spielstand: Neues-Spiel-Fenster (Welt, Vorlieben, Startregion, Stadtname) statt Standardwelt.")]
         [SerializeField] bool newGameDialogOnFirstStart = true;
+        // --- Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung) im Verkehr – im Spiel an, in Tests aus
+        [Tooltip("Dienste schicken echte Fahrzeuge über das Straßennetz (Müllabfuhr hängt teilweise an deren Ankunft).")]
+        [SerializeField] bool serviceVehicles = true;
         /// <summary>Erster Start ohne Spielstand: läuft eine Platzhalterwelt, bis der Spieler im Neues-Spiel-Fenster startet.</summary>
         public bool AwaitingNewGame { get; private set; }
         // --- Ende Spielstart
@@ -101,6 +104,7 @@ namespace CityBuilder.Game
             }
             // --- Ende Spielstart
             World = SimulationWorld.CreateDefault(CreateSettings());
+            World.ServiceVehicles.Enabled = serviceVehicles; // Eigene Assets 2
             if (World.Planet != null)
                 Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
                           $"{World.Planet.GenerationMilliseconds:0} ms. Start: {World.StartRegion.Name} ({World.Planet.PlayerCountry.Name})");
@@ -163,6 +167,7 @@ namespace CityBuilder.Game
         public void ReplaceWorld(SimulationWorld world)
         {
             World = world ?? throw new System.ArgumentNullException(nameof(world));
+            if (serviceVehicles && world.ServiceVehicles != null) world.ServiceVehicles.Enabled = true; // Eigene Assets 2: auch alte Stände/neues Spiel
             accumulator = 0.0;
             WorldGeneration++;
             WorldReplaced?.Invoke();
@@ -205,7 +210,8 @@ namespace CityBuilder.Game
             if (kb.spaceKey.wasPressedThisFrame) TogglePause();
             if (kb.digit1Key.wasPressedThisFrame) SetSpeed(1);
             if (kb.digit2Key.wasPressedThisFrame) SetSpeed(2);
-            if (kb.digit3Key.wasPressedThisFrame) SetSpeed(3);
+            // 4 Tempostufen, aber 4 ist Dienste: 3 schaltet zwischen 6 min und 2 min je Spieltag um
+            if (kb.digit3Key.wasPressedThisFrame) SetSpeed(SpeedIndex == 3 ? 4 : 3);
         }
     }
 }

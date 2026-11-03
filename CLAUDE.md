@@ -77,6 +77,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Freie Straßen bleiben** (kein Anno-Raster).
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
+- **Nachtrag (2026-11-03, Spieler): Setzen statt Zonen.** Alle Gebäude (Wohnen, Laden, Büro, Industriehalle) werden gesetzt,
+  per gehaltener linker Maustaste als **Reihe entlang der Straße** (wie Anno). Welcher Betrieb in Laden/Büro/Halle einzieht,
+  entscheidet die Simulation (Vorkommen, Nachfrage, Schwerpunkt). Zonen verschwinden aus der Bauleiste (Code bleibt für alte
+  Stände), Zonenraster/Grundstücksplatten entfallen; Nachfrage als eigene Anzeige; Straßen-Abstandshilfe nach Haustiefen.
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
@@ -108,9 +112,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Ziel-Halt (`CitizenSystem.EgressTicks`), Parkwege (`TimeModel.WalkTicks`, gleiche Formel in `PedestrianPlanner.ParkWalkTicks`),
   statistische Busfahrten, Lkw-Platzhalter (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s). ÖPNV-Fahrgast geht erst zur
   Haltestelle (`Passenger.ReadyTime` = Start + Zugangsweg) und kann erst dann einsteigen.
-- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,111) × `SpeedMultipliers` 1/3/6 →
-  1 Spieltag = 36 / 12 / 6 Minuten, Verkehr sichtbar 5× / 15× / 30× Echtzeit (20 / 60 / 120 Verkehrsschritte je Sekunde;
-  Entscheidung des Spielers 2026-11-03 „viel langsamer“, vorher 6 / 3 / 1,5 min). `ticksPerSecond` ist **nicht** mehr
+- **Echtzeit** (nur Unity, `SimulationRunner`): 4 Tempostufen = `TicksPerRealSecond` (0,022) × `SpeedMultipliers` 1/5/30/90 →
+  1 Spieltag = **Echtzeit 3 h** / 36 / 6 / 2 Minuten, Verkehr sichtbar 1× / 5× / 30× / 90× (4 / 20 / 120 / 360 Verkehrsschritte je
+  Sekunde; Entscheidung des Spielers 2026-11-03). Tasten 1/2/3, erneut 3 = Stufe 4 (Taste 4 ist Dienste); HUD hat 4 Knöpfe. `ticksPerSecond` ist **nicht** mehr
   serialisiert (die Szene hatte einen alten Wert 10 gespeichert, der das Zeitmodell überschrieb). Der Runner verteilt die Verkehrsschritte über
   die Frames (`Substep`), Budget `maxSimMillisecondsPerFrame` 8 ms: Rückstand wird verworfen (Simulation langsamer, Frame
   friert nicht ein; `DroppedStepsLastFrame`, `LastFrameSimMilliseconds` in Debug-HUD/Hilfe). `TickAlpha` = Bruchteil zum nächsten
@@ -502,7 +506,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Noch offen: Zustand von Bauwerken (Versorger/Dienste).
 
 ## Strom & Wasser (G3)
-- `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
+- `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm; Biogas, Wasserkraft, Offshore, Batteriespeicher s. „Energie erweitert & Dienstfahrzeuge“;
   Leistung Strom kW / Wasser m³/h, Baukosten/Unterhalt bucht die Stadtkasse ab, s. u.), `UtilitySystem` (alle 30 min).
 - Bauwerke frei platziert und gedreht (`PlanFacility` → `BuildFacility`): nicht auf Straßen/Wasser/anderen Bauwerken,
   Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen.
@@ -696,7 +700,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
   Freizeit/Wahrzeichen aus `Models/Leisure/` bzw. `Models/Landmarks/` (s. „Freizeit, Wahrzeichen & Lärmschutzwand“); Zuordnung
   zentral in `Editor/OwnModelDescriptions.cs`, `Name.json` geht vor (s. „Eigene Assets“).
-- Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
+- Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (✅ Grundstufe: Müllwagen/Streife/Feuerwehr/Rettung, s. „Energie erweitert & Dienstfahrzeuge“; Reichweite weiter per Dijkstra-Schätzung), Sperrungen/
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
 
@@ -731,6 +735,89 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Später: Freizeitanlagen als echte Freizeitziele im Tagesablauf (wie Parks), Stadion-Veranstaltungen mit Verkehr, Tourismus aus
   der Attraktivität, Wand-Lärmschutz auch für Dienst-/Industrielärm, Wände an Kurven entlang (heute gerade Stücke), Dienste dürfen
   noch auf Wänden platziert werden (Sperre fehlt dort).
+
+## Energie erweitert & Dienstfahrzeuge (Eigene Assets 2, 2026-11-03, agent/models2)
+- **Neue Versorger** im `UtilityCatalog` (hinten in `All`, Kacheln/Inspektor/Kasse/Verschieben automatisch; Modelle `Models/Energy`):
+  **Biogasanlage** `power_biogas` (2 MW, 40×32 m, 16 000 € / 180 €/Tag, `RequiresRoadAccess` = Zufahrt Pflicht auch Überland,
+  klein → Ortsnetz oder Hochspannung), **Laufwasserkraftwerk** `power_hydro` (66×56 m, 90 000 € / 450 €/Tag, `FacilitySite.River`,
+  nur Hochspannung), **Offshore-Windpark** `power_offshore_wind` (4 × 5 MW, 180×180 m, 150 000 € / 1 100 €/Tag, `FacilitySite.Sea`,
+  `Units` 4, nur Hochspannung), **Batteriespeicher** `power_battery` (`FacilityRole.Storage`, 10 MW / 20 MWh, 32×24 m, 30 000 € /
+  120 €/Tag, Zufahrt, Ortsnetz oder Hochspannung). Neue Leitungsart **Hochspannungs-Seekabel/Erdkabel** `power_hv_cable` (90 €/m,
+  Ebene Hochspannung, unterirdisch ohne Masten → kreuzt Meer/Straßen; Werkzeug `UtilityAction.SubseaCable`, Kachel „Seekabel“).
+  Neue Fehler `NeedsRiver`, `NeedsSea`, `NoHydroSite` (hinten angefügt). Dateien: `UtilityCatalog` (Enums `FacilitySite`,
+  `OutputModel`), `UtilitySystem.Energy.cs` (alles Neue), kleine markierte Stellen in `UtilitySystem.cs`/`.Save.cs`.
+- **Nennleistung je Bauwerk** `UtilityFacility.Rated` (Katalogwert, Wasserkraft je Standort) × `Availability` (0..1) × Störfall →
+  `Output`. `IsRequired` zählt nur Erzeuger (`IsGenerator`, nicht Umspannwerk/Speicher). Onshore-Windrad/Solar bleiben bewusst
+  **konstant** (bestehende Balance/Tests) – „schwankende Erzeugung“ gilt nur für die neuen Typen.
+- **Wasserkraft – Entscheidung Laufwasserkraftwerk mit Wehr statt Talsperre:** Der erzeugte Fluss hat kein Gefälle; eine Talsperre
+  müsste ein Tal fluten und den Fluss unterbrechen. Das Wehr staut nur bis unter das niedrigere Ufer: **Fallhöhe** H = niedrigere
+  Uferhöhe (höchster Punkt bis 60 m hinter der Uferlinie) − Wasserspiegel − 1 m Freibord, 2…15 m; **Abfluss** Q = Wasserbreite quer
+  zum Wehr × mittlere Tiefe × 0,9 m/s × √(Jahresniederschlag/750) (0,5…1,5); P = 9,81 × min(Q, 150 m³/s Ausbau) × H × 0,88 kW
+  (Testfluss 46 m, Q 152, H 5 m → 6,5 MW). Abfluss schwankt mit der Niederschlagslage (`RiverFlowIndex` = gleitendes Mittel des
+  Klima-Niederschlags, Faktor 0,45…1,5; große Flüsse liegen meist über dem Ausbaudurchfluss). **Der Fluss bleibt durchgängig:**
+  Gelände wird nicht eingeebnet, Wasser bleibt Wasser, Verschmutzung wandert weiter, Wasser-Gateways bleiben schiffbar (Schleuse/
+  Fischtreppe gehören zum Bauwerk). Werkzeug richtet das Wehr aus (`TryAlignHydro`: schmalster Querschnitt in 15°-Schritten,
+  Mitte des Flusses, Vorderseite flussabwärts; `,`/`.` drehen zusätzlich), Hinweis zeigt Breite/Abfluss/Fallhöhe/MW.
+- **Meer vs. Fluss** (`IsSea`): Wasser + natürlicher Grund ≤ −5 m (Flussbett −4, Meer −7) + ≥ 75 % Wasser im Umkreis 150 m.
+  Offshore: Mitte offenes Meer, jede Ecke ≥ 3 m tief. Wind `WindFactor(tick)` = zwei Lagen geglättetes Hash-Rauschen (6 h/1,5 h),
+  0,05…1, Ø ≈ 0,46 über 30 Tage (alle Parks ein Wetter, deterministisch).
+- **Biogas – Rohstoff als Bedarfs-Anbindung** (Hook `UtilitySystem.FarmSources` ← `Goods/FarmFeedstock.Sources`: Bauernhöfe =
+  Firmen mit Rezept „farm“ + Beschäftigte): Anlagen nach Id teilen sich die Höfe im Umkreis 3 km (nächste zuerst, kein Hof doppelt),
+  Volllast ab 40 Beschäftigten, sonst Grundlast 25 % (Bioabfall) + Rest anteilig. **Offen:** echtes Gut „Biomasse/Silage“ mit
+  Lieferungen per Traktor/Lkw und Erlös für die Höfe (Mais/Gülle sind noch keine Güter).
+- **Batteriespeicher im Netzmodell** (`OfferStorage`/`SettleStorage`, je Durchlauf `StepHours` 0,5 h, Wirkungsgrad 90 % je Richtung):
+  Hochspannungs-Speicher bieten vor der Umspannung an (zählen für die Lieferquote), Ortsnetz-Speicher nach dem Bezug aus der
+  Hochspannung → **Speicher liefern erst, wenn die Kraftwerke nicht reichen**, nur so viel wie fehlt. Laden aus dem Überschuss:
+  zuerst im eigenen Netz, Ortsnetz-Speicher zusätzlich über freie Umspannkapazität aus dem Überschuss der Hochspannung (Last des
+  Umspannwerks steigt). Speicher, die entladen, laden nicht. Netz: `StorageDischarge`/`StorageCharge`/`Storages`, Bauwerk
+  `StoredKwh`, `Charging`, `StateOfCharge`. Keine Rückspeisung Ortsnetz → Hochspannung (wie bisher).
+- **Dienstfahrzeuge (Grundstufe)** `Simulation/Services/ServiceVehicleSystem` (+ `.Save.cs`, Typen/Regeln `ServiceVehicles.cs`,
+  `world.ServiceVehicles`, `ISubstepSystem` + Kalender-Tick, `IUpkeepSource` „Dienstfahrzeuge“ 150 €/Woche je Fahrzeug):
+  **Standard aus** (`Enabled`; Tests/alte Welten bitgleich), `SimulationRunner` schaltet ein (`serviceVehicles`, auch nach dem Laden).
+  Flotte je Dienstgebäude mit Zufahrt: Polizei 3 Streifenwagen, Feuerwache 2 Löschfahrzeuge, Krankenhaus 3/Klinik 1 Rettungswagen,
+  Deponie 6/Verbrennung 5 Müllwagen. Echte Fahrten über `TrafficSystem.RequestTrip` mit **eigener Fahrt-Id-Spanne**
+  `Traffic/TripIdRanges` (−1,5 … −1,9 Mrd., Lkw des Warensystems zählen ab −1 abwärts), Anteil ≤ 5 % von `MaxVehicles`,
+  Statistik `TrafficStats.ServiceVehicles`. Ablauf: Depot → Halt (Zufahrt des Gebäudes) → steht dort (`Working`, die Darstellung
+  zeichnet es geparkt: `ParkedUnits`) → nächster Halt bzw. zurück; Startversuch je Tick, nach 20 Fehlversuchen bzw. 1 Tag oder bei
+  abgebrochener Fahrt Abbruch (gilt als zurück, Ladung entladen). Alles nach Id, Zufall `SimRandom`, Hash für Einsätze.
+  - **Müllwagen:** stündlich Touren (bis 6 Halte, 10 t) zu den Gebäuden mit dem meisten Müll ≥ 50 kg im Einzugsgebiet der Deponie
+    (`ServiceSystem.AssignedFacility`), laden bei Ankunft (`CollectGarbage`), entladen an der Deponie (`UnloadGarbage`). **Entscheidung
+    „teilweise“:** solange Müllwagen fahren, holt die Pauschale nur noch 50 % der laufenden Menge **ohne Nachholen**
+    (`ServiceSystem.GarbageBaseShare`, Standard 1 = bitgleich wie vorher), Rückstau wartet auf den Wagen (Test: Stichstraße für Lkw
+    gesperrt → 4,7× so viel Müll). Nicht jede Tonne als Fahrt (große Städte bräuchten Tausende Halte am Tag).
+  - **Streife:** Runden über 3 zufällige Gebäude im Einzugsgebiet der Wache, 20 s Halt, 1 h Pause. Ohne Kriminalitätsmodell nur
+    sichtbare Präsenz (ändert keine Abdeckung).
+  - **Feuerwehr: Platzhalter-Einsätze** (es gibt noch keine Brände): je Stunde und Gebäude Chance Brandrisiko × 1 %/24 (stabiler
+    Hash), 5 min vor Ort, kein Schaden; ohne freies Fahrzeug „verpasst“.
+  - **Rettungswagen: echtes Ereignis** – neues Event `CitizenSystem.BecameIll` (eine Zeile in `.Life.cs`): ab 65 immer, sonst 30 %
+    schwer → Wagen der zuständigen Klinik/des Krankenhauses fährt zur Wohnung (3 min) und zurück; noch ohne Wirkung auf die Genesung.
+  - **Taxi:** wartet auf Funktion (bräuchte Taxi-Depot + Verkehrsmittel „Taxi“ in der Wahl der Bürger – zu großer Umbau für diese Runde).
+- **Fahrzeug-Modelle** (`Models/Vehicles`, Rolle `vehicle`, `AssetCatalog.Buses/Vans/ServiceVehicles`): **Linienbus** = eigenes
+  Bus-Modell **statt** der Store-Busse, solange es da ist (Entscheidung: einheitliche Flotte eines Verkehrsbetriebs, Paletten-Stil wie
+  die eigenen Gebäude, Store-Busse 9–12 m uneinheitlich; Store-Busse bleiben Rückfall). **Lieferwagen** (DeliveryVan): Lkw-Fahrten des
+  Warensystems zu Einzelhandel mit ≤ 35 % einer Lkw-Ladung zeigt die `VehicleView` als Transporter (nur Darstellung – in der
+  Simulation bleibt es ein 12-m-Lkw; offen: eigene Fahrzeugklasse/-länge und billigere Fracht). Dienstfahrzeuge nach Art
+  (`ServiceVehicleRules.ModelName`), ohne Modell farbige Quader. Inspektor: Fahrzeug zeigt Art/Auftrag/Dienst/Ziel/Tour/Ladung.
+- **Gelände-Modelle** (`Models/Terrain`): `Cliff_Straight` = Felsklippe (`rock`, `use: cliff`) in `NatureDetailView` auf einem
+  16-m-Raster, wo der Hang ≥ 0,8 (≈ 40°) fällt (55 % der Zellen), Wand talwärts, Unterkante am Hangfuß, Höhe auf den Hang gestaucht
+  (0,3…1,4), nicht auf Gebäuden/Bauwerken/am Wasser; `Rocks` = weiterer Felsen. **In `_Unused.txt` mit Begründung:** `Cliff_Corner`
+  (Kachelraster-Ecke), `Cliff_Waterfall` (Fluss ohne Gefälle/Stufen), `Hill`, `Pond`, `River_*` (passt nicht zum prozeduralen
+  Gelände: Hügel/Teiche/Flüsse kommen aus Höhenkarte bzw. Terraforming).
+- **Darstellung:** `UtilityView` setzt beim Offshore-Park 4 Anlagen im Raster (`Units`, je Rotor dreht), Platzhalter für alle neuen
+  Typen, Seekabel dunkelrot (unterirdisch-Ansicht), keine Betonplatte im Meer. Bauleiste/Tooltips/Werkzeug-Hinweise, Inspektor
+  (Ladestand/Betrieb, Standort Abfluss/Fallhöhe, Wind, Rohstoff).
+- **Spielstand:** `utilities` **v3** (Nennleistung, Ladestand, Laden, Standort, Verfügbarkeit, Biogas-Rohstoff je Bauwerk; Speicher je
+  Netz; Abflusslage) – v2 → Katalogleistung, leere Speicher, Abfluss normal. Neuer Abschnitt `servicevehicles` v1 (Schalter, Fahrzeuge
+  mit Auftrag/Halten/Fahrt-Id, Zufall, Zähler, `GarbageBaseShare`) – fehlt er, keine Fahrzeuge. `SaveLoadTests.BuildCity` hat Speicher +
+  Dienstfahrzeuge.
+- **Tests** `EnergyTests` (8: Wasserkraft nur im Fluss/Leistung aus Q und H/Fluss bleibt Wasser/Trockenzeit, niedrige Ufer, Offshore
+  nur im Meer + Seekabel + Wind-Statistik, Biogas Zufahrt + Höfe teilen, Speicher Hochspannung laden/überbrücken/leer, Speicher
+  Ortsnetz lädt übers Umspannwerk, Kasse, Spielstand bitgleich) und `ServiceVehicleTests` (5: aus = wie bisher, Müllwagen im Verkehr
+  mit eigener Id-Spanne/Halde füllt sich, Rückstau hängt an der Ankunft, Streife/Brand/Rettung, Speichern mitten in der Tour bitgleich).
+- **Optisch ungeprüft** (Unity nicht gestartet): Lage/Größe der Modelle (Wehr 66 m auf breiteren Flüssen, Höhe 0,4 m über dem Wasser),
+  Offshore-Raster, Klippen an Hängen, geparkte Dienstfahrzeuge am Gehwegrand, Transporter statt Lkw, Bus-Dachplatte auf dem neuen
+  Bus-Modell. Offen: Wehrbreite an die Flussbreite anpassen, Talsperre mit Stausee, Seekabel-Darstellung über dem Meeresgrund,
+  Brände/Kriminalität als echte Ereignisse (dann Feuerwehr/Streife mit Wirkung), Müllwagen-Halte entlang der Route bündeln, Taxi.
 
 ## Bodenwert & Ausbaustufen (G6)
 - `Simulation/LandValue`: `LandValueRules` (alle Formeln/Zahlen, Platzhalter fürs Balancing), `LandValueSystem`
@@ -1268,7 +1355,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   an Kreuzungen, ≤ 5 m vor Zufahrten, ≤ 12 m an Haltestellen, ≤ 2,5 m an Laternen, nicht auf Brücken/in Tunneln, nur wenn der
   Gehweg breit genug ist) und in Parks (innerer Ring, Kiosk nur im großen Park), LOD 450 m. `Environment/NoiseBarrierView`:
   Lärmschutzwände als 16-m-Kacheln. BusStop: wie bisher über `OwnModelCatalog.Transport` („bus_stop“).
-  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance/TrainStation, Infrastructure/Drawbridge.
+  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance/TrainStation, Infrastructure/Drawbridge, Vehicles/Taxi,
+  Terrain/Cliff_Corner/Cliff_Waterfall/Hill/Pond/River_* (Begründung im Bericht). Energy/*, Vehicles/*, Terrain/Cliff_Straight+Rocks:
+  s. „Energie erweitert & Dienstfahrzeuge“.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -1295,8 +1384,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Fahrten: Bürgerfahrten aus Gebäuden (s. Bürger G2) und Durchgangsverkehr zwischen **Außenanschlüssen**
   (Straßenenden am Kartenrand, `ExternalConnections`). Sackgassen in der Stadt erzeugen keinen Verkehr mehr – außer mit
   `DeadEndsAreExternal` (Testszenarien). Ziele mitten auf Segmenten (`FindPathToSegment`) wandern beim Zerteilen mit.
-  Hängende Fahrzeuge verschwinden nach 90 s. Hook `ThroughTrafficWeight` (Gateways): Gewicht je Start/Ziel statt Gleichverteilung
-  (null = wie bisher).
+  Hängende Fahrzeuge verschwinden nach 90 s. Hook `ThroughTrafficWeight` (Gateways): Gewicht je Start/Ziel statt Gleichverteilung (null = wie bisher).
+  **Fahrt-Id-Spannen** (`Traffic/TripIdRanges`): Bürger > 0, Lkw des Warensystems ab −1 abwärts, Dienstfahrzeuge −1,5 … −1,9 Mrd.
+  (`IsService`, Statistik `ServiceVehicles`); neue Fahrzeugarten bekommen dort eine eigene Spanne.
 
 ## Außenanbindungen (Gateways)
 Wunsch des Spielers: Fernstraße, Bahn, Wasserstraße sind wie in Cities: Skylines **schon da**; man muss die Stadt an die Autobahn
@@ -1438,7 +1528,8 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   die **durchlaufen** werden, sind `Core.StableMap` (gleiche Reihenfolge wie `Dictionary`, Platzbelegung speicherbar).
   `System.Random` gibt es in der Simulation nicht mehr → `Core.CompatRandom` (gleiche Zahlenfolge, speicherbar) bzw. `SimRandom`.
 - **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s;
-  `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände).
+  `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände;
+  `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -1501,8 +1592,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
      abgenommen). Später: schwankende Erzeugung, Rohrdurchmesser/Leitungskapazität, Rückspeisung, Umspannwerk-Modell
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
-     (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. Später: Brände/Kriminalität
-     als Ereignisse, Dienstfahrzeuge
+     (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. ✅ Dienstfahrzeuge
+     (Grundstufe: Müllwagen-Touren mit Abholung bei Ankunft, Streife, Platzhalter-Brandeinsätze, Rettung bei Krankheit). Später: Brände/Kriminalität
+     als Ereignisse, Dienstfahrzeuge mit Wirkung (Brände löschen, Kriminalität), Taxi
    - ✅ G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
      - ✅ Güterkatalog + Rezepte, Firmen mit Lager/Kasse/Gewinn, Industrie-Unterarten nach Vorkommen/Nachfrage, Märkte mit
@@ -1528,7 +1620,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
        Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
-   - Energie erweitern: ✅ Atomkraftwerk; weitere reale Kraftwerkstypen
+   - Energie erweitern: ✅ Atomkraftwerk; ✅ Biogas (Rohstoff aus Bauernhöfen), Laufwasserkraftwerk (Abfluss/Fallhöhe), Offshore-Windpark
+     (Seekabel), Batteriespeicher (puffert im Netz), Spielstand utilities v3 (im Editor noch nicht visuell abgenommen). Offen: Biomasse als Gut,
+     Talsperre, schwankende Onshore-Wind/Solar
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,

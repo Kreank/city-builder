@@ -396,11 +396,15 @@ namespace CityBuilder.Game.UI.Hud
 
             // Spieltempo (Leertaste/1/2/3 bleiben im SimulationRunner)
             var speed = Container("cb-segment");
-            var icons = new[] { HudIconKind.Pause, HudIconKind.Play, HudIconKind.Fast, HudIconKind.Faster };
+            var icons = new[] { HudIconKind.Pause, HudIconKind.Play, HudIconKind.Fast, HudIconKind.Faster, HudIconKind.Faster };
             for (int i = 0; i < SimulationRunner.SpeedCount && i < icons.Length; i++)
             {
                 int index = i;
-                string tip = i == 0 ? "Pause (Leertaste)" : $"Tempo {i}: 1 Spieltag ≈ {Simulation.Core.TimeModel.RealSecondsPerDay(i) / 60f:0.#} min (Taste {i})"; // Zeitmodell
+                float dayMin = Simulation.Core.TimeModel.RealSecondsPerDay(i) / 60f;
+                string key = i <= 3 ? $"Taste {i}" : "Taste 3 nochmal";
+                string tip = i == 0 ? "Pause (Leertaste)"
+                    : i == 1 ? $"Echtzeit: Fahrzeuge in echter Geschwindigkeit, 1 Spieltag ≈ {dayMin / 60f:0.#} h ({key})"
+                    : $"Tempo {i}: 1 Spieltag ≈ {dayMin:0.#} min ({key})"; // Zeitmodell
                 var b = Btn(null, () => { if (index == 0) runner.TogglePause(); else runner.SetSpeed(index); },
                     () => runner.SpeedIndex == index, tip, null, "cb-seg-btn");
                 b.AddToClassList("cb-seg-btn--icon");
