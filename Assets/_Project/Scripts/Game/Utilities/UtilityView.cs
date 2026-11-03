@@ -134,6 +134,9 @@ namespace CityBuilder.Game.Utilities
             root.SetParent(facilityRoot, false);
             root.SetPositionAndRotation(SimConvert.ToWorld(f.Position, f.Height), Quaternion.LookRotation(new Vector3(f.Front.X, 0f, f.Front.Y)));
 
+            // Eigenes Blender-Modell, falls vorhanden (OwnModelCatalog), sonst Platzhalter aus Grundkörpern
+            if (TryBuildModel(f, root)) return root.gameObject;
+
             var concrete = new Color(0.62f, 0.61f, 0.58f);
             float w = f.Type.Width, d = f.Type.Depth;
             Box(root, new Vector3(0f, 0.15f, 0f), new Vector3(w, 0.3f, d), concrete * 0.9f);
@@ -207,6 +210,66 @@ namespace CityBuilder.Game.Utilities
                     break;
             }
             return root.gameObject;
+        }
+
+        /// <summary>
+        /// Setzt das Blender-Modell des Bauwerks ein: gemeinsames Paletten-Material, Kindobjekt „Rotor“ dreht sich.
+        /// Weicht die Grundfläche des Modells deutlich vom Katalog ab (z. B. falsche Import-Einheit), wird es
+        /// gleichmäßig auf die Grundfläche skaliert.
+        /// </summary>
+        bool TryBuildModel(UtilityFacility f, Transform root)
+        {
+            var catalog = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+            var prefab = catalog != null ? catalog.Facility(f.Type.Id) : null;
+            if (prefab == null) return false;
+
+            var go = Instantiate(prefab, root, false);
+            go.name = prefab.name;
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.identity;
+
+            var renderers = go.GetComponentsInChildren<Renderer>(true);
+            if (catalog.Palette != null)
+                foreach (var r in renderers)
+                {
+                    var mats = new Material[r.sharedMaterials.Length];
+                    for (int i = 0; i < mats.Length; i++) mats[i] = catalog.Palette;
+                    r.sharedMaterials = mats;
+                }
+
+            // Grundfläche prüfen (lokal zum Bauwerk)
+            bool any = false;
+            var b = new Bounds();
+            foreach (var r in renderers)
+            {
+                var rb = r.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var c = rb.center + Vector3.Scale(rb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    var p = root.InverseTransformPoint(c);
+                    if (!any) { b = new Bounds(p, Vector3.zero); any = true; } else b.Encapsulate(p);
+                }
+            }
+            if (any)
+            {
+                float fit = Mathf.Min(f.Type.Width / Mathf.Max(0.01f, b.size.x), f.Type.Depth / Mathf.Max(0.01f, b.size.z));
+                if (fit < 0.8f || fit > 1.25f) go.transform.localScale = Vector3.one * fit;
+            }
+
+            var rotor = FindChild(go.transform, "Rotor");
+            if (rotor != null) rotors.Add(rotor);
+            return true;
+        }
+
+        static Transform FindChild(Transform t, string name)
+        {
+            if (t.name == name) return t;
+            foreach (Transform c in t)
+            {
+                var r = FindChild(c, name);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         // ------------------------------------------------------------ Stromleitungen: Masten + Seile
