@@ -353,8 +353,8 @@ namespace CityBuilder.Game.Roads
             }
             if (kb.tabKey.wasPressedThisFrame) CycleType(kb.shiftKey.isPressed ? -1 : 1);
             if (kb.gKey.wasPressedThisFrame) ToggleSnap();
-            if (kb.f3Key.wasPressedThisFrame) CycleParallelRows();   // Bauhilfe Parallelabstand: Reihen 4 → 3 → 2 → 1 → aus
-            if (kb.f4Key.wasPressedThisFrame) ToggleBlockGrid();     // Bauhilfe: Blockraster (Querstraßen-Abstände)
+            if (kb.f9Key.wasPressedThisFrame) CycleParallelRows();    // Bauhilfe Parallelabstand: Reihen 4 → 3 → 2 → 1 → aus
+            if (kb.f10Key.wasPressedThisFrame) ToggleBlockGrid();      // Bauhilfe: Blockraster (Querstraßen-Abstände)
             if (kb.pageUpKey.wasPressedThisFrame) ChangeHeight(HeightStep);
             if (kb.pageDownKey.wasPressedThisFrame) ChangeHeight(-HeightStep);
             if (kb.commaKey.wasPressedThisFrame) RotateTemplate(-15f);
@@ -607,9 +607,9 @@ namespace CityBuilder.Game.Roads
         GuideHit? startGuide;
         GuideHit? lastGuideHit;
 
-        /// <summary>Reihen, die die neue Straße neben einer bestehenden bekommen soll (1–4); 0 = Hilfslinien aus (F3).</summary>
+        /// <summary>Reihen, die die neue Straße neben einer bestehenden bekommen soll (1–4); 0 = Hilfslinien aus (F9).</summary>
         public int ParallelRows { get; private set; } = ZoneGrid.Depth;
-        /// <summary>Blockraster (F4): Länge gerader Straßen rastet auf Querstraßen-Abstände ohne Rest ein.</summary>
+        /// <summary>Blockraster (F10): Länge gerader Straßen rastet auf Querstraßen-Abstände ohne Rest ein.</summary>
         public bool BlockGrid { get; private set; }
         public bool ShowParallelGuides => ParallelRows > 0 && (CurrentMode == Mode.Straight || CurrentMode == Mode.Curve)
             && SelectedType.Category == RoadCategory.City && !UsesDualCarriageway;
@@ -673,7 +673,7 @@ namespace CityBuilder.Game.Roads
             var h = hits[0];
             var info = ParallelGuides.Evaluate(h.Segment.Type, SelectedType, h.Distance, ParallelRows);
             float height = AbsHeight(p);
-            string block = BlockGrid ? " · F4 Blöcke an" : "";
+            string block = BlockGrid ? " · F10 Blöcke an" : "";
             Guide = new GuideState
             {
                 Active = true,
@@ -685,14 +685,14 @@ namespace CityBuilder.Game.Roads
                 Type = SelectedType,
                 Valid = true,
                 Info = $"Parallele: {ParallelGuides.Describe(info)} · Ziel {ParallelGuides.FormatMeters(h.Offset)} · " +
-                       $"F3 Reihen ({ParallelRows}) · G Einrasten" + block,
+                       $"F9 Reihen ({ParallelRows}) · G Einrasten" + block,
             };
         }
 
         /// <summary>Ziehen: Abstand des Straßenendes (sonst Starts) zur nächsten parallelen Stadtstraße.</summary>
         string ParallelInfo(RoadNetwork roads, RoadPlan plan)
         {
-            string block = BlockGrid ? "Blöcke (F4)" : null;
+            string block = BlockGrid ? "Blöcke (F10)" : null;
             if (!ShowParallelGuides || plan.Type.Category != RoadCategory.City) return block;
             GuideHit? best = null;
             foreach (var p in new[] { plan.End, plan.Start })

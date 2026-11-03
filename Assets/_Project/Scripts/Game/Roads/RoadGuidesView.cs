@@ -10,7 +10,7 @@ namespace CityBuilder.Game.Roads
     /// Bauhilfen fürs Straßen-Werkzeug: Verlängerungs- und Lotlinien, Winkelbögen, Kurvengriffe,
     /// Fahrtrichtungspfeil, Einrast-Markierung sowie Beschriftungen (Länge, Winkel, Kosten, Fehler).
     /// Bauhilfe Parallelabstand: gestrichelte Parallelen im optimalen Abstand, Zonentiefe bestehender Straßen und der
-    /// Vorschau, Blockraster (F4).
+    /// Vorschau, Blockraster (F10).
     /// Reine Anzeige – liest nur den Zustand des <see cref="RoadTool"/>.
     /// </summary>
     public sealed class RoadGuidesView : MonoBehaviour
@@ -292,7 +292,7 @@ namespace CityBuilder.Game.Roads
             }
         }
 
-        /// <summary>Blockraster (F4): Querlinien dort, wo eine Querstraße gleichen Typs den Block ab dem Start ohne Rest
+        /// <summary>Blockraster (F10): Querlinien dort, wo eine Querstraße gleichen Typs den Block ab dem Start ohne Rest
         /// füllt (8-m-Takt hinter der Kreuzungsfläche).</summary>
         void DrawBlockTicks(RoadTool.GuideState g, float width)
         {
