@@ -194,7 +194,7 @@ namespace CityBuilder.Game.Environment
             // Gelände/Wald höchstens 1× je Sekunde nachziehen (Terraforming-Pinsel, Holzeinschlag)
             if (Time.unscaledTime - lastRebuild > 1f && (w.Terrain.Version != terrainVersion || (wood != null && wood.Version != woodVersion)))
                 changed = true;
-            if (changed && Time.unscaledTime - lastRebuild > 0.25f)
+            if (changed && Time.unscaledTime - lastRebuild > 1f)
             {
                 dirty = false;
                 lastRebuild = Time.unscaledTime;
