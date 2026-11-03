@@ -5,6 +5,8 @@ using CityBuilder.Game.Roads;
 using CityBuilder.Game.Services;
 using CityBuilder.Game.Terrain;
 using CityBuilder.Game.Traffic;
+using CityBuilder.Game.UI.Panels;
+using CityBuilder.Game.UI.Windows;
 using CityBuilder.Game.Utilities;
 using CityBuilder.Simulation.Utilities;
 using UnityEngine;
@@ -69,6 +71,11 @@ namespace CityBuilder.Game.UI.Hud
         }
 
         readonly List<Toast> toasts = new List<Toast>();
+
+        /// <summary>Fensterverwaltung (Phase 2): rechtes Panel + mittiges Fenster. Neue Fenster: <c>Windows.Add(new …Window())</c>.</summary>
+        public WindowHost Windows { get; private set; }
+        WorldLabelLayer worldLabels;
+        HelpWindow help;
 
         /// <summary>Wahr, solange die neue UI läuft (sonst greift das RoadTool auf die alte IMGUI-Leiste zurück).</summary>
         public bool Ready { get; private set; }
@@ -137,6 +144,8 @@ namespace CityBuilder.Game.UI.Hud
 
             UiBlocker.RegisterToolkitRoot(root);
             HudMessages.Posted += OnMessage;
+            Ui.TooltipHook = (e, text) => Tip(e, text);
+            if (!UiPanels.ForceImgui) BuildWindows();
             Ready = true;
             RefreshAll();
             return true;
@@ -145,6 +154,9 @@ namespace CityBuilder.Game.UI.Hud
         void OnDestroy()
         {
             HudMessages.Posted -= OnMessage;
+            if (Windows != null) UiPanels.ToolkitActive = false;
+            worldLabels?.Dispose();
+            Ui.TooltipHook = null;
             if (root != null) UiBlocker.UnregisterToolkitRoot(root);
             if (panelSettings != null) Destroy(panelSettings);
         }
@@ -165,9 +177,31 @@ namespace CityBuilder.Game.UI.Hud
                 foreach (var a in slowRefresh) a();
                 foreach (var a in panelSlowRefresh) a();
             }
+            Windows?.Update();
             UpdateToasts();
             PlaceTooltip();
             UpdateLayoutInsets();
+        }
+
+        void LateUpdate()
+        {
+            if (Ready) worldLabels?.Update();
+        }
+
+        /// <summary>Fenster der Phase 2 anmelden; ab dann zeichnen die alten IMGUI-Fenster nicht mehr (s. <see cref="UiPanels"/>).</summary>
+        void BuildWindows()
+        {
+            Windows = new WindowHost(tool, root);
+            var inspector = tool.GetComponent<CityBuilder.Game.Inspect.InspectorPanel>();
+            if (inspector != null) Windows.Add(new CityBuilder.Game.Inspect.InspectorWindow(inspector));
+            Windows.Add(new TrafficWindow());
+            Windows.Add(new UtilityWindow());
+            Windows.Add(new ServiceWindow());
+            var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
+            if (budget != null) Windows.Add(new BudgetWindow(budget));
+            help = Windows.Add(new HelpWindow());
+            worldLabels = new WorldLabelLayer(root, tool.Camera);
+            UiPanels.ToolkitActive = true;
         }
 
         void RefreshAll()
@@ -189,9 +223,24 @@ namespace CityBuilder.Game.UI.Hud
             float top = buildBar.worldBound.yMin;
             if (!float.IsNaN(top)) HudLayout.BottomInset = Mathf.Max(0f, root.layout.height - top) * scale + 8f;
 
-            // Toasts weichen IMGUI-Fenstern am rechten Rand aus (Verkehrs-/Versorgungsfenster, Inspektor)
-            float right = UiBlocker.RightEdgeImguiWidth();
-            toastStack.style.right = 16f + (right > 0f ? right / scale + 8f : 0f);
+            // Toasts weichen dem rechten Panel bzw. IMGUI-Fenstern am rechten Rand aus
+            float right = UiBlocker.RightEdgeImguiWidth() / scale;
+            float panelLeft = Windows != null ? Windows.RightPanelLeft : float.NaN;
+            if (!float.IsNaN(panelLeft)) right = Mathf.Max(right, w - panelLeft);
+            toastStack.style.right = 16f + (right > 0f ? right + 8f : 0f);
+            HudLayout.RightInset = right > 0f ? right * scale + 8f : 0f;
+
+            // Rechtes Panel: über die Bauleiste rücken, wenn sie bei schmalen Bildschirmen darunter reicht
+            if (Windows != null && !float.IsNaN(top))
+            {
+                // buildBar selbst ist volle Breite – maßgeblich sind die sichtbaren Leisten darin
+                float barRight = 0f;
+                foreach (var child in buildBar.Children())
+                    if (child.resolvedStyle.display != DisplayStyle.None && !float.IsNaN(child.worldBound.xMax))
+                        barRight = Mathf.Max(barRight, child.worldBound.xMax);
+                bool overlaps = barRight > w - 16f - 392f;
+                Windows.SetRightBottom(overlaps ? Mathf.Max(16f, root.layout.height - top + 8f) : 16f);
+            }
         }
 
         // ------------------------------------------------------------ Bausteine
@@ -395,6 +444,11 @@ namespace CityBuilder.Game.UI.Hud
                 "Info-Modus (C): Gebäude, Bürger, Fahrzeuge und Versorger anklicken · Rechtsklick hebt auf", null, "cb-icon-btn");
             info.Add(Icon(HudIconKind.Info));
             topBar.Add(info);
+
+            // Hilfe & Tasten (F1) – nur mit den neuen Fenstern
+            var helpBtn = Btn(null, () => help?.Toggle(), () => help != null && help.IsOpen, "Hilfe & Tasten (F1)", null, "cb-icon-btn");
+            helpBtn.Add(Icon(HudIconKind.Help));
+            topBar.Add(helpBtn);
             return topBar;
         }
 

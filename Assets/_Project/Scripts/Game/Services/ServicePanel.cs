@@ -31,6 +31,7 @@ namespace CityBuilder.Game.Services
             if (tool == null || tool.Runner.World == null || tool.CurrentMode == RoadTool.Mode.Traffic) return;
             string kind = overlay != null ? overlay.Current : null;
             if (tool.CurrentMode != RoadTool.Mode.Service && kind == null) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: s. UI/Windows (IMGUI nur Rückfall)
             if (header == null)
             {
                 header = new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, richText = true };

@@ -9,6 +9,8 @@ namespace CityBuilder.Game.UI.Hud
         Road, Highway, Zones, Terrain, TrafficLight, Bulldoze, Warning, Check, Pipe, Brush, Coins,
         /// <summary>G4 Dienste: Wappen/Schild mit Kreuz.</summary>
         Service,
+        /// <summary>Fenster (Phase 2): Schließen, Kamera folgen, Zurück, Hilfe.</summary>
+        Close, Follow, Back, Help,
     }
 
     /// <summary>
@@ -152,6 +154,21 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Service: // Schild mit Kreuz (Dienste G4)
                     Poly(true, 12, 3, 20, 6, 19, 14, 12, 21, 5, 14, 4, 6); Line(12, 8, 12, 16); Line(8, 12, 16, 12);
+                    break;
+                case HudIconKind.Close:
+                    Line(6, 6, 18, 18); Line(18, 6, 6, 18);
+                    break;
+                case HudIconKind.Follow: // Fadenkreuz
+                    Circle(12, 12, 3); Line(12, 2, 12, 5); Line(12, 19, 12, 22); Line(2, 12, 5, 12); Line(19, 12, 22, 12);
+                    break;
+                case HudIconKind.Back:
+                    Line(19, 12, 5, 12); Poly(false, 11, 6, 5, 12, 11, 18);
+                    break;
+                case HudIconKind.Help:
+                    Circle(12, 12, 9);
+                    p.BeginPath(); p.MoveTo(P(9.3f, 9.5f)); p.BezierCurveTo(P(9.6f, 6.6f), P(14.8f, 6.6f), P(14.8f, 9.6f));
+                    p.BezierCurveTo(P(14.8f, 11.6f), P(12, 11.8f), P(12, 14)); p.Stroke();
+                    Line(12, 17, 12, 17.1f);
                     break;
             }
         }
