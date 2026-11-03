@@ -60,6 +60,8 @@ namespace CityBuilder.Simulation.People
         SidewalkGraph graph;
         readonly Dictionary<(long, long), PedestrianRoute> cache = new Dictionary<(long, long), PedestrianRoute>();
         readonly PedestrianRouteBuilder builder = new PedestrianRouteBuilder();
+        /// <summary>Gebäude-/Park-Endpunkte (Gehweg-Zugang) je Schlüssel – gültig bis zum nächsten Netz-Neubau.</summary>
+        readonly Dictionary<long, PedestrianEndpoint> endpoints = new Dictionary<long, PedestrianEndpoint>();
 
         /// <summary>
         /// ÖPNV-Erweiterungsstelle: liefert für einen Bürger zur Zeit t eine Vorgabe (wartet an Haltestelle, im Bus,
@@ -92,6 +94,7 @@ namespace CityBuilder.Simulation.People
                 {
                     graph = new SidewalkGraph(roads);
                     cache.Clear();
+                    endpoints.Clear();
                 }
                 return graph;
             }
@@ -121,7 +124,11 @@ namespace CityBuilder.Simulation.People
         public bool TryBuildingEndpoint(Building b, out PedestrianEndpoint e)
         {
             e = default;
-            if (b == null || !Graph.TryAccessAtT(b.FrontSegmentId, b.FrontT, b.Entrance, out var a)) return false;
+            if (b == null) return false;
+            var g = Graph;
+            long key = KindBuilding | (uint)b.Id;
+            if (endpoints.TryGetValue(key, out e) && Vector2.DistanceSquared(e.Door, b.Entrance - b.Front) < 1e-4f) return e.IsValid;
+            if (!g.TryAccessAtT(b.FrontSegmentId, b.FrontT, b.Entrance, out var a)) { endpoints[key] = default; e = default; return false; }
             e = new PedestrianEndpoint
             {
                 Key = KindBuilding | (uint)b.Id,
@@ -131,6 +138,7 @@ namespace CityBuilder.Simulation.People
                 Access = a,
                 IsValid = true,
             };
+            endpoints[key] = e;
             return true;
         }
 

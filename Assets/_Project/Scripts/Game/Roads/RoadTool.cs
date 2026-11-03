@@ -150,6 +150,9 @@ namespace CityBuilder.Game.Roads
             zoneView = Ensure<ZoneView>();
             zoneView.Init(runner, previewMaterial);
             if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
+            // --- Fußgänger: sichtbare Bürger (zu Fuß, Park, Laden, Haustür) per GPU-Instancing
+            if (litBase != null) Ensure<CityBuilder.Game.People.PeopleView>().Init(runner, litBase);
+            // --- Ende Fußgänger
 
             // Info-Modus (C): Inspektor für Gebäude, Fahrzeuge, Versorgungsbauwerke und Bürger (+ Stadtübersicht)
             Ensure<CityBuilder.Game.Inspect.InspectorPanel>().Init(this, previewMaterial);

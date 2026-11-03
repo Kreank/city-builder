@@ -100,9 +100,25 @@ namespace CityBuilder.Editor
             catalog.Services = services.ToArray();
             // --- Ende G4
 
+            // --- Fußgänger: alle FBX unter Models/People (Id = Dateiname, s. OwnModelCatalog.People)
+            var people = new List<OwnModelCatalog.Entry>();
+            if (AssetDatabase.IsValidFolder($"{ModelsRoot}/People"))
+                foreach (string guid in AssetDatabase.FindAssets("t:GameObject", new[] { $"{ModelsRoot}/People" }))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!path.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase)) continue;
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (model == null) continue;
+                    people.Add(new OwnModelCatalog.Entry { Id = Path.GetFileNameWithoutExtension(path), Model = model });
+                    Debug.Log($"[OwnModels] Person {Path.GetFileNameWithoutExtension(path)} ← {path}, Größe {Bounds(model).size}");
+                }
+            people.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+            catalog.People = people.ToArray();
+            // --- Ende Fußgänger
+
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste → {CatalogPath}");
+            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste, {people.Count} Personen → {CatalogPath}");
         }
 
         static Material EnsurePaletteMaterial()
