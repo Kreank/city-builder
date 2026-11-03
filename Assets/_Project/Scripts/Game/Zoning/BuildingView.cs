@@ -131,7 +131,7 @@ namespace CityBuilder.Game.Zoning
                 var front = new Vector3(b.Front.X, 0f, b.Front.Y);
                 var look = Quaternion.LookRotation(front);
                 var basePos = SimConvert.ToWorld(b.Position, b.Height);
-                var model = catalog != null ? AssetCatalog.Pick(catalog.Buildings(b.Zone), b.Variant) : null;
+                var model = catalog != null ? PickForLevel(catalog.Buildings(b.Zone), b.Variant, b.Level) : null; // G6
 
                 // Grundstücksplatte in Zonenfarbe (Bordkante um das Gebäude)
                 if (!plates.TryGetValue(b.Zone, out var plateList)) plates[b.Zone] = plateList = new List<Matrix4x4>();
@@ -163,11 +163,38 @@ namespace CityBuilder.Game.Zoning
             }
         }
 
+        // --- G6 Ausbaustufen: Modelle der Zonen-Kategorie nach Höhe sortiert und in MaxLevel Bänder geteilt –
+        // Stufe 1 wählt aus den niedrigsten, die höchste Stufe aus den höchsten (innerhalb des Bands per Variant).
+        // Mit nur einem Modell bleibt es bei diesem (dann zeigt nur der Platzhalter die Stufe über die Höhe).
+        static readonly Dictionary<ModelEntry[], int[]> byHeight = new Dictionary<ModelEntry[], int[]>();
+
+        static ModelEntry PickForLevel(ModelEntry[] list, int variant, int level)
+        {
+            if (!AssetCatalog.Has(list) || list.Length < 2) return AssetCatalog.Pick(list, variant);
+            if (!byHeight.TryGetValue(list, out var order))
+            {
+                order = new int[list.Length];
+                for (int i = 0; i < order.Length; i++) order[i] = i;
+                System.Array.Sort(order, (a, c) =>
+                {
+                    float ha = list[a] != null ? list[a].Size.y : 0f, hc = list[c] != null ? list[c].Size.y : 0f;
+                    return ha != hc ? ha.CompareTo(hc) : a.CompareTo(c);
+                });
+                byHeight[list] = order;
+            }
+            int max = CityBuilder.Simulation.LandValue.LandValueRules.MaxLevel;
+            int lv = Mathf.Clamp(level, 1, max), n = order.Length;
+            int start = n * (lv - 1) / max, end = Mathf.Max(start + 1, n * lv / max);
+            int pick = order[start + (variant & 0x7fffffff) % (end - start)];
+            return list[pick] != null && list[pick].Mesh != null ? list[pick] : AssetCatalog.Pick(list, variant);
+        }
+        // --- Ende G6
+
         static int FacadeIndex(Building b) => (int)((uint)(b.Variant * 2654435761u) >> 8) % FacadeColors.Length;
 
         static float PlaceholderHeight(Building b)
         {
-            float jitter = 0.8f + (b.Variant % 100) / 250f;
+            float jitter = (0.8f + (b.Variant % 100) / 250f) * (1f + 0.3f * (b.Level - 1)); // G6: höhere Stufe = höher
             switch (b.Zone)
             {
                 case ZoneType.ResidentialLow: return 6f * jitter;
