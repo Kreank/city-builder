@@ -37,7 +37,7 @@ namespace CityBuilder.Simulation.Tests
         public void ReferenceDirection_PointsAwayFromNode()
         {
             var net = new RoadNetwork();
-            var seg = net.BuildRoad(new Vector2(0, 0), null, new Vector2(100, 0), RoadType.Small);
+            var seg = RoadNetworkTests.Build(net, new Vector2(0, 0), new Vector2(100, 0))[0];
 
             // Am Endknoten zeigt die vorhandene Straße nach -X. Geradeaus weiterbauen (+X) = 180°.
             Assert.True(RoadGeometry.TryGetReferenceDirection(net, seg.End, Vector2.UnitX, out var reference, out float angle));

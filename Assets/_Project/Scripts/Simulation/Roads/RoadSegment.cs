@@ -2,7 +2,11 @@ using System.Numerics;
 
 namespace CityBuilder.Simulation.Roads
 {
-    /// <summary>Ein (gerades oder gekrümmtes) Straßenstück zwischen zwei Knoten.</summary>
+    /// <summary>
+    /// Ein (gerades oder gekrümmtes) Straßenstück zwischen zwei Knoten.
+    /// Die Richtung Start → Ende ist bedeutsam: Spuren mit <see cref="LaneDirection.Forward"/>
+    /// fahren in diese Richtung (wichtig für Einbahnstraßen, Autobahnen, Rampen).
+    /// </summary>
     public sealed class RoadSegment
     {
         public int Id { get; }
@@ -32,9 +36,12 @@ namespace CityBuilder.Simulation.Roads
             return len > 1e-6f ? d / len : Vector2.Normalize(End.Position - Start.Position);
         }
 
-        public float DistanceTo(Vector2 point) =>
-            Bezier.DistanceToPoint(Start.Position, Control, End.Position, point);
+        public float ClosestT(Vector2 point) => Bezier.ClosestT(Start.Position, Control, End.Position, point);
+
+        public float DistanceTo(Vector2 point) => Vector2.Distance(Evaluate(ClosestT(point)), point);
 
         public RoadNode Other(RoadNode node) => node == Start ? End : Start;
+
+        public override string ToString() => $"Segment {Id} ({Type.DisplayName}) {Start.Id}→{End.Id}";
     }
 }

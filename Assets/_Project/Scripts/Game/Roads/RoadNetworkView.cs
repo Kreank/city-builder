@@ -5,21 +5,26 @@ using UnityEngine;
 namespace CityBuilder.Game.Roads
 {
     /// <summary>
-    /// Zeigt das Straßennetz der Simulation an. Hört auf Events des RoadNetwork –
-    /// die View verändert die Simulation nie selbst.
+    /// Zeigt das Straßennetz der Simulation an. Hört auf Events des RoadNetwork und baut
+    /// betroffene Meshes gesammelt einmal pro Frame neu (ein Bauvorgang kann viele Segmente zerteilen).
+    /// Die View verändert die Simulation nie selbst.
     /// </summary>
     public sealed class RoadNetworkView : MonoBehaviour
     {
         [SerializeField] SimulationRunner runner;
+        [Tooltip("Basis-Material (URP Lit). Die Oberflächenfarben werden davon abgeleitet.")]
         [SerializeField] Material roadMaterial;
-        [SerializeField] float roadHeight = 0.05f;
 
-        readonly Dictionary<int, GameObject> segmentObjects = new Dictionary<int, GameObject>();
-        readonly Dictionary<int, GameObject> nodeObjects = new Dictionary<int, GameObject>();
+        readonly Dictionary<int, MeshFilter> segmentObjects = new Dictionary<int, MeshFilter>();
+        readonly Dictionary<int, MeshFilter> nodeObjects = new Dictionary<int, MeshFilter>();
+        readonly HashSet<int> dirtySegments = new HashSet<int>();
+        readonly HashSet<int> dirtyNodes = new HashSet<int>();
         RoadNetwork network;
+        RoadMaterials materials;
 
         void Start()
         {
+            materials = new RoadMaterials(roadMaterial);
             network = runner.World.Roads;
             network.SegmentAdded += OnSegmentAdded;
             network.SegmentRemoved += OnSegmentRemoved;
@@ -30,75 +35,132 @@ namespace CityBuilder.Game.Roads
 
         void OnDestroy()
         {
-            if (network == null) return;
-            network.SegmentAdded -= OnSegmentAdded;
-            network.SegmentRemoved -= OnSegmentRemoved;
-            network.NodeRemoved -= OnNodeRemoved;
+            if (network != null)
+            {
+                network.SegmentAdded -= OnSegmentAdded;
+                network.SegmentRemoved -= OnSegmentRemoved;
+                network.NodeRemoved -= OnNodeRemoved;
+            }
+            materials?.Destroy();
         }
 
         void OnSegmentAdded(RoadSegment segment)
         {
-            var go = CreateMeshObject($"Road {segment.Id} ({segment.Type.DisplayName})",
-                RoadMeshBuilder.BuildSegment(segment.Start.Position, segment.Control, segment.End.Position, segment.Type.Width, roadHeight));
-            segmentObjects[segment.Id] = go;
-
-            RefreshNode(segment.Start);
-            RefreshNode(segment.End);
+            dirtySegments.Add(segment.Id);
+            dirtyNodes.Add(segment.Start.Id);
+            dirtyNodes.Add(segment.End.Id);
         }
 
         void OnSegmentRemoved(RoadSegment segment)
         {
-            if (segmentObjects.TryGetValue(segment.Id, out var go))
+            if (segmentObjects.TryGetValue(segment.Id, out var mf))
             {
-                DestroyMeshObject(go);
+                DestroyMeshObject(mf);
                 segmentObjects.Remove(segment.Id);
             }
-            RefreshNode(segment.Start);
-            RefreshNode(segment.End);
+            dirtyNodes.Add(segment.Start.Id);
+            dirtyNodes.Add(segment.End.Id);
         }
 
         void OnNodeRemoved(RoadNode node)
         {
-            if (!nodeObjects.TryGetValue(node.Id, out var go)) return;
-            DestroyMeshObject(go);
+            if (!nodeObjects.TryGetValue(node.Id, out var mf)) return;
+            DestroyMeshObject(mf);
             nodeObjects.Remove(node.Id);
         }
 
-        /// <summary>Knotenscheibe so groß wie die breiteste angeschlossene Straße.</summary>
-        void RefreshNode(RoadNode node)
+        void LateUpdate()
         {
-            if (nodeObjects.TryGetValue(node.Id, out var old))
+            if (dirtyNodes.Count == 0 && dirtySegments.Count == 0) return;
+
+            // Knoten zuerst: ändert sich der Grad eines Knotens, müssen alle anliegenden Segmente neu gekürzt werden.
+            foreach (int nodeId in dirtyNodes)
             {
-                DestroyMeshObject(old);
-                nodeObjects.Remove(node.Id);
+                var node = network.GetNode(nodeId);
+                if (node == null) continue;
+                RebuildNode(node);
+                foreach (int segId in node.SegmentIds) dirtySegments.Add(segId);
             }
-            if (network.GetNode(node.Id) == null || node.SegmentIds.Count == 0) return;
+            dirtyNodes.Clear();
 
-            float width = 0f;
-            foreach (int id in node.SegmentIds)
-                width = Mathf.Max(width, network.GetSegment(id).Type.Width);
-
-            var go = CreateMeshObject($"Node {node.Id}", RoadMeshBuilder.BuildDisc(width * 0.5f, roadHeight));
-            go.transform.position = SimConvert.ToWorld(node.Position);
-            nodeObjects[node.Id] = go;
+            foreach (int segId in dirtySegments)
+            {
+                var seg = network.GetSegment(segId);
+                if (seg != null) RebuildSegment(seg);
+            }
+            dirtySegments.Clear();
         }
 
-        GameObject CreateMeshObject(string name, Mesh mesh)
+        /// <summary>Kreuzung = ab 3 Straßen. Dort wird die Fläche frei gehalten (keine Markierungen).</summary>
+        static bool IsJunction(RoadNode node) => node.SegmentIds.Count >= 3;
+
+        float JunctionRadius(RoadNode node)
+        {
+            float r = 0f;
+            foreach (int id in node.SegmentIds) r = Mathf.Max(r, network.GetSegment(id).Type.HalfWidth);
+            return r;
+        }
+
+        void RebuildSegment(RoadSegment seg)
+        {
+            float trimStart = IsJunction(seg.Start) ? JunctionRadius(seg.Start) : 0f;
+            float trimEnd = IsJunction(seg.End) ? JunctionRadius(seg.End) : 0f;
+
+            if (!segmentObjects.TryGetValue(seg.Id, out var mf))
+            {
+                mf = CreateMeshObject($"Road {seg.Id} ({seg.Type.DisplayName})", materials.All);
+                segmentObjects[seg.Id] = mf;
+            }
+            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh);
+        }
+
+        void RebuildNode(RoadNode node)
+        {
+            int degree = node.SegmentIds.Count;
+            if (degree <= 1)
+            {
+                // Sackgasse/Straßenende: keine Knotenfläche
+                if (nodeObjects.TryGetValue(node.Id, out var old))
+                {
+                    DestroyMeshObject(old);
+                    nodeObjects.Remove(node.Id);
+                }
+                return;
+            }
+
+            // Grad 2: kleine Scheibe schließt Lücken in Knicken. Kreuzung: volle Fläche.
+            float radius = 0f;
+            foreach (int id in node.SegmentIds)
+            {
+                var t = network.GetSegment(id).Type;
+                radius = Mathf.Max(radius, IsJunction(node) ? t.HalfWidth : t.CarriagewayHalfWidth);
+            }
+
+            if (!nodeObjects.TryGetValue(node.Id, out var mf))
+            {
+                mf = CreateMeshObject($"Node {node.Id}", new[] { materials[RoadSurface.Asphalt] });
+                mf.transform.position = SimConvert.ToWorld(node.Position);
+                nodeObjects[node.Id] = mf;
+            }
+            // Leicht unter der Fahrbahn, damit Markierungen der Segmente sichtbar bleiben.
+            mf.sharedMesh = RoadMeshBuilder.BuildDisc(radius, RoadMeshBuilder.RoadHeight - 0.002f, mf.sharedMesh);
+        }
+
+        MeshFilter CreateMeshObject(string name, Material[] mats)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mf = go.AddComponent<MeshFilter>();
             var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = roadMaterial;
+            mr.sharedMaterials = mats;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            return go;
+            return mf;
         }
 
-        static void DestroyMeshObject(GameObject go)
+        static void DestroyMeshObject(MeshFilter mf)
         {
-            var mf = go.GetComponent<MeshFilter>();
-            if (mf != null && mf.sharedMesh != null) Destroy(mf.sharedMesh);
-            Destroy(go);
+            if (mf.sharedMesh != null) Destroy(mf.sharedMesh);
+            Destroy(mf.gameObject);
         }
     }
 }

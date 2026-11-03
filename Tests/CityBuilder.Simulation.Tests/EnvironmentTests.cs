@@ -50,7 +50,7 @@ namespace CityBuilder.Simulation.Tests
         public void NoiseSystem_MakesRoadsLoud()
         {
             var world = SimulationWorld.CreateDefault();
-            world.Roads.BuildRoad(new Vector2(0, 0), null, new Vector2(200, 0), RoadType.Highway);
+            RoadBuilder.Build(world.Roads, RoadBuilder.Plan(world.Roads, new Vector2(0, 0), 0f, null, new Vector2(200, 0), 0f, RoadCatalog.Highway3));
 
             for (int i = 0; i < 10; i++) world.Step(); // NoiseSystem läuft alle 10 Ticks
 

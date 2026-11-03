@@ -27,12 +27,25 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Szene neu erzeugen (Editor geschlossen):
   `"C:\Program Files\Unity\Hub\Editor\6000.6.7f1\Editor\Unity.exe" -batchmode -quit -projectPath . -executeMethod CityBuilder.Editor.ProjectSetup.CreateMainScene -logFile setup.log`
 
+## Straßen
+- Rechtsverkehr. Querschnitt pro Typ in `RoadCatalog` (Spuren links→rechts in Segmentrichtung Start→Ende).
+  Segmentrichtung ist bedeutsam (Einbahn, Autobahn, Rampe) – beim Zerteilen bleibt sie erhalten.
+- Bauen immer über `RoadBuilder.Plan…()` → Vorschau → `RoadBuilder.Build…()`. Kreuzungen entstehen automatisch
+  durch Zerteilen; Autobahnen kreuzen nie ebenerdig und verbinden sich nur mit Autobahn/Rampe.
+- Kreisverkehr = Ring aus Einbahn-Bögen gegen den Uhrzeigersinn; Inneres wird entfernt.
+
 ## Roadmap
-1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay
-2. Straßen schneiden/Kreuzungen mitten im Segment, Terrain mit Höhen
-3. Erste Stadt: Zonen entlang Straßen, Wohnhäuser, Bevölkerung, eine Produktionskette, Lager, Geld
-4. Welt: Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator)
-5. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
-6. Reich: mehrere Städte, Transport dazwischen
-7. Handel: Bot-Nationen, Marktpreise, Verträge
-8. Online-Handel, Mobile-Port
+1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
+2. Straßen
+   - ✅ A: Spurmodell + Katalog, Kreuzungen durch Zerteilen, Kreisverkehr, Markierungen, Bauleiste
+   - B: Spurgraph/Abbiegebeziehungen, Straße aufwerten/ersetzen, Richtung umdrehen, Parallelbau Autobahn
+   - C: Verkehrssimulation (Fahrzeuge, Wegfindung, Stau)
+   - D: Verkehrsregeln (Ampeln, Vorfahrt, Stopp, Abbiegeverbote, Fahrverbote, ÖPNV-Vorrang)
+   - E: Höhen – Brücken, Tunnel, Rampen → Autobahnkreuze/-dreiecke/Anschlussstellen
+3. Terrain mit Höhen
+4. Erste Stadt: Zonen entlang Straßen, Wohnhäuser, Bevölkerung, eine Produktionskette, Lager, Geld
+5. Welt: Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator)
+6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
+7. Reich: mehrere Städte, Transport dazwischen
+8. Handel: Bot-Nationen, Marktpreise, Verträge
+9. Online-Handel, Mobile-Port
