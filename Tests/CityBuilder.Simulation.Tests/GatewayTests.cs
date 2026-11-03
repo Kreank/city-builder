@@ -477,8 +477,8 @@ namespace CityBuilder.Simulation.Tests
             var w = SimulationWorld.CreateDefault(Settings());
             var c = SaveGame.Capture(w);
             var ws = c.Find(SaveGame.WorldSectionId);
-            Assert.Equal(3, ws.Version);
-            c.Set(ws.Id, 2, ws.Data.Take(ws.Data.Length - 3).ToArray()); // v2: ohne die drei Gateway-Schalter
+            Assert.Equal(4, ws.Version);
+            c.Set(ws.Id, 3, ws.Data.Take(ws.Data.Length - 3).ToArray()); // v3: ohne die drei Gateway-Schalter
             var old = SaveGame.Restore(SaveContainer.FromBytes(c.ToBytes()));
             Assert.False(old.Settings.PrebuiltConnections);
             Assert.False(old.Settings.RequireGatewayForMoveIn);

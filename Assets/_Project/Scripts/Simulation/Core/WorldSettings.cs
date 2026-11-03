@@ -38,6 +38,10 @@ namespace CityBuilder.Simulation.Core
         public World.PlanetSettings Planet;
         // --- Ende Welt
 
+        // --- Spielstart & Startregion
+        /// <summary>Name der Spielerstadt (null = „Neustadt“); der Stadtstaat heißt „Freie Stadt {Name}“. Laufend: <c>SimulationWorld.Realm</c>.</summary>
+        public string CityName;
+        // --- Ende Spielstart
         // --- Außenanbindungen (Gateways)
         /// <summary>
         /// Beim Kartenstart (neue Welt) eine Autobahn quer durch die Karte mit Anschlussstelle + Zubringer bauen (gehört der

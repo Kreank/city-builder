@@ -34,6 +34,12 @@ namespace CityBuilder.Game
         [Tooltip("Region der Stadt (−1 = automatisch: gemäßigt, fruchtbar, Fluss/Küste).")]
         [SerializeField] int startRegion = -1;
         // --- Ende Welt
+        // --- Spielstart & Startregion
+        [Tooltip("Erster Start ohne Spielstand: Neues-Spiel-Fenster (Welt, Vorlieben, Startregion, Stadtname) statt Standardwelt.")]
+        [SerializeField] bool newGameDialogOnFirstStart = true;
+        /// <summary>Erster Start ohne Spielstand: läuft eine Platzhalterwelt, bis der Spieler im Neues-Spiel-Fenster startet.</summary>
+        public bool AwaitingNewGame { get; private set; }
+        // --- Ende Spielstart
         // --- Außenanbindungen (Gateways)
         [Header("Außenanbindung")]
         [Tooltip("Beim Kartenstart eine Autobahn mit Anschlussstelle + Zubringer bauen (wie Cities: Skylines); dazu Bahn-/Wasserwege vorbereitet.")]
@@ -80,6 +86,19 @@ namespace CityBuilder.Game
 
         void Awake()
         {
+            // --- Spielstart: erster Programmstart ohne Spielstand → Neues-Spiel-Fenster statt Standardwelt
+            // (bis dahin eine schnelle Platzhalterwelt ohne Weltkarte, angehalten; SaveManager öffnet das Fenster)
+            AwaitingNewGame = newGameDialogOnFirstStart && generateWorld && !Persistence.SaveManager.HasAnySave();
+            if (AwaitingNewGame)
+            {
+                var placeholder = CreateSettings();
+                placeholder.GenerateWorld = false;
+                placeholder.PrebuiltConnections = placeholder.RequireGatewayForMoveIn = placeholder.RequireGatewayForTrade = false; // Gateways: Platzhalter braucht keine Autobahn
+                World = SimulationWorld.CreateDefault(placeholder);
+                SetSpeed(0);
+                return;
+            }
+            // --- Ende Spielstart
             World = SimulationWorld.CreateDefault(CreateSettings());
             if (World.Planet != null)
                 Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
@@ -149,9 +168,14 @@ namespace CityBuilder.Game
         }
 
         /// <summary>Neues Spiel mit den Einstellungen des Inspectors (optional anderer Welt-Seed/andere Startregion).</summary>
-        public SimulationWorld NewGame(int? worldSeed = null, int? startRegion = null, int? seed = null)
+        public SimulationWorld NewGame(int? worldSeed = null, int? startRegion = null, int? seed = null) =>
+            NewGame(CreateSettings(worldSeed, startRegion), seed ?? 12345);
+
+        /// <summary>Spielstart: neues Spiel mit fertigen Einstellungen (Neues-Spiel-Fenster: Seed, Startregion, Stadtname).</summary>
+        public SimulationWorld NewGame(WorldSettings settings, int seed = 12345)
         {
-            var world = SimulationWorld.CreateDefault(CreateSettings(worldSeed, startRegion), seed ?? 12345);
+            var world = SimulationWorld.CreateDefault(settings ?? CreateSettings(), seed);
+            AwaitingNewGame = false;
             ReplaceWorld(world);
             return world;
         }

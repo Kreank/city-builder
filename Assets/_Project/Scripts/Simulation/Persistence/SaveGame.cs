@@ -24,8 +24,12 @@ namespace CityBuilder.Simulation.Persistence
         public const string GameVersion = "0.6";
         /// <summary>Abschnitt mit Einstellungen, Seed und Uhr – wird vor allen anderen gelesen (baut die Welt).</summary>
         public const string WorldSectionId = "world";
-        /// <summary>v2: Zeitmodell (Verkehrsschritt im laufenden Tick), v3: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse).</summary>
-        const int WorldSectionVersion = 3;
+        /// <summary>
+        /// v2: Zeitmodell – Verkehrsschritt im laufenden Tick. v3 (Spielstart &amp; Startregion): Anteil freies Land + Stadtname;
+        /// v1/v2-Stände laden mit freiem Land 0 (altes politische Modell).
+        /// v4: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse); v1–v3 laden mit Schaltern aus.
+        /// </summary>
+        const int WorldSectionVersion = 4;
 
         // ------------------------------------------------------------ Speichern
 
@@ -196,7 +200,10 @@ namespace CityBuilder.Simulation.Persistence
             w.Int(world.Seed);
             w.Long(world.Clock.Tick);
             w.Int(world.SubstepInTick); // v2
-            // v3 Gateways
+            // v3 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
+            w.Float(s.Planet?.FreeLandShare ?? World.PlanetSettings.DefaultFreeLandShare);
+            w.String(s.CityName);
+            // v4 Gateways
             w.Bool(s.PrebuiltConnections);
             w.Bool(s.RequireGatewayForMoveIn);
             w.Bool(s.RequireGatewayForTrade);
@@ -226,7 +233,19 @@ namespace CityBuilder.Simulation.Persistence
             seed = r.Int();
             tick = r.Long();
             substep = version >= 2 ? r.Int() : 0; // v1: immer auf der Tick-Grenze gespeichert
-            if (version >= 3) // Gateways (v1/v2: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
+            // Spielstart: v1/v2 kannten kein freies Land → Welt im alten Modell neu erzeugen (alle Regionen gehören NPC-Ländern,
+            // Spieler-Land = Land der Startregion). Nur so passen die gespeicherten Länder-/Handelsabschnitte (Länder-Ids).
+            float free = 0f;
+            if (version >= 3)
+            {
+                free = r.Float();
+                if (!(free >= 0f && free <= 0.9f)) throw new SaveFormatException("Welteinstellungen ungültig (freies Land).");
+                s.CityName = r.String();
+            }
+            // Standardwert ohne eigene Planet-Einstellungen bleibt null (gleiche Bytes beim erneuten Speichern)
+            if (s.Planet != null) s.Planet.FreeLandShare = free;
+            else if (free != World.PlanetSettings.DefaultFreeLandShare) s.Planet = new World.PlanetSettings { FreeLandShare = free };
+            if (version >= 4) // Gateways (v1–v3: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
             {
                 s.PrebuiltConnections = r.Bool();
                 s.RequireGatewayForMoveIn = r.Bool();

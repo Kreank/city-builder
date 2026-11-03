@@ -57,7 +57,7 @@ namespace CityBuilder.Simulation.Gateways
                     list.Add(new GatewayTarget { Direction = dirs[i], Weight = i % 2 == 0 ? 1.1f : 1f, Kind = GatewayTargetKind.Hinterland, Name = names[i] });
                 return list;
             }
-            int player = start.CountryId;
+            int player = planet.PlayerCountryId; // Stadtstaat oder Land der Startregion (newgame)
             // Nachbarregionen: fremde Länder und Hauptstadt-Regionen zählen mehr
             foreach (int nb in start.Neighbors)
             {
@@ -72,8 +72,9 @@ namespace CityBuilder.Simulation.Gateways
                 list.Add(new GatewayTarget
                 {
                     Direction = dir, Weight = w,
-                    Kind = foreign ? GatewayTargetKind.Country : GatewayTargetKind.Region,
-                    Name = foreign ? country.Name : r.Name,
+                    // freies Land (Region ohne Land, s. newgame): Umland-Ziel mit Regionsnamen
+                    Kind = foreign ? GatewayTargetKind.Country : r.IsFree ? GatewayTargetKind.Hinterland : GatewayTargetKind.Region,
+                    Name = foreign ? country.Name : r.IsFree ? $"{r.Name} (freies Land)" : r.Name,
                     CountryId = r.CountryId, RegionId = r.Id,
                 });
             }

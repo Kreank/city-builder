@@ -47,7 +47,7 @@ namespace CityBuilder.Game.UI.Windows
             var p = map.Planet;
             var player = p?.PlayerCountry;
             Head(ui, "Weltkarte (F4)", Tone.Info, player != null ? player.Name : "Welt",
-                p == null ? "keine Welt erzeugt" : $"{p.Countries.Count} Länder · {p.Regions.Count} Regionen · Startregion {p.StartRegion?.Name ?? "–"}");
+                p == null ? "keine Welt erzeugt" : $"{p.Countries.Count - (p.PlayerCityState != null ? 1 : 0)} Länder · {p.Regions.Count} Regionen ({p.FreeRegionCount} frei) · Startregion {p.StartRegion?.Name ?? "–"}");
             if (p == null) return;
             ui.Tabs(MainModes, MainIndex, i =>
             {
@@ -70,7 +70,7 @@ namespace CityBuilder.Game.UI.Windows
             ui.Image(tex, p.Width * Scale, p.Height * Scale,
                 uv => { int i = Cell(p, uv); var c = p.CountryOfCell(i); selectedCountry = c != null ? c.Id : -1; },
                 uv => hoverCell = uv.HasValue ? Cell(p, uv.Value) : -1);
-            ui.Note(hoverCell >= 0 ? WorldMapWindow.CellText(p, hoverCell) : "Maus über die Karte: Zelleninfo · Klick auf ein Land: Details · weiß = Startregion, gelber Punkt = deine Hauptstadt");
+            ui.Note(hoverCell >= 0 ? WorldMapWindow.CellText(p, hoverCell) : "Maus über die Karte: Zelleninfo · Klick auf ein Land: Details · weiß = Startregion, gelber Punkt = deine Stadt · hell = freies Land");
 
             var country = selectedCountry >= 0 && selectedCountry < p.Countries.Count ? p.Countries[selectedCountry] : p.PlayerCountry;
             if (country != null) CountryBody(ui, p, country);
@@ -85,7 +85,7 @@ namespace CityBuilder.Game.UI.Windows
 
         void CountryBody(Ui ui, Planet p, Country c)
         {
-            ui.Section(c.Name + (c.IsPlayer ? " (dein Land)" : ""), $"Hauptstadt {c.CapitalName}");
+            ui.Section(c.Name + (c.IsCityState ? " (dein Stadtstaat)" : c.IsPlayer ? " (dein Land)" : ""), c.IsCityState ? "noch ohne eigenes Land – Etappe 7: Land gründen" : $"Hauptstadt {c.CapitalName}");
             using (ui.Chips())
             {
                 ui.Chip("★ " + CountryProfile.DisplayName(c.Profile.Primary), Tone.Good);
