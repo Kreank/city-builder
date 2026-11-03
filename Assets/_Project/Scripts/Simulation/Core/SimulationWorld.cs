@@ -257,6 +257,11 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.ServiceVehicles);
             world.Economy.RegisterUpkeep(world.ServiceVehicles);
             // --- Ende Eigene Assets 2
+
+            // --- Sicherheit (agent/safety): Brände und Kriminalität als Ereignisse (nach den Dienstfahrzeugen; Standard aus)
+            world.Safety = new Safety.SafetySystem(world);
+            world.AddSystem(world.Safety);
+            // --- Ende Sicherheit
             return world;
         }
 
@@ -302,6 +307,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceVehicleSystem ServiceVehicles { get; private set; }
+
+        /// <summary>Sicherheit: Brände und Kriminalität (Standard aus, das Spiel schaltet ein). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Safety.SafetySystem Safety { get; private set; }
 
         // --- Speichern & Laden
         /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>

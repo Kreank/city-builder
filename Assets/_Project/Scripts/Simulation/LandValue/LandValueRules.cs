@@ -32,6 +32,8 @@ namespace CityBuilder.Simulation.LandValue
         /// <summary>Zufriedenheit der Nachbarschaft 0..1; −1 = unbekannt (keine Bewohner/Beschäftigten in der Nähe).</summary>
         public float Neighborhood;
         public float Noise, Air, Garbage;
+        /// <summary>Sicherheit: frische Brände in der Nähe + Kriminalität 0..1 (0 = ruhig).</summary>
+        public float Safety;
         /// <summary>Zelle liegt im Wasser → Bodenwert 0.</summary>
         public bool IsWater;
     }
@@ -44,6 +46,8 @@ namespace CityBuilder.Simulation.LandValue
         public float Landmark;
         /// <summary>Abzüge (≤ 0).</summary>
         public float Noise, Air, Garbage;
+        /// <summary>Sicherheit: Abzug für Brände/Kriminalität (≤ 0).</summary>
+        public float Safety;
         /// <summary>Summe, auf 0..1 begrenzt (Zielwert, ungeglättet).</summary>
         public float Target;
         /// <summary>Aktueller (träge geglätteter) Bodenwert der Zelle; −1 = noch nicht berechnet.</summary>
@@ -69,6 +73,7 @@ namespace CityBuilder.Simulation.LandValue
             Add("Lärm", Noise);
             Add("Abgas", Air);
             Add("Müll", Garbage);
+            Add("Brände/Kriminalität", Safety); // Sicherheit
             return list;
         }
     }
@@ -147,6 +152,8 @@ namespace CityBuilder.Simulation.LandValue
         public const float NeighborhoodWeight = 0.10f;
         public const float NeighborhoodNeutral = 0.6f;
         public const float NoisePenalty = 0.25f, AirPenalty = 0.35f, GarbagePenalty = 0.20f;
+        /// <summary>Sicherheit: Abzug bei vollem Brand-/Kriminalitätswert (frischer Großbrand nebenan bzw. Rate 1).</summary>
+        public const float SafetyPenalty = 0.15f;
 
         /// <summary>Anteil, um den der Zellwert je Neuberechnung zum Ziel läuft.</summary>
         public const float Smoothing = 0.35f;
@@ -192,6 +199,8 @@ namespace CityBuilder.Simulation.LandValue
             float sum = f.Base + f.RoadAccess + f.JobAccess + f.ExternalAccess + f.Services + f.Park + f.Water + f.View
                         + f.Density + f.Neighborhood + f.Noise + f.Air + f.Garbage;
             if (f.Landmark > 0f) sum += f.Landmark; // Eigene Assets (ohne Wahrzeichen bitgleich wie vorher)
+            f.Safety = -SafetyPenalty * C(i.Safety);  // Sicherheit (ohne Brände/Kriminalität bitgleich wie vorher)
+            if (f.Safety < 0f) sum += f.Safety;
             f.Target = C(sum);
             return f;
         }

@@ -232,6 +232,23 @@ namespace CityBuilder.Simulation.Citizens.Content
                 "Kein Parkplatz suchen – der Bus hält direkt an der {Straße}.",
                 "Die Buslinie ist wirklich praktisch.",
             },
+            // --- Sicherheit (Brände, Kriminalität)
+            /* Fire */ new[]
+            {
+                "Ich sehe die Flammen an der {Straße} immer noch vor mir.",
+                "Der Rauchmelder hat uns gerettet – aber die Wohnung riecht noch nach Brand.",
+                "Wie lange hat die Feuerwehr gebraucht? Gefühlt eine Ewigkeit.",
+                "An der {Straße} hat es gebrannt. Ich prüfe jetzt jeden Abend den Herd.",
+                "{Partner} und ich standen nachts auf der Straße und haben zugesehen, wie es brennt.",
+            },
+            /* Burglary */ new[]
+            {
+                "Bei uns wurde eingebrochen. Ich schlafe seitdem schlecht.",
+                "Die Tür aufgebrochen, alles durchwühlt – an der {Straße} fühle ich mich nicht mehr sicher.",
+                "Bei {Firma} wurde eingebrochen. Wer macht so etwas?",
+                "Ich habe ein neues Schloss gekauft. Die Polizei war erst spät da.",
+            },
+            // --- Ende Sicherheit
         };
 
         public static int Count(MemoryKind k) => ByKind[(int)k].Length;

@@ -187,6 +187,7 @@ namespace CityBuilder.Simulation.Zoning
             foreach (var b in buildings.Values)
             {
                 if (b.IsConstructed) continue;
+                if (b.OutOfService) continue; // Sicherheit: Brandruine/Sanierung – Baufortschritt ruht
                 b.Construction = MathF.Min(1f, b.Construction + 0.1f);
                 if (b.IsConstructed) Version++;
             }

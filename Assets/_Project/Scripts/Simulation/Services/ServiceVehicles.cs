@@ -23,6 +23,8 @@ namespace CityBuilder.Simulation.Services
         FireCall = 3,
         /// <summary>Rettungswagen zu einem schwer erkrankten Bürger (Ereignis „Krankheit“ des Bürgersystems).</summary>
         Rescue = 4,
+        /// <summary>Sicherheit: Polizeieinsatz zu einem Tatort (Einbruch, Diebstahl, Vandalismus) – Aufklärung bei Ankunft.</summary>
+        CrimeCall = 5,
     }
 
     /// <summary>Zustand eines Dienstfahrzeugs.</summary>
@@ -105,6 +107,8 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Rettung: Anteil schwerer Fälle unter 65 Jahren (ab 65 immer), Dauer vor Ort.</summary>
         public const float RescueShareUnder65 = 0.3f;
         public const float RescueSeconds = 180f;
+        /// <summary>Sicherheit: Dauer eines Polizeieinsatzes am Tatort (Verkehrssekunden ≈ 16 Spielminuten).</summary>
+        public const float CrimeCallSeconds = 120f;
         /// <summary>Unterhalt je Fahrzeug (Treibstoff, Wartung; Personal steckt im Unterhalt des Dienstgebäudes) in € je Woche.</summary>
         public const float UpkeepPerVehicleWeek = 150f;
         /// <summary>Startversuche (je Tick) bis der Auftrag verfällt; Sicherheitsnetz für hängende Touren (Ticks).</summary>
@@ -161,6 +165,7 @@ namespace CityBuilder.Simulation.Services
                 case ServiceMission.Patrol: return "Streife";
                 case ServiceMission.FireCall: return "Brandeinsatz";
                 case ServiceMission.Rescue: return "Rettungseinsatz";
+                case ServiceMission.CrimeCall: return "Polizeieinsatz"; // Sicherheit
                 default: return "–";
             }
         }

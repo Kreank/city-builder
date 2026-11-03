@@ -27,7 +27,7 @@ namespace CityBuilder.Game.UI.Windows
             {
                 if (overlay == null) overlay = Tool.GetComponent<ServiceOverlayView>();
                 if (Tool.CurrentMode == RoadTool.Mode.Service) return 90f;
-                return Kind != null ? 50f : 0f;
+                return Kind != null && !CityBuilder.Simulation.Safety.SafetyOverlays.IsSafety(Kind) ? 50f : 0f; // Sicherheit: eigene Ansichten ohne Dienste-Fenster
             }
         }
 
