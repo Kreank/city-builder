@@ -43,6 +43,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("Tab · H", "Straßentyp wechseln · Doppelbau (Autobahn)");
                 ui.Field("Bild↑ / Bild↓", "Bauhöhe (0 = automatisch trassieren: Tunnel/Brücke/einebnen)");
                 ui.Field("G · Strg", "Einrasten an/aus · halten = frei");
+                ui.Field("F9 · F10", "Parallelstraßen: Reihen 4→3→2→1→aus · Blockraster");
                 ui.Field(", .", "Vorlage/Bauwerk drehen");
                 ui.Field("Z · [ ]", "Zonen · Pinselgröße");
                 ui.Field("L", "Gelände formen");
@@ -59,10 +60,17 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");
+                ui.Field("F2 · F3 · F4", "Bodenwert · Rohstoffe durchschalten · Weltkarte");
                 ui.Field("M", "Stadtkasse");
                 ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen)");
                 ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
                 ui.Field("F1", "diese Hilfe");
+            }
+            ui.Section("Spiel");
+            using (ui.Fields())
+            {
+                ui.Field("Esc", "Spielmenü (wenn nichts anderes offen ist): Speichern, Laden, Neues Spiel, Autosave");
+                ui.Field("Strg+S · Strg+L", "Schnell speichern · Schnell laden");
             }
             ui.Section("Zeit & Kamera");
             using (ui.Fields())
