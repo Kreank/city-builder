@@ -57,6 +57,7 @@ namespace CityBuilder.Game.Transit
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => { previewKey = int.MinValue; previewVersion = previewRoads = -1; }; // Speichern & Laden
             // UX: gezeichnete Linie = laufender Vorgang (Esc verwirft, Rechtsklick nimmt den letzten Halt zurück)
             tool.RegisterOperation(() => Active && Current == TransitAction.Line && drawing.Count > 0, () => drawing.Clear(), UndoStop);
             okMaterial = new Material(transparent) { name = "TransitPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
