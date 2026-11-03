@@ -1,0 +1,3 @@
+/* Laufzeit-Theme der Spiel-UI: Unity-Standard (liefert die Standardschrift und Grundstile der Controls).
+   Das eigentliche Aussehen kommt aus CityHud.uss, das GameHud an die Wurzel des Dokuments hängt. */
+@import url("unity-theme://default");

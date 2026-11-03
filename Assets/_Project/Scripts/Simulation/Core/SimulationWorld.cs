@@ -116,6 +116,15 @@ namespace CityBuilder.Simulation.Core
             world.Services = new ServiceSystem(world.Roads, world.Terrain, world.City, world.Utilities, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Services);
             // --- Ende G4
+
+            // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
+            world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
+            world.Roads.Budget = world.Economy;
+            world.Terrain.Budget = world.Economy;
+            world.Utilities.Budget = world.Economy;
+            world.City.DemandModifier = world.Economy.DemandFactor;
+            world.AddSystem(world.Economy);
+            // --- Ende Stadtkasse
             return world;
         }
 
@@ -130,6 +139,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Dienste (G4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceSystem Services { get; private set; }
+
+        /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Economy.EconomySystem Economy { get; private set; }
 
         public void AddSystem(ISimulationSystem system)
         {

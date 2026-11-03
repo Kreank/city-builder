@@ -1,0 +1,824 @@
+/* =====================================================================================================
+   City Builder – Spiel-UI (UI Toolkit). Stil laut abgenommenem Entwurf: dunkel, sachlich, leicht warm.
+   Referenzauflösung 1920×1080 (PanelSettings: ScaleWithScreenSize), alle Maße in Referenz-Pixeln.
+   Nur Eigenschaften, die UI Toolkit (Unity 6) kennt: kein box-shadow, kein gap, kein grid –
+   Abstände über margin, Raster über flex-wrap.
+
+   SCHRIFT: Geplant sind Manrope (Überschriften) und Inter (Text/Zahlen). Solange die Schriften nicht im
+   Projekt liegen, gilt die Unity-Standardschrift aus dem Theme. Zum Tauschen nur die beiden Regeln
+   .cb-root (Text) und .cb-heading (Überschriften) unten um -unity-font-definition ergänzen, z. B.
+     -unity-font-definition: url("project://database/Assets/_Project/UI/Fonts/Inter SDF.asset");
+   ===================================================================================================== */
+
+:root {
+    /* Flächen */
+    --cb-panel: rgba(26, 28, 34, 0.94);
+    --cb-panel-strong: rgba(26, 28, 34, 0.97);
+    --cb-surface: #1C1E24;
+    --cb-surface-2: #14161B;
+    --cb-card: #262932;
+    --cb-card-hover: #2E323C;
+    --cb-border: #343846;
+    --cb-border-soft: #303440;
+
+    /* Text */
+    --cb-text: #ECE9E4;
+    --cb-text-muted: #A9A5B0;
+    --cb-text-secondary: #C9C5CE;
+
+    /* Akzente */
+    --cb-action: #2BB3A3;
+    --cb-action-hover: #5FD3C5;
+    --cb-on-action: #10201E;
+    --cb-accent: #F2A93B;
+    --cb-on-accent: #1C1E24;
+    --cb-warn: #F08A4B;
+    --cb-warn-text: #F5A06A;
+    --cb-warn-surface: #3A2A1E;
+    --cb-warn-border: #6B4426;
+    --cb-ok-surface: #1F3324;
+    --cb-ok-text: #8FD694;
+
+    /* Zonen */
+    --cb-zone-residential: #5DBB63;
+    --cb-zone-commercial: #4A90D9;
+    --cb-zone-industry: #E0A030;
+    --cb-zone-office: #8C6BD1;
+
+    /* Radien */
+    --cb-radius-panel: 12px;
+    --cb-radius-card: 10px;
+    --cb-radius-button: 8px;
+
+    /* Schriftgrößen */
+    --cb-font-xs: 11px;
+    --cb-font-s: 12px;
+    --cb-font-m: 13px;
+    --cb-font-l: 15px;
+}
+
+/* ------------------------------------------------------------ Grundlagen */
+
+.cb-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    color: var(--cb-text);
+    font-size: var(--cb-font-m);
+    /* -unity-font-definition: Inter (s. Kopf) */
+}
+
+.cb-heading {
+    -unity-font-style: bold;
+    /* -unity-font-definition: Manrope (s. Kopf) */
+}
+
+.cb-root Label {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.cb-panel {
+    background-color: var(--cb-panel);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    border-radius: var(--cb-radius-panel);
+}
+
+.cb-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cb-col {
+    flex-direction: column;
+}
+
+.cb-spacer {
+    flex-grow: 1;
+}
+
+.cb-muted {
+    color: var(--cb-text-muted);
+}
+
+.cb-secondary {
+    color: var(--cb-text-secondary);
+}
+
+.cb-text-ok {
+    color: var(--cb-action);
+}
+
+.cb-text-warn {
+    color: var(--cb-warn-text);
+}
+
+.cb-bold {
+    -unity-font-style: bold;
+}
+
+.cb-separator {
+    width: 1px;
+    height: 28px;
+    background-color: var(--cb-border);
+    margin-left: 8px;
+    margin-right: 8px;
+}
+
+.cb-hidden {
+    display: none;
+}
+
+/* ------------------------------------------------------------ Icons (gezeichnet per Painter2D, Farbe = color) */
+
+.cb-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.cb-icon--l {
+    width: 22px;
+    height: 22px;
+}
+
+.cb-icon--s {
+    width: 14px;
+    height: 14px;
+}
+
+/* ------------------------------------------------------------ Knöpfe */
+
+.cb-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-radius: var(--cb-radius-button);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    background-color: var(--cb-card);
+    color: var(--cb-text);
+    margin-left: 3px;
+    margin-right: 3px;
+    -unity-font-style: bold;
+    font-size: var(--cb-font-s);
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-btn:hover {
+    background-color: var(--cb-card-hover);
+}
+
+.cb-btn:active {
+    background-color: var(--cb-surface-2);
+}
+
+.cb-btn.cb-on {
+    border-color: var(--cb-action);
+    color: var(--cb-action);
+}
+
+.cb-btn--primary {
+    background-color: var(--cb-action);
+    border-color: var(--cb-action);
+    color: var(--cb-on-action);
+}
+
+.cb-btn--primary:hover {
+    background-color: var(--cb-action-hover);
+}
+
+.cb-btn--square {
+    width: 32px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.cb-btn > .cb-icon {
+    margin-right: 6px;
+}
+
+.cb-btn--square > .cb-icon {
+    margin-right: 0;
+}
+
+/* Segment (z. B. Spieltempo, Werkzeugmodus): Spur + Knöpfe */
+.cb-segment {
+    flex-direction: row;
+    align-items: center;
+    background-color: var(--cb-surface-2);
+    border-radius: var(--cb-radius-button);
+    padding-left: 2px;
+    padding-right: 2px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    margin-left: 3px;
+    margin-right: 3px;
+}
+
+.cb-seg-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding-left: 11px;
+    padding-right: 11px;
+    margin-left: 2px;
+    margin-right: 2px;
+    border-radius: 6px;
+    color: var(--cb-text-muted);
+    -unity-font-style: bold;
+    font-size: var(--cb-font-s);
+    transition-property: background-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-seg-btn:hover {
+    color: var(--cb-text);
+}
+
+.cb-seg-btn.cb-on {
+    background-color: var(--cb-card);
+    color: var(--cb-action);
+}
+
+.cb-seg-btn--icon {
+    width: 38px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ------------------------------------------------------------ Obere Leiste */
+
+.cb-topbar {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: 14px;
+    height: 60px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.cb-brand {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 14px;
+}
+
+.cb-logo {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--cb-radius-button);
+    background-color: var(--cb-action);
+    color: var(--cb-surface);
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+}
+
+.cb-city-name {
+    font-size: 19px;
+}
+
+.cb-date {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+}
+
+.cb-stat {
+    flex-direction: row;
+    align-items: center;
+    height: 42px;
+    padding-left: 14px;
+    padding-right: 14px;
+    margin-left: 4px;
+    margin-right: 4px;
+    border-radius: var(--cb-radius-button);
+    background-color: var(--cb-card);
+    border-width: 1px;
+    border-color: var(--cb-border);
+}
+
+.cb-stat > .cb-icon {
+    margin-right: 8px;
+}
+
+.cb-stat__label {
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+}
+
+.cb-stat__value {
+    font-size: var(--cb-font-l);
+    -unity-font-style: bold;
+}
+
+/* Konto überzogen / Baustopp */
+.cb-stat__value--warn {
+    color: var(--cb-warn-text);
+}
+
+.cb-stat__extra {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    margin-left: 6px;
+    -unity-font-style: normal;
+}
+
+.cb-icon--action {
+    color: var(--cb-action);
+}
+
+.cb-icon--accent {
+    color: var(--cb-accent);
+}
+
+.cb-chip-warn {
+    flex-direction: row;
+    align-items: center;
+    height: 42px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-left: 4px;
+    margin-right: 4px;
+    border-radius: var(--cb-radius-button);
+    background-color: var(--cb-warn-surface);
+    border-width: 1px;
+    border-color: var(--cb-warn-border);
+    color: var(--cb-warn);
+}
+
+.cb-chip-warn:hover {
+    border-color: var(--cb-warn);
+}
+
+.cb-chip-warn > .cb-icon {
+    margin-right: 6px;
+}
+
+.cb-chip-warn__text {
+    -unity-font-style: bold;
+    font-size: var(--cb-font-m);
+    color: var(--cb-warn-text);
+}
+
+.cb-icon-btn {
+    width: 42px;
+    height: 42px;
+    margin-left: 6px;
+    border-radius: var(--cb-radius-button);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    background-color: var(--cb-card);
+    color: var(--cb-text);
+    align-items: center;
+    justify-content: center;
+    transition-property: background-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-icon-btn:hover {
+    background-color: var(--cb-card-hover);
+}
+
+.cb-icon-btn.cb-on {
+    background-color: var(--cb-accent);
+    border-color: var(--cb-accent);
+    color: var(--cb-on-accent);
+}
+
+/* ------------------------------------------------------------ Linke Ansichtsleiste */
+
+.cb-rail {
+    position: absolute;
+    left: 16px;
+    top: 92px;
+    width: 56px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    align-items: center;
+}
+
+.cb-rail-btn {
+    width: 44px;
+    height: 44px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    border-radius: var(--cb-radius-button);
+    align-items: center;
+    justify-content: center;
+    color: var(--cb-text-secondary);
+    transition-property: background-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-rail-btn:hover {
+    background-color: var(--cb-card);
+}
+
+.cb-rail-btn.cb-on {
+    background-color: var(--cb-accent);
+    color: var(--cb-on-accent);
+}
+
+.cb-rail-sep {
+    width: 32px;
+    height: 1px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    background-color: var(--cb-border);
+}
+
+.cb-overlay-name {
+    position: absolute;
+    left: 84px;
+    top: 92px;
+    height: 36px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 14px;
+    padding-right: 14px;
+    background-color: var(--cb-panel);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    border-radius: var(--cb-radius-button);
+}
+
+.cb-overlay-name__label {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    margin-right: 8px;
+}
+
+.cb-overlay-name__value {
+    font-size: 14px;
+}
+
+/* ------------------------------------------------------------ Bauleiste unten */
+
+.cb-buildbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 16px;
+    align-items: center;
+}
+
+.cb-hint {
+    flex-direction: row;
+    align-items: center;
+    max-width: 1100px;
+    min-height: 32px;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    background-color: var(--cb-panel);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    border-radius: var(--cb-radius-button);
+}
+
+.cb-hint > .cb-icon {
+    margin-right: 8px;
+    color: var(--cb-action);
+}
+
+.cb-hint__text {
+    font-size: var(--cb-font-m);
+    white-space: normal;
+    flex-shrink: 1;
+}
+
+.cb-hint--error {
+    background-color: var(--cb-warn-surface);
+    border-color: var(--cb-warn-border);
+}
+
+.cb-hint--error > .cb-icon {
+    color: var(--cb-warn);
+}
+
+.cb-hint--error > .cb-hint__text {
+    color: var(--cb-warn-text);
+    -unity-font-style: bold;
+}
+
+.cb-build-panel {
+    width: 1040px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 8px;
+    background-color: var(--cb-panel-strong);
+}
+
+.cb-build-panel__header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 4px;
+    padding-right: 4px;
+    margin-bottom: 8px;
+}
+
+.cb-build-panel__title {
+    font-size: var(--cb-font-l);
+}
+
+.cb-build-panel__hint {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+}
+
+.cb-tool-row {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.cb-option-label {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    margin-left: 6px;
+    margin-right: 4px;
+}
+
+.cb-option-value {
+    font-size: var(--cb-font-m);
+    -unity-font-style: bold;
+    min-width: 54px;
+    -unity-text-align: middle-center;
+}
+
+.cb-tiles {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.cb-tile {
+    width: 118px;
+    height: 100px;
+    margin-left: 4px;
+    margin-right: 4px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding-top: 8px;
+    padding-bottom: 6px;
+    padding-left: 4px;
+    padding-right: 4px;
+    align-items: center;
+    border-radius: var(--cb-radius-card);
+    border-width: 2px;
+    border-color: var(--cb-border-soft);
+    background-color: var(--cb-card);
+    transition-property: background-color, border-color;
+    transition-duration: 0.12s;
+}
+
+.cb-tile:hover {
+    background-color: var(--cb-card-hover);
+}
+
+.cb-tile.cb-on {
+    border-color: var(--cb-action);
+}
+
+.cb-tile__swatch {
+    width: 52px;
+    height: 36px;
+    border-radius: var(--cb-radius-card);
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.92);
+    margin-bottom: 6px;
+}
+
+.cb-tile__name {
+    font-size: var(--cb-font-s);
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
+.cb-tile__sub {
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+    -unity-text-align: middle-center;
+    margin-top: 2px;
+}
+
+.cb-tile-sep {
+    width: 1px;
+    height: 84px;
+    margin-left: 6px;
+    margin-right: 6px;
+    margin-top: 12px;
+    background-color: var(--cb-border);
+}
+
+/* Balken (Nachfrage in Zonen-Kacheln) */
+.cb-bar {
+    width: 84px;
+    height: 6px;
+    margin-top: 5px;
+    border-radius: 3px;
+    background-color: var(--cb-border-soft);
+}
+
+.cb-bar__fill {
+    height: 6px;
+    border-radius: 3px;
+    background-color: var(--cb-accent);
+}
+
+.cb-info {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    white-space: normal;
+    margin-top: 6px;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.cb-info-row {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    padding-left: 4px;
+}
+
+.cb-info-row > Label {
+    font-size: var(--cb-font-s);
+    margin-right: 14px;
+}
+
+/* Kategorie-Leiste */
+.cb-catbar {
+    flex-direction: row;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    background-color: var(--cb-panel-strong);
+}
+
+.cb-cat {
+    width: 92px;
+    height: 58px;
+    margin-left: 2px;
+    margin-right: 2px;
+    border-radius: var(--cb-radius-card);
+    align-items: center;
+    justify-content: center;
+    color: var(--cb-text-secondary);
+    transition-property: background-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-cat:hover {
+    background-color: var(--cb-card);
+}
+
+.cb-cat.cb-on {
+    background-color: var(--cb-action);
+    color: var(--cb-on-action);
+}
+
+.cb-cat__label {
+    font-size: var(--cb-font-xs);
+    -unity-font-style: bold;
+    margin-top: 4px;
+    -unity-text-align: middle-center;
+}
+
+.cb-cat--danger.cb-on {
+    background-color: var(--cb-warn);
+    color: var(--cb-on-accent);
+}
+
+/* Schieberegler (Weiche Kante im Gelände-Werkzeug) */
+.cb-slider {
+    width: 140px;
+    margin-left: 4px;
+    margin-right: 4px;
+}
+
+.cb-slider .unity-base-slider__tracker {
+    background-color: var(--cb-surface-2);
+    border-color: var(--cb-border);
+}
+
+.cb-slider .unity-base-slider__dragger {
+    background-color: var(--cb-action);
+    border-color: var(--cb-action);
+}
+
+/* ------------------------------------------------------------ Meldungen (Toasts) oben rechts */
+
+.cb-toasts {
+    position: absolute;
+    top: 92px;
+    right: 16px;
+    width: 340px;
+}
+
+.cb-toast {
+    flex-direction: row;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    background-color: var(--cb-surface);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    border-radius: var(--cb-radius-card);
+    opacity: 1;
+    transition-property: opacity, translate;
+    transition-duration: 0.25s;
+}
+
+.cb-toast--enter {
+    opacity: 0;
+    translate: 24px 0;
+}
+
+.cb-toast--leave {
+    opacity: 0;
+}
+
+.cb-toast--warning {
+    border-color: var(--cb-warn-border);
+}
+
+.cb-toast__badge {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--cb-radius-card);
+    background-color: var(--cb-card);
+    color: var(--cb-action);
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.cb-toast--warning .cb-toast__badge {
+    background-color: #4A3220;
+    color: var(--cb-warn);
+}
+
+.cb-toast__body {
+    flex-shrink: 1;
+    flex-grow: 1;
+}
+
+.cb-toast__title {
+    font-size: 14px;
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.cb-toast__text {
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    white-space: normal;
+    margin-top: 2px;
+}
+
+/* ------------------------------------------------------------ Tooltip */
+
+.cb-tooltip {
+    position: absolute;
+    max-width: 360px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    background-color: var(--cb-surface-2);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    border-radius: var(--cb-radius-button);
+    font-size: var(--cb-font-s);
+    white-space: normal;
+}

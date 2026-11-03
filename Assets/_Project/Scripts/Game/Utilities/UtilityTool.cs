@@ -254,7 +254,7 @@ namespace CityBuilder.Game.Utilities
                 lineRenderer.enabled = false;
                 ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 6f, false);
                 SetLabel($"{f.Type.DisplayName} abreißen", true, SimConvert.ToWorld(f.Position, f.Height + 10f));
-                if (clicked) Utilities.RemoveFacility(f.Id);
+                if (clicked) Utilities.DemolishFacility(f.Id);
                 return;
             }
             ghost.SetActive(false);
@@ -267,7 +267,7 @@ namespace CityBuilder.Game.Utilities
             lineRenderer.SetPosition(0, SimConvert.ToWorld(line.A, Ground(line.A) + offset));
             lineRenderer.SetPosition(1, SimConvert.ToWorld(line.B, Ground(line.B) + offset));
             SetLabel($"{UtilityCatalog.LineName(line.Kind)} abreißen ({line.Length:0} m)", true, SimConvert.ToWorld(p, Ground(p) + WireHeight));
-            if (clicked) Utilities.RemoveLine(line.Id);
+            if (clicked) Utilities.DemolishLine(line.Id);
         }
 
         void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid)
@@ -316,6 +316,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityBuildError.PoleOnWater: return $"Kein Maststandort: Wasser breiter als {UtilitySystem.MaxPoleSpan:0} m Spannweite";
                 case UtilityBuildError.PoleOnFacility: return "Kein Maststandort: Bauwerk im Weg";
                 case UtilityBuildError.PoleOnBuilding: return "Kein Maststandort: Gebäude im Weg (wird nicht abgerissen) – andere Trasse wählen";
+                case UtilityBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 default: return null;
             }
         }

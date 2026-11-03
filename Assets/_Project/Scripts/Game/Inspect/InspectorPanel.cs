@@ -330,7 +330,7 @@ namespace CityBuilder.Game.Inspect
                 link = new GUIStyle(GUI.skin.button) { fontSize = 12, richText = true, alignment = TextAnchor.MiddleLeft, wordWrap = false };
             }
 
-            var area = new Rect(Screen.width - 450f, 10f, 440f, Mathf.Min(Screen.height - 170f, 720f));
+            var area = new Rect(Screen.width - 450f, HudLayout.TopInset, 440f, Mathf.Min(Screen.height - HudLayout.TopInset - HudLayout.BottomInset, 720f));
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
             GUILayout.BeginArea(new Rect(area.x + 10f, area.y + 8f, area.width - 20f, area.height - 16f));

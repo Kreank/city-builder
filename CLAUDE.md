@@ -41,7 +41,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -93,7 +93,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Terraforming** (`TerrainMap.Terraform(TerraformBrush)`): Anheben, Absenken, Glätten (3×3-Mittel), Einebnen auf
   Zielhöhe; Radius, Stärke (max. Δh je Anwendung), weiche Kante. Ändert aktuelle **und** natürliche Höhe (gewollte
   Änderung des Grundgeländes → später gebaute Straßen gelten dort als ebenerdig). Grenzen −12…+150 m.
-  Rückgabe `TerraformResult`: geänderte/gesperrte Punkte, bewegte Erdmenge (m³, für spätere Kosten), Dirty-Rechteck;
+  Rückgabe `TerraformResult`: geänderte/gesperrte Punkte, bewegte Erdmenge (m³) und Kosten (Stadtkasse), Dirty-Rechteck;
   dasselbe Rechteck kommt über `TerrainMap.Changed` (GroundView/RoadNetworkView bauen nur dort neu).
 - **Sperrmaske** `TerrainLocks` (gesetzt von `SimulationWorld` als `TerrainMap.LockQuery`): gesperrt sind alle Straßen
   (auch Brücken/Tröge/Tunnel) bis Fahrbahn + `RoadMargin` und alle Gebäude-Grundstücke + 1 Rasterzelle; danach
@@ -150,6 +150,27 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
   `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
 
+## Spiel-UI (UI Toolkit, Phase 1)
+- `Game/UI/Hud/GameHud` (+ `GameHud.BuildBar.cs`), Begleiter am `RoadTool` (zuletzt angehängt). Erzeugt zur Laufzeit
+  `PanelSettings` (ScaleWithScreenSize, Referenz 1920×1080, Match 0,5) + `UIDocument`; lädt
+  `Resources/UI/CityTheme.tss` (importiert nur `unity-theme://default` → Standardschrift) und `Resources/UI/CityHud.uss`
+  (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
+  Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
+- Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
+  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
+  (Stau, Lärm, Abgas, Strom, Wasser, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
+  Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
+- Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
+  Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
+- Icons: `HudIcon` zeichnet per Painter2D (24er-Raster, Farbe = `color`), keine Bilddateien.
+- Mausblockade: `UiBlocker.RegisterToolkitRoot` → `IsPointerOverUi` prüft zusätzlich `panel.Pick`. Reine Layout-Container
+  haben `PickingMode.Ignore`, nur echte Flächen blockieren. IMGUI-Fenster richten sich nach `HudLayout` (Top/Bottom/LeftInset).
+- Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
+  Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
+- Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
+- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
+  Phase 2: Inspektor als rechtes Panel im neuen Stil (Entwurf `Panels.dc.html`).
+
 ## Inspektor (Info-Modus, Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
   Liest nur. Klick = Strahl gegen Gebäude (Grundstück × `VisualHeight`), Versorgungsbauwerke (Fläche × grobe
@@ -174,7 +195,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 
 ## Strom & Wasser (G3)
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
-  Leistung Strom kW / Wasser m³/h, Kosten/Unterhalt nur Anzeige – es gibt noch keine Stadtkasse), `UtilitySystem` (alle 30 min).
+  Leistung Strom kW / Wasser m³/h, Baukosten/Unterhalt bucht die Stadtkasse ab, s. u.), `UtilitySystem` (alle 30 min).
 - Bauwerke frei platziert und gedreht (`PlanFacility` → `BuildFacility`): nicht auf Straßen/Wasser/anderen Bauwerken,
   Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen,
   Straße durchs Bauwerk reißt es ab. Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
@@ -213,7 +234,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
 - Später: Abwasser/Kläranlage, Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
-  Stadtkasse (Kosten/Unterhalt abbuchen), Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
+  Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
   Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
   Wasserqualität/Verschmutzung flussabwärts. **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
@@ -261,6 +282,48 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
   Inspektor-Feld „Dienste in Reichweite“, Ausbaustufen.
 
+## Stadtkasse (Teil von G5, vorgezogen)
+- `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
+  (alle Zahlen an einem Ort, Platzhalter fürs Balancing), `BudgetCategory`/`TaxKind`, `BudgetPeriod` (Buchungen eines
+  Tages/einer Woche je Kategorie, Beträge ≥ 0, Einnahme/Ausgabe aus der Kategorie).
+- **Tagesabrechnung**: Grundsteuer = bewohnte Haushalte × 40 € × Satz Wohnen; Gewerbe-/Einkommensteuer = besetzte
+  Jobs × Basis (Handel/Mischgebiet 45, Büro 60, Industrie 40 €) × Satz der Zonenart. Unterhalt: Straßen 0,5 % des
+  Neubauwerts je Tag (`RoadBuilder.SegmentValue` = Länge × €/m × Brücken-/Tunnelfaktor → 1 km Stadtstraße 60 €/Tag),
+  freie Leitungen/Rohre 0,5 % je Tag, Versorgungsbauwerke `UpkeepPerDay` aus dem `UtilityCatalog`, weitere
+  Kostenträger über `IUpkeepSource` (`Name`, `WeeklyUpkeep()`, täglich 1/7, Kategorie „Dienste“ mit Aufschlüsselung je
+  Name) – **Dienste (G4) melden sich nur mit `world.Economy.RegisterUpkeep(src)` an**. Nach 7 Tagen wird die Woche
+  abgeschlossen (`History`, max. 52 Wochen, `LastWeek`, `CurrentWeek` inkl. Baukosten, `LastDay`, `EstimateDay()` als
+  Prognose ohne Buchung). Identität: `Net` = `ClosingBalance − OpeningBalance` je Woche.
+- **Steuersätze** je `TaxKind` (Wohnen/Handel/Büro/Industrie): Standard 10 %, 0–30 %, ganze Prozent (`SetTaxRate`,
+  `ChangeTaxRate`). Wirkung über den Hook `CitySystem.DemandModifier` (Faktor auf `Demand` je Zone): beim Standardsatz
+  exakt 1, darunter +2 % je Prozentpunkt, darüber −4 % je Prozentpunkt (min. 0,1); Mischgebiet = Mittel Wohnen/Handel.
+  `MoveInPull` (Zuzug) bleibt bisher unberührt.
+- **Baukosten** über die Schnittstelle `IConstructionBudget` (`CanAfford`/`Spend`/`Refund`), gesetzt als `Budget` an
+  `RoadNetwork`, `TerrainMap` und `UtilitySystem` (null = kostenlos, z. B. reine Netz-Tests). Straßen: `RoadBuilder.Plan`
+  prüft nach den Geometrieregeln (die haben Vorrang) → `RoadBuildError.InsufficientFunds`; `Build`, Doppelbau,
+  Kreisverkehr und Vorlagen buchen den **Planpreis genau einmal** (`RoadBuilder.Charged` hängt die Kasse während des
+  Verbundbaus ab, Teilstücke werden nicht einzeln geprüft/gebucht). Ausbau = `ReplaceCost` (`CheckReplace` prüft Geld).
+  Versorgung: `PlanFacility`/`PlanLine` → `UtilityBuildError.InsufficientFunds`, `Build…` bucht. Terraforming:
+  `TerrainMap.Terraform` prüft vorher gegen die größtmögliche Erdmenge (π(r+Zelle)² × Stärke) und bucht danach
+  Volumen × 0,5 €/m³ (`TerraformResult.Cost`, `.InsufficientFunds`). **Abriss durch den Spieler** (`RoadBuilder.Demolish`,
+  `UtilitySystem.DemolishFacility/-Line`) bringt 25 % zurück; internes Entfernen (`RemoveSegment`, Kreisverkehr räumt
+  innen, Straße durch Bauwerk, Leitung nicht umtrassierbar) bringt nichts.
+- **Kredit = Überziehungsrahmen** 50 000 € (bewusst statt Kredit mit Laufzeit: kein Verwaltungsaufwand, überbrückt die
+  Startphase; echte Kredite später): Bauen erlaubt, solange der Kontostand danach ≥ −50 000 € ist. Zinsen 0,2 % je Tag
+  auf das Minus. **Konsequenz:** 28 Tage am Stück im Minus → `ConstructionFrozen` (Baustopp: keine Neubauten), bis der
+  Kontostand wieder ≥ 0 ist. Wachstum der Zonen (private Bauherren) läuft weiter.
+- **Sandbox** `WorldSettings.UnlimitedFunds` (Standard **an**, Startkapital `StartingFunds` 100 000 €): alles wird
+  gebucht, aber nie blockiert, keine Zinsen, kein Baustopp. Entscheidung: Die vielen bestehenden Tests/der Rauchtest bauen
+  ohne an Geld zu denken und bleiben so unverändert; das Spiel (`SimulationRunner`, Inspector „Stadtkasse“) schaltet die
+  echte Kasse ein. Wirtschafts-Tests setzen `UnlimitedFunds = false`.
+- Darstellung: `Game/Economy/BudgetPanel` (IMGUI, Taste **M**, verschiebbar; Begleiter am `RoadTool`): Kontostand,
+  Verfügbar/Überzogen/Baustopp, Tagesprognose, letzte und laufende Woche je Kategorie, Dienste je Name, Steuersätze ±
+  mit Nachfragefaktor, Saldo-Balken der letzten 12 Wochen. Fehlertexte „Zu wenig Geld in der Stadtkasse (M)“ in
+  Straßen-/Versorgungswerkzeug, Terraforming zeigt Kosten je Strich.
+- Später: Gebühren (ÖPNV, Maut), Einnahmen aus Handel/Export (G5), Steuern nach Einkommen/Bildung/Bodenwert (G6),
+  Steuersatz wirkt auf Zuzug/Zufriedenheit, Kredite mit Laufzeit/Tilgung, Budgetregler je Dienst, Bauwerks-Abriss
+  anteilig nach Alter, Speicherstand.
+
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
   in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
@@ -306,7 +369,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    (Fahrzeuge, Laternen, EU-Ampel, Bäume)
    - ✅ Terraforming (Simulation + Tests, Sperre unter Straßen/Gebäuden) und Werkzeug (Leiste „Gelände“)
    - ✅ Gelände-Farben per Vertex-Farben + eigenem URP-Shader (im Editor noch nicht visuell abgenommen)
-   - Später: Kosten fürs Terraforming (Erdmenge ist vorhanden), Bewuchs wächst auf bearbeitetem Boden nach,
+   - ✅ Kosten fürs Terraforming (Erdmenge × Preis, Stadtkasse)
+   - Später: Bewuchs wächst auf bearbeitetem Boden nach,
      Rückgängig, Gelände unter Brücken/über Tunneln freigeben (mit Durchfahrts-/Überdeckungsgrenze)
 4. Gebäude & Wirtschaft (wie Cities: Skylines, aber tiefer – Warenketten als Vorstufe zum Handel). Entscheidungen:
    **einzelne Bürger** als Agenten (Alter, Bildung, Wohnung, Job, Bedürfnisse, echte Fahrten),
@@ -317,13 +381,16 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Später: Geburten/Auszug erwachsener Kinder, Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
-     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht. Später: Abwasser, schwankende Erzeugung, Kosten abbuchen
+     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse. Später: Abwasser, schwankende Erzeugung
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
      (im Editor noch nicht visuell abgenommen). Später: Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Brände/Kriminalität
      als Ereignisse, Dienstfahrzeuge
    - G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
+     - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
+       Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
+       Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
    - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
