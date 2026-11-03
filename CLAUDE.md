@@ -29,6 +29,34 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Vorlieben, Sprüche), die als Daten mitgeliefert werden – im Spiel keine KI-Kosten, offline lauffähig.
 - Simulation bleibt deterministisch (Multiplayer, Replays, Tests).
 
+## Konzept: Wirtschaft, Welt & Handel (Leitlinie für G5, G6, Etappen 5–9)
+- **Güter statt Geldströme:** Wirtschaft = physische Güter mit Lagerbestand. Rohstoffe (Getreide, Vieh, Holz, Erz,
+  Kohle, Erdöl, Sand/Kies) → Zwischenprodukte (Mehl, Bretter, Stahl, Kunststoff, Glas, Zement) → Endprodukte
+  (Lebensmittel, Kleidung, Möbel, Elektronik, Baustoffe, Fahrzeuge). Produktion über **Rezepte** (Eingänge → Ausgänge
+  je Tag, Arbeitskräfte je Bildungsstufe, Strom/Wasser). Güterkatalog datengetrieben, erweiterbar.
+- **Standort zählt:** Rohstoffgewinnung braucht Vorkommen aus der Welt-/Bodenkarte (Fruchtbarkeit, Erz, Öl, Wald);
+  Vorkommen sind endlich bzw. regenerieren (Wald, Boden). Klima bestimmt Ernte und Bedarf (Heizen, Kühlen).
+- **Logistik ist Spiel:** Güter liegen in Gebäudelagern und werden per Fahrzeug transportiert (Lkw über das
+  `TrafficSystem`, später Zug/Schiff/Flugzeug). Transportkosten = Zeit × Kostensatz. Stau kostet also Geld.
+- **Märkte:** je Gut ein **lokaler Preis** aus Angebot/Nachfrage (Lagerbestand gegen Zielbestand, träge angepasst)
+  und ein **Weltmarktpreis** an den Außenanschlüssen. Import, wenn lokal teurer als Welt + Transport; Export umgekehrt.
+  Firmen (Industrie-/Gewerbegebäude) rechnen mit Erlös − Einkauf − Löhnen → Gewinn steuert Wachstum/Verfall und
+  Nachfrage der Zonen (ersetzt pauschale Nachfrage schrittweise).
+- **Haushalte:** Einkommen aus Lohn/Rente; Konsum nach **Bedarfsstufen** (wie Anno: Grundbedarf → Komfort → Luxus),
+  höhere Stufen erst mit Einkommen + Zufriedenheit; Kaufkraft treibt den Einzelhandel; unerfüllter Konsum senkt das
+  Bedürfnis „Einkauf“.
+- **Staat:** Steuern (Grund/Einkommen/Gewerbe), später Zölle, Subventionen, Verordnungen; Bodenwert (G6) als
+  Spiegel der Standortqualität und Steuerbasis.
+- **Welt (Etappe 5):** fiktive Erde mit Regionen (Klima, Relief, Böden, Bodenschätze) → **komparative Vorteile**:
+  Länder spezialisieren sich (Tourismus, Rohstoffe, Technik). Jede Stadtkarte ist ein Ausschnitt einer Region.
+- **Detailstufen (LOD-Simulation):** die eigene, betrachtete Stadt läuft voll (einzelne Bürger, Fahrzeuge, Lager);
+  andere Städte und Länder laufen **aggregiert** (Volkswirtschaft je Stadt: Bevölkerung, Produktion je Gut,
+  Bedarf, Lager, Preise) – so bleibt eine ganze Welt rechenbar. Wechselt man in eine Stadt, wird sie detailliert.
+- **Handel & Politik (7–9):** Spieler und NPC-Länder nutzen **dieselben Schnittstellen** (Angebote, Aufträge,
+  Verträge mit Laufzeit, Liefermenge, Preis). Asynchron: Aufträge haben Lieferzeiten über echte Transportwege.
+  NPC-Länder = Spiel-KI (Utility AI wie bei Bürgern, keine Sprach-KI zur Laufzeit).
+- Alles deterministisch (geseedeter RNG), Commands für Spieleraktionen (Multiplayer/Replays).
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
