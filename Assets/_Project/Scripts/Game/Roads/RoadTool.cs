@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Utility }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -151,7 +151,21 @@ namespace CityBuilder.Game.Roads
             zoneView = Ensure<ZoneView>();
             zoneView.Init(runner, previewMaterial);
             if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
+
+            // --- G3 Strom & Wasser: Werkzeug (Modus Utility), Bauwerke/Leitungen, Info-Ansicht, Netz-Fenster
+            Ensure<CityBuilder.Game.Utilities.UtilityTool>().Init(this, previewMaterial);
+            var utilityOverlay = Ensure<CityBuilder.Game.Utilities.UtilityOverlayView>();
+            if (litBase != null)
+            {
+                Ensure<CityBuilder.Game.Utilities.UtilityView>().Init(runner, litBase, ground);
+                utilityOverlay.Init(runner, litBase, previewMaterial);
+            }
+            Ensure<CityBuilder.Game.Utilities.UtilityPanel>().Init(this, utilityOverlay);
+            // --- Ende G3
         }
+
+        /// <summary>Unterirdisch-Ansicht erzwingen (G3: Wasserrohre verlegen).</summary>
+        public bool ForceUnderground { get; set; }
 
         ZoneView zoneView;
 
@@ -247,7 +261,7 @@ namespace CityBuilder.Game.Roads
             if (kb != null) HandleKeys(kb);
             SnapActive = SnapEnabled && !(kb != null && kb.ctrlKey.isPressed);
             if (ground != null)
-                ground.UndergroundForced = IsBuildMode &&
+                ground.UndergroundForced = ForceUnderground || IsBuildMode &&
                     (BuildHeight < -0.1f || (step != Step.Start && startHeight - GroundAt(startPoint) < -0.1f));
             if (mouse.rightButton.wasPressedThisFrame) { Cancel(); if (CurrentMode == Mode.Traffic) ClearSelection(); }
 
@@ -272,6 +286,7 @@ namespace CityBuilder.Game.Roads
             switch (CurrentMode)
             {
                 case Mode.Zone: UpdateZone(raw); break;
+                case Mode.Utility: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G3: UtilityTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;

@@ -13,7 +13,7 @@ namespace CityBuilder.Game.UI
     /// </summary>
     public sealed class RoadToolbar : MonoBehaviour
     {
-        enum Group { City, Highway, Interchanges, Traffic, Zones }
+        enum Group { City, Highway, Interchanges, Traffic, Zones, Utilities }
 
         static readonly Color Selected = new Color(0.45f, 0.75f, 1f);
 
@@ -36,6 +36,7 @@ namespace CityBuilder.Game.UI
                 if (tool.CurrentMode == RoadTool.Mode.Traffic) group = Group.Traffic;
                 else if (tool.CurrentMode == RoadTool.Mode.Template) group = Group.Interchanges;
                 else if (tool.CurrentMode == RoadTool.Mode.Zone) group = Group.Zones;
+                else if (tool.CurrentMode == RoadTool.Mode.Utility) group = Group.Utilities; // G3
                 else if (group != Group.Traffic && group != Group.Interchanges && group != Group.Zones) group = GroupOf(tool.SelectedType);
                 else if (tool.IsBuildMode) group = GroupOf(tool.SelectedType);
             }
@@ -52,6 +53,7 @@ namespace CityBuilder.Game.UI
             if (Button("Autobahnknoten", group == Group.Interchanges, 130f)) SelectGroup(Group.Interchanges);
             if (Button("Verkehr (T)", group == Group.Traffic, 110f)) SelectGroup(Group.Traffic);
             if (Button("Zonen (Z)", group == Group.Zones, 100f)) SelectGroup(Group.Zones);
+            if (Button("Versorgung (L)", group == Group.Utilities, 120f)) SelectGroup(Group.Utilities); // G3
             GUILayout.FlexibleSpace();
             GUILayout.Label(tool.SnapEnabled ? "Einrasten: an (G)" : "Einrasten: aus (G)", GUILayout.Width(125f));
             GUILayout.EndHorizontal();
@@ -63,6 +65,7 @@ namespace CityBuilder.Game.UI
                 case Group.Interchanges: InterchangeRows(); break;
                 case Group.Traffic: TrafficRows(); break;
                 case Group.Zones: ZoneRows(); break;
+                case Group.Utilities: { var ut = GetComponent<CityBuilder.Game.Utilities.UtilityTool>(); if (ut != null) ut.DrawToolbarRows(); break; } // G3
             }
             GUILayout.EndArea();
         }
@@ -75,6 +78,7 @@ namespace CityBuilder.Game.UI
                 case Group.Interchanges: tool.SelectTemplate(tool.TemplateKind); break;
                 case Group.Zones: tool.SelectZone(tool.SelectedZone); break;
                 case Group.Traffic: tool.SetMode(RoadTool.Mode.Traffic); break;
+                case Group.Utilities: tool.SetMode(RoadTool.Mode.Utility); break; // G3
                 default:
                     var first = TypesOf(g).FirstOrDefault();
                     if (first != null && GroupOf(tool.SelectedType) != g) tool.SelectType(first);
