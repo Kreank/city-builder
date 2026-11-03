@@ -55,6 +55,8 @@ namespace CityBuilder.Simulation.Services
         public int FromBuildingId { get; internal set; }
         /// <summary>Weitere Halte der Tour (Gebäude-Ids, Reihenfolge = Fahrtreihenfolge).</summary>
         internal readonly System.Collections.Generic.List<int> Stops = new System.Collections.Generic.List<int>();
+        /// <summary>Noch offene Halte nach dem aktuellen Ziel.</summary>
+        public int RemainingStops => Stops.Count;
         /// <summary>Verkehrszeit (s), bis zu der das Fahrzeug am Halt steht.</summary>
         public double WorkUntil { get; internal set; }
         /// <summary>Kalender-Tick, ab dem es wieder ausrücken darf.</summary>

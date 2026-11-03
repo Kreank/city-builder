@@ -88,6 +88,11 @@ namespace CityBuilder.Game.UI.Hud
                 case "power_solar": return "Solarpark";
                 case "water_pump": return "Pumpe (Ufer)";
                 case "water_tower": return "Wasserturm";
+                // --- Energie erweitert
+                case "power_biogas": return "Biogas";
+                case "power_hydro": return "Wasserkraft";
+                case "power_offshore_wind": return "Offshore-Wind";
+                case "power_battery": return "Batteriespeicher";
                 default: return t.DisplayName;
             }
         }

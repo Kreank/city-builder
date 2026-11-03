@@ -53,6 +53,9 @@ namespace CityBuilder.Editor
             { "CoalPlant", "power_coal" }, { "GasPlant", "power_gas" }, { "WindTurbine", "power_wind" },
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
             { "NuclearPlant", "power_nuclear" }, { "Services/SewagePlant", "sewage_plant" }, { "Substation", "power_substation" },
+            // Eigene Assets 2: Energie erweitert (Models/Energy)
+            { "Energy/BiogasPlant", "power_biogas" }, { "Energy/HydroDam", "power_hydro" }, { "Energy/OffshoreWind", "power_offshore_wind" },
+            { "Energy/BatteryStorage", "power_battery" },
         };
 
         /// <summary>Dienst-Id → Dateinamen (Services, Leisure, Landmarks; erster vorhandener gilt).</summary>
@@ -93,6 +96,13 @@ namespace CityBuilder.Editor
             ("Transport/MetroEntrance", "U-Bahn (Roadmap: ÖPNV)"),
             ("Transport/TrainStation", "Bahn (Roadmap: S-Bahn/Fernbahn)"),
             ("Infrastructure/Drawbridge", "Klapp-/Zugbrücken (Roadmap: Schifffahrt)"),
+            // --- Eigene Assets 2: Taxi und Gelände-Kacheln (Entscheidungen s. docs/Modell-Konvention.md)
+            ("Vehicles/Taxi", "Taxi (Taxi-Depot + Taxi als Verkehrsmittel der Bürger, Roadmap: ÖPNV)"),
+            ("Terrain/Cliff_Corner", "Gelände-Kachelraster: Klippen-Ecke passt nur an rechtwinklige Kanten – das Gelände ist eine stetige Höhenkarte (Cliff_Straight steht an steilen Hängen)"),
+            ("Terrain/Cliff_Waterfall", "Flüsse mit Gefälle/Stufen: der erzeugte Fluss hat kein Gefälle (Bett überall gleich tief)"),
+            ("Terrain/Hill", "keine Verwendung geplant – passt nicht zum prozeduralen Gelände: Hügel entstehen aus der Höhenkarte (TerrainMap/Terraforming); ein Hügel-Modell würde Straßen/Gebäude/Gelände durchdringen"),
+            ("Terrain/Pond", "keine Verwendung geplant – passt nicht zum prozeduralen Gelände: Wasser ist jede Stelle unter dem Wasserspiegel (Terraforming „Absenken“ macht Teiche mit Simulation); ein Modell hätte Wasser ohne Wirkung"),
+            ("Terrain/River_", "keine Verwendung geplant – passt nicht zum prozeduralen Gelände: der Fluss ist Teil der Höhenkarte (Breite/Lauf aus der Startregion, Wasserqualität, Brücken)"),
         };
 
         /// <summary>Requisiten nach Name → Aufstellort („sidewalk“, „park“, „both“).</summary>
@@ -147,6 +157,32 @@ namespace CityBuilder.Editor
                 default: return name.ToLowerInvariant();
             }
         }
+
+        // --- Eigene Assets 2: Fahrzeuge (Models/Vehicles) → AssetCatalog (Busse, Lieferwagen, Dienstfahrzeuge) und Felsklippen
+        /// <summary>Fahrzeug nach Name → Verwendung.</summary>
+        public static string VehicleUse(string name)
+        {
+            switch (name)
+            {
+                case "Bus": return "bus";
+                case "DeliveryVan": return "delivery_van";
+                case "GarbageTruck": return "garbage_truck";
+                case "PoliceCar": return "police_car";
+                case "FireTruck": return "fire_truck";
+                case "Ambulance": return "ambulance";
+                case "Taxi": return "taxi";
+                default: return name.ToLowerInvariant();
+            }
+        }
+
+        /// <summary>Fahrzeug-Verwendungen mit Funktion: Linienbus, kleiner Lieferwagen (Einzelhandel), Dienstfahrzeuge.</summary>
+        public static readonly HashSet<string> VehicleUses = new HashSet<string>
+            { "bus", "delivery_van", "garbage_truck", "police_car", "fire_truck", "ambulance" };
+        /// <summary>Dienstfahrzeuge (Name im AssetCatalog = Modellname der Simulation, <c>ServiceVehicleRules.ModelName</c>).</summary>
+        public static readonly HashSet<string> ServiceVehicleUses = new HashSet<string> { "garbage_truck", "police_car", "fire_truck", "ambulance" };
+        /// <summary>Felsen-Verwendung „cliff“: Felsklippe an steilen Hängen (NatureDetailView), sonst normaler Felsen.</summary>
+        public const string CliffUse = "cliff";
+        // --- Ende Eigene Assets 2
 
         /// <summary>Verwendungen, die eine View im Spiel zeichnet (Rest = „wartet auf Funktion“).</summary>
         public static readonly HashSet<string> AgricultureUses = new HashSet<string>
@@ -218,6 +254,7 @@ namespace CityBuilder.Editor
                 if (d.Role == OwnModelRoles.Agriculture && string.IsNullOrEmpty(d.Use)) AgricultureRule(d);
                 if (d.Role == OwnModelRoles.Infrastructure && string.IsNullOrEmpty(d.Use)) d.Use = InfrastructureUse(d.Name);
                 if (d.Role == OwnModelRoles.Prop && string.IsNullOrEmpty(d.Placement)) d.Placement = PropPlacement(d.Name);
+                if (d.Role == OwnModelRoles.Vehicle && string.IsNullOrEmpty(d.Use)) d.Use = VehicleUse(d.Name); // Eigene Assets 2
                 if (d.Role == OwnModelRoles.Building && string.IsNullOrEmpty(d.Zone) && Zones.Contains(d.Folder.Replace("Buildings/", "")))
                     d.Zone = d.Folder.Replace("Buildings/", "");
                 return;
@@ -256,6 +293,13 @@ namespace CityBuilder.Editor
                 case "People": d.Role = OwnModelRoles.Person; return;
                 case "Agriculture": d.Role = OwnModelRoles.Agriculture; AgricultureRule(d); return;
                 case "Infrastructure": d.Role = OwnModelRoles.Infrastructure; d.Use = InfrastructureUse(d.Name); return;
+                // --- Eigene Assets 2: Fahrzeuge und Gelände-Deko (Taxi/Gelände-Kacheln stehen oben in Waiting)
+                case "Vehicles": d.Role = OwnModelRoles.Vehicle; d.Use = VehicleUse(d.Name); return;
+                case "Terrain":
+                    if (d.Name.StartsWith("Cliff_Straight")) { d.Role = OwnModelRoles.Rock; d.Use = CliffUse; return; }
+                    if (d.Name.StartsWith("Rock")) { d.Role = OwnModelRoles.Rock; return; }
+                    break;
+                // --- Ende Eigene Assets 2
             }
             if (d.Role == null)
             {

@@ -31,6 +31,19 @@ namespace CityBuilder.Game.Assets
         public ModelEntry[] Trucks = new ModelEntry[0];
         public ModelEntry[] Buses = new ModelEntry[0];
         public ModelEntry[] Trams = new ModelEntry[0];
+        // --- Eigene Assets 2 (Models/Vehicles): kleine Lieferwagen (Einzelhandel, kleine Mengen) und Dienstfahrzeuge
+        // (Name = Modellname: GarbageTruck, PoliceCar, FireTruck, Ambulance – s. ServiceVehicleRules.ModelName)
+        public ModelEntry[] Vans = new ModelEntry[0];
+        public ModelEntry[] ServiceVehicles = new ModelEntry[0];
+
+        /// <summary>Dienstfahrzeug-Modell nach Name oder null (→ Platzhalter).</summary>
+        public ModelEntry ServiceVehicle(string name)
+        {
+            if (ServiceVehicles == null) return null;
+            foreach (var e in ServiceVehicles) if (e != null && e.Mesh != null && e.Name == name) return e;
+            return null;
+        }
+        // --- Ende Eigene Assets 2
         public ModelEntry[] StreetLamps = new ModelEntry[0];
         public ModelEntry[] TrafficLights = new ModelEntry[0];
         public ModelEntry[] Trees = new ModelEntry[0];

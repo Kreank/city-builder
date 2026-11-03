@@ -159,6 +159,7 @@ namespace CityBuilder.Game.Utilities
 
         static Color PipeColor(UtilityLineType t) =>
             t == UtilityCatalog.UndergroundCable ? new Color(0.95f, 0.55f, 0.1f)
+            : t == UtilityCatalog.SubseaCable ? new Color(0.75f, 0.12f, 0.1f) // Energie erweitert: Hochspannungs-Seekabel
             : t.Kind == UtilityKind.Sewage ? new Color(0.5f, 0.36f, 0.2f) : new Color(0.2f, 0.5f, 0.95f);
         // --- Ende
 
@@ -222,10 +223,49 @@ namespace CityBuilder.Game.Utilities
 
             var concrete = new Color(0.62f, 0.61f, 0.58f);
             float w = f.Type.Width, d = f.Type.Depth;
-            Box(root, new Vector3(0f, 0.15f, 0f), new Vector3(w, 0.3f, d), concrete * 0.9f);
+            if (f.Type.Site != FacilitySite.Sea) // Energie erweitert: keine Betonplatte auf dem Meer
+                Box(root, new Vector3(0f, 0.15f, 0f), new Vector3(w, 0.3f, d), concrete * 0.9f);
 
             switch (f.Type.Id)
             {
+                // --- Energie erweitert: Platzhalter, bis die Modelle aus Models/Energy im OwnModelCatalog liegen
+                case "power_offshore_wind":
+                {
+                    var white = new Color(0.93f, 0.93f, 0.93f);
+                    foreach (var at in UnitOffsets(f.Type))
+                    {
+                        Cyl(root, at + new Vector3(0f, 4f, 0f), 3f, 8f, new Color(0.95f, 0.8f, 0.1f)); // Übergangsstück
+                        Cyl(root, at + new Vector3(0f, 45f, 0f), 1.8f, 82f, white);
+                        Box(root, at + new Vector3(0f, 86f, 1f), new Vector3(3.5f, 3.5f, 8f), white);
+                        var rotor = new GameObject("Rotor").transform;
+                        rotor.SetParent(root, false);
+                        rotor.localPosition = at + new Vector3(0f, 86f, -3.5f);
+                        for (int i = 0; i < 3; i++)
+                        {
+                            var blade = new GameObject("Blade").transform;
+                            blade.SetParent(rotor, false);
+                            blade.localRotation = Quaternion.Euler(0f, 0f, i * 120f);
+                            Box(blade, new Vector3(0f, 12f, 0f), new Vector3(1.6f, 24f, 0.4f), white);
+                        }
+                        rotors.Add(rotor);
+                    }
+                    break;
+                }
+                case "power_hydro":
+                    Box(root, new Vector3(0f, 7f, 0f), new Vector3(w, 14f, 8f), concrete);                       // Wehr quer zum Fluss
+                    Box(root, new Vector3(0f, 5f, d * 0.25f), new Vector3(w * 0.35f, 10f, 14f), new Color(0.7f, 0.68f, 0.62f)); // Krafthaus flussab
+                    break;
+                case "power_battery":
+                    for (int i = 0; i < 6; i++)
+                        Box(root, new Vector3(-w * 0.5f + 3f + (i % 3) * (w - 6f) / 2f, 1.5f, i < 3 ? -4f : 4f), new Vector3(6f, 3f, 2.5f), new Color(0.85f, 0.87f, 0.9f));
+                    break;
+                case "power_biogas":
+                    Cyl(root, new Vector3(-8f, 4f, -4f), 8f, 8f, new Color(0.35f, 0.45f, 0.3f));
+                    Part(root, sphere, new Vector3(-8f, 8f, -4f), Quaternion.identity, new Vector3(16f, 7f, 16f), new Color(0.88f, 0.85f, 0.7f));
+                    Cyl(root, new Vector3(10f, 4f, -4f), 7f, 8f, new Color(0.35f, 0.45f, 0.3f));
+                    Box(root, new Vector3(6f, 3f, 10f), new Vector3(14f, 6f, 8f), new Color(0.7f, 0.7f, 0.68f));
+                    break;
+                // --- Ende Energie erweitert
                 case "power_coal":
                     Box(root, new Vector3(-6f, 7f, 4f), new Vector3(28f, 14f, 18f), new Color(0.55f, 0.35f, 0.28f));
                     Box(root, new Vector3(13f, 11f, 4f), new Vector3(12f, 22f, 14f), new Color(0.5f, 0.5f, 0.52f));
@@ -384,7 +424,35 @@ namespace CityBuilder.Game.Utilities
 
             var rotor = FindChild(go.transform, "Rotor");
             if (rotor != null) rotors.Add(rotor);
+            // --- Energie erweitert: mehrere Anlagen auf der Grundfläche (Offshore-Windpark: 4 Windräder im Raster)
+            if (f.Type.Units > 1)
+            {
+                var offsets = UnitOffsets(f.Type);
+                go.transform.localPosition = offsets[0];
+                for (int i = 1; i < offsets.Count; i++)
+                {
+                    var copy = Instantiate(go, root, false);
+                    copy.name = prefab.name;
+                    copy.transform.localPosition = offsets[i];
+                    var r = FindChild(copy.transform, "Rotor");
+                    if (r != null) rotors.Add(r);
+                }
+            }
+            // --- Ende Energie erweitert
             return true;
+        }
+
+        /// <summary>Energie erweitert: Lage der Anlagen eines Bauwerks mit <see cref="UtilityFacilityType.Units"/> &gt; 1 (Raster, lokal).</summary>
+        static List<Vector3> UnitOffsets(UtilityFacilityType t)
+        {
+            var list = new List<Vector3>();
+            int cols = Mathf.CeilToInt(Mathf.Sqrt(t.Units)), rows = Mathf.CeilToInt(t.Units / (float)cols);
+            for (int i = 0; i < t.Units; i++)
+            {
+                int cx = i % cols, cz = i / cols;
+                list.Add(new Vector3((cx - (cols - 1) * 0.5f) * t.Width / cols, 0f, (cz - (rows - 1) * 0.5f) * t.Depth / rows));
+            }
+            return list;
         }
 
         static Transform FindChild(Transform t, string name)

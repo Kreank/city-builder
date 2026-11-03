@@ -26,7 +26,7 @@ namespace CityBuilder.Game.Utilities
         /// Werkzeug. <see cref="PowerLine"/> = Freileitung im Ortsnetz (Name bleibt für bestehende Aufrufer),
         /// SewagePipe: Abwasser (G3 erweitert); HighVoltageLine/PowerCable/AlongRoads: Netze selbst verlegt.
         /// </summary>
-        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove, SewagePipe, HighVoltageLine, PowerCable, AlongRoads }
+        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove, SewagePipe, HighVoltageLine, PowerCable, AlongRoads, SubseaCable /* Energie erweitert */ }
 
         /// <summary>Höhe der Leiterseile über Gelände (Vorschau, Freileitung alt) bzw. Rohrtiefe darunter.</summary>
         public const float WireHeight = 12f;
@@ -55,6 +55,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityAction.PowerCable: return UtilityCatalog.UndergroundCable;
                 case UtilityAction.WaterPipe: return UtilityCatalog.WaterPipe;
                 case UtilityAction.SewagePipe: return UtilityCatalog.SewerPipe;
+                case UtilityAction.SubseaCable: return UtilityCatalog.SubseaCable; // Energie erweitert
                 default: return null;
             }
         }
@@ -300,6 +301,13 @@ namespace CityBuilder.Game.Utilities
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°";
             string power = t.IsSubstation ? $"Umspannkapazität {t.Capacity / 1000f:0.#} MW" : $"{t.Capacity:0} {UtilityCatalog.Unit(t.Kind)}";
             string info = $"{t.DisplayName} · {power} · {t.Cost:0} € (+{t.UpkeepPerDay:0} €/Tag) · {turn}";
+            // --- Energie erweitert: Standortleistung (Wasserkraft), Speicher, Offshore, Biogas
+            if (t.Output == OutputModel.Hydro && plan.Hydro.Width > 0f)
+                info += $" · Standort: Fluss {plan.Hydro.Width:0} m breit, Abfluss {plan.Hydro.Flow:0} m³/s, Fallhöhe {plan.Hydro.Head:0.0} m → {plan.Rated / 1000f:0.0} MW";
+            if (t.IsStorage) info += $" · {t.StorageKwh / 1000f:0} MWh · lädt bei Überschuss, liefert bei Unterdeckung";
+            if (t.Site == FacilitySite.Sea) info += " · nur im Meer · Hochspannungs-Seekabel zum Umspannwerk an Land";
+            if (t.Output == OutputModel.Biogas) info += $" · Rohstoff aus Bauernhöfen im Umkreis {UtilitySystem.BiogasFeedRadius / 1000f:0} km";
+            // --- Ende Energie erweitert
             if (t.IsSubstation) info += " · Hochspannung an einen Rand, Ortsnetz an einen anderen";
             else if (t.Kind == UtilityKind.Power) info += t.FeedsLocalGrid ? " · speist ins Ortsnetz oder in die Hochspannung" : " · Hochspannung zum Umspannwerk verlegen";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
@@ -374,6 +382,8 @@ namespace CityBuilder.Game.Utilities
                 return "vom Kraftwerk zum Umspannwerk · große Masten, keine Hausanschlüsse";
             if (t == UtilityCatalog.OverheadLine)
                 return $"Ortsnetz vom Umspannwerk entlang der Straße · Masten neben der Straße brauchen Platz · Gebäude ≤ {reach:0} m angeschlossen";
+            if (t == UtilityCatalog.SubseaCable) // Energie erweitert
+                return "Hochspannung ohne Masten: durchs Meer (Offshore-Windpark → Umspannwerk an Land) oder als Erdkabel unter Straßen · keine Hausanschlüsse";
             if (t == UtilityCatalog.UndergroundCable)
                 return $"Ortsnetz unter dem Gehweg (teurer, kein Platzbedarf) · Gebäude ≤ {reach:0} m angeschlossen";
             if (t.Kind == UtilityKind.Sewage)
@@ -548,6 +558,10 @@ namespace CityBuilder.Game.Utilities
                 case UtilityBuildError.PoleOnBuilding: return "Kein Maststandort: Gebäude im Weg (wird nicht abgerissen) – Erdkabel oder andere Trasse";
                 case UtilityBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 case UtilityBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {UtilitySystem.RoadReach:0} m";
+                // --- Energie erweitert
+                case UtilityBuildError.NeedsRiver: return "Nur im Fluss (Mitte im fließenden Wasser, nicht im Meer) – das Wehr richtet sich quer zum Fluss aus";
+                case UtilityBuildError.NeedsSea: return $"Nur im offenen Meer (ganze Fläche im Wasser, mind. {UtilitySystem.SeaMinDepth:0} m tief, weg von der Küste)";
+                case UtilityBuildError.NoHydroSite: return $"Kein Wasserkraft-Standort: Ufer zu niedrig für den Aufstau (Fallhöhe mind. {UtilitySystem.HydroMinHead:0} m) oder Fluss zu schmal/breit";
                 default: return null;
             }
         }
@@ -590,6 +604,7 @@ namespace CityBuilder.Game.Utilities
             if (Button("Hochspannung", Active && Current == UtilityAction.HighVoltageLine, 105f)) Select(UtilityAction.HighVoltageLine);
             if (Button("Freileitung", Active && Current == UtilityAction.PowerLine, 90f)) Select(UtilityAction.PowerLine);
             if (Button("Erdkabel", Active && Current == UtilityAction.PowerCable, 80f)) Select(UtilityAction.PowerCable);
+            if (Button("Seekabel", Active && Current == UtilityAction.SubseaCable, 80f)) Select(UtilityAction.SubseaCable); // Energie erweitert
             if (Button("Wasserrohr", Active && Current == UtilityAction.WaterPipe, 95f)) Select(UtilityAction.WaterPipe);
             if (Button("Abwasserkanal", Active && Current == UtilityAction.SewagePipe, 110f)) Select(UtilityAction.SewagePipe); // G3 erweitert
             if (Button("Entlang Straßen", Active && Current == UtilityAction.AlongRoads, 115f)) SelectAlong(AlongType);
