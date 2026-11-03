@@ -42,6 +42,7 @@ namespace CityBuilder.Game.Zoning
         readonly Matrix4x4[] buffer = new Matrix4x4[1023];
         int builtVersion = -1;
         bool anyUnderConstruction;
+        FarmView farms; // Eigene Assets
 
         /// <summary>
         /// Deutliche Zonenfarben (kräftige Platte, getönte Platzhalter) – automatisch an, solange das
@@ -142,6 +143,11 @@ namespace CityBuilder.Game.Zoning
                 plateList.Add(Matrix4x4.TRS(basePos + Vector3.up * (PlateTop - PlateDepth * 0.5f), look,
                     new Vector3(b.Width * 0.96f, PlateDepth, b.Depth * 0.96f)));
 
+                // --- Eigene Assets: Bauernhöfe (Landwirtschafts-Firma) zeichnet die FarmView als Hof/Felder je Jahreszeit
+                if (farms == null) farms = GetComponent<FarmView>();
+                if (farms != null && farms.Handles(b)) { visualHeights[b.Id] = farms.VisualHeight(b); continue; }
+                // --- Ende Eigene Assets
+
                 if (model != null)
                 {
                     // Modell ans Grundstück anpassen: um 0° oder 90° gedreht, je nachdem was besser passt
@@ -175,6 +181,16 @@ namespace CityBuilder.Game.Zoning
         static ModelEntry PickForLevel(ModelEntry[] list, int variant, int level)
         {
             if (!AssetCatalog.Has(list) || list.Length < 2) return AssetCatalog.Pick(list, variant);
+            // --- Eigene Assets: Modelle mit fester Stufe aus Name.json („level“) gehen vor
+            int fixedCount = 0;
+            foreach (var e in list) if (e != null && e.Mesh != null && e.Level == level) fixedCount++;
+            if (fixedCount > 0)
+            {
+                int k = (variant & 0x7fffffff) % fixedCount;
+                foreach (var e in list)
+                    if (e != null && e.Mesh != null && e.Level == level && k-- == 0) return e;
+            }
+            // --- Ende Eigene Assets
             if (!byHeight.TryGetValue(list, out var order))
             {
                 order = new int[list.Length];

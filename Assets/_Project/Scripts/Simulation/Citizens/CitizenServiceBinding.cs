@@ -29,7 +29,11 @@ namespace CityBuilder.Simulation.Citizens
                 if (version == services.StructureVersion) return;
                 version = services.StructureVersion;
                 present.Clear();
-                foreach (var f in services.Facilities) present.Add(f.Type.Channel);
+                foreach (var f in services.Facilities)
+                {
+                    present.Add(f.Type.Channel);
+                    if (f.Type.ExtraChannel != null) present.Add(f.Type.ExtraChannel); // Eigene Assets: Zweitkanal
+                }
             }
 
             float Channel(string id, Zoning.Building b) =>
@@ -61,6 +65,18 @@ namespace CityBuilder.Simulation.Citizens
                 }
                 return best == null ? default : new ParkSpot(best.Id, best.Position, bestQ);
             };
+
+            // --- Eigene Assets: Freizeitanlagen, Sport, Wahrzeichen über dieselbe Abdeckungs-API. Ohne solche Bauwerke 0
+            // (nicht 0,5 neutral wie die Grunddienste): sie sind ein Bonus, kein Grundbedarf.
+            float Bonus(string id, Zoning.Building b)
+            {
+                Refresh();
+                return present.Contains(id) ? services.Coverage(id, b) : 0f;
+            }
+            citizens.LeisureCoverage = b => Bonus(ServiceKinds.Leisure, b);
+            citizens.SportCoverage = b => Bonus(ServiceKinds.Sport, b);
+            citizens.LandmarkPride = b => Bonus(ServiceKinds.Landmark, b);
+            // --- Ende Eigene Assets
 
             services.DemandProvider = (b, channel) =>
             {

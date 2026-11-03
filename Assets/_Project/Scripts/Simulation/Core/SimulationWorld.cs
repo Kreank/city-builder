@@ -176,6 +176,11 @@ namespace CityBuilder.Simulation.Core
             world.Citizens.ConnectTransit(world.Transit);
             // --- Ende ÖPNV
 
+            // --- Eigene Assets: Lärmschutzwände (Linienbauwerk; das NoiseSystem dämpft den Lärm dahinter)
+            world.NoiseBarriers = new NoiseBarrierSystem(world.Roads, world.Terrain, world.City, world.Min, world.Max);
+            world.AddSystem(world.NoiseBarriers);
+            // --- Ende Eigene Assets
+
             // --- G6 Bodenwert & Ausbaustufen (nach Diensten: liest Abdeckung, Müll, Zufriedenheit; vor der Kasse: Grundsteuer)
             world.LandValue = new LandValue.LandValueSystem(world);
             world.AddSystem(world.LandValue);
@@ -205,6 +210,8 @@ namespace CityBuilder.Simulation.Core
             world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
             world.Transit.Budget = world.Economy;            // ÖPNV: Baukosten
             world.Economy.RegisterUpkeep(world.Transit);     // ÖPNV: Unterhalt Depots/Busse/Haltestellen
+            world.NoiseBarriers.Budget = world.Economy;        // Eigene Assets: Lärmschutzwände (Bau, Unterhalt)
+            world.Economy.RegisterUpkeep(world.NoiseBarriers);
             var economy = world.Economy;
             world.Transit.FareSink = amount => economy.Earn(CityBuilder.Simulation.Economy.BudgetCategory.TransitFares, amount); // ÖPNV: Fahrgeld
             world.AddSystem(world.Economy);
@@ -257,6 +264,9 @@ namespace CityBuilder.Simulation.Core
         public GoodsSystem Goods { get; private set; }
         /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Transit.TransitSystem Transit { get; private set; }
+
+        /// <summary>Eigene Assets: Lärmschutzwände entlang von Straßen (dämpfen Lärm dahinter). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public NoiseBarrierSystem NoiseBarriers { get; private set; }
 
         /// <summary>Etappe 8: Handel zwischen Ländern (null ohne Weltkarte). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Trade.TradeSystem Trade { get; private set; }

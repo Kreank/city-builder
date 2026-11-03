@@ -16,6 +16,8 @@ namespace CityBuilder.Game.Assets
         public Mesh Mesh;
         public Material[] Materials;
         public Vector3 Size;
+        /// <summary>Eigene Assets: feste Ausbaustufe 1–3 aus der Beschreibungsdatei (<c>"level"</c>), 0 = nach Höhe einsortiert.</summary>
+        public int Level;
     }
 
     /// <summary>

@@ -19,6 +19,8 @@ namespace CityBuilder.Simulation.LandValue
         /// <summary>Nähe zur Autobahn/Rampe (nur für Industrie-Standortwahl, nicht im Bodenwert).</summary>
         public float HighwayAccess;
         public float Police, Fire, Health, Education, Library, Park;
+        /// <summary>Eigene Assets: Wahrzeichen in der Nähe (Radius × Stärke, 0..1).</summary>
+        public float Landmark;
         /// <summary>Wasserlage (Ufer in der Nähe).</summary>
         public float Shore;
         /// <summary>G3 erweitert: Verschmutzung des nahen Gewässers 0..1 (Abwasser-Auslass) – macht die Wasserlage zum Abzug.</summary>
@@ -38,6 +40,8 @@ namespace CityBuilder.Simulation.LandValue
     public struct LandValueFactors
     {
         public float Base, RoadAccess, JobAccess, ExternalAccess, Services, Park, Water, View, Density, Neighborhood;
+        /// <summary>Eigene Assets: Beitrag der Wahrzeichen.</summary>
+        public float Landmark;
         /// <summary>Abzüge (≤ 0).</summary>
         public float Noise, Air, Garbage;
         /// <summary>Summe, auf 0..1 begrenzt (Zielwert, ungeglättet).</summary>
@@ -57,6 +61,7 @@ namespace CityBuilder.Simulation.LandValue
             Add("Außenanschluss", ExternalAccess);
             Add("Dienste", Services);
             Add("Parks", Park);
+            Add("Wahrzeichen", Landmark);
             Add("Wasserlage", Water);
             Add("Aussicht", View);
             Add("Dichte", Density);
@@ -117,7 +122,8 @@ namespace CityBuilder.Simulation.LandValue
     /// <para><b>Bodenwert</b> (0..1) = Grundwert + Σ Gewicht × Faktor − Abzüge, begrenzt auf 0..1:</para>
     /// <list type="bullet">
     /// <item>Grundwert 0,10; Straßenanbindung 0,18; Arbeitsplätze in Reichweite 0,14; Außenanschluss 0,04.</item>
-    /// <item>Dienste 0,25 gesamt (Polizei 0,06, Feuerwehr 0,05, Gesundheit 0,05, Bildung 0,06, Bibliothek 0,03); Parks 0,12.</item>
+    /// <item>Dienste 0,25 gesamt (Polizei 0,06, Feuerwehr 0,05, Gesundheit 0,05, Bildung 0,06, Bibliothek 0,03); Parks 0,12;
+    /// Wahrzeichen 0,10 (Eigene Assets).</item>
     /// <item>Wasserlage 0,08, Aussicht 0,05, Dichte 0,06, Nachbarschaft ±0,10 (Zufriedenheit 0,6 = neutral, 1,0 = +0,10, 0,2 = −0,10).</item>
     /// <item>Abzüge: Lärm 0,25 × Lärm, Abgas 0,35 × Abgas, Müll 0,20 × Müllstand. Wasserzellen = 0.</item>
     /// </list>
@@ -130,6 +136,8 @@ namespace CityBuilder.Simulation.LandValue
         public const float RoadWeight = 0.18f, JobWeight = 0.14f, ExternalWeight = 0.04f;
         public const float PoliceWeight = 0.06f, FireWeight = 0.05f, HealthWeight = 0.05f, EducationWeight = 0.06f, LibraryWeight = 0.03f;
         public const float ParkWeight = 0.12f;
+        /// <summary>Eigene Assets: Wahrzeichen (Rathaus, Kirche, Museum, Burg …) im Umkreis, voll bei Abdeckung 1.</summary>
+        public const float LandmarkWeight = 0.10f;
         public const float ShoreWeight = 0.08f, ViewWeight = 0.05f, DensityWeight = 0.06f;
         /// <summary>G3 erweitert: Wasserlage × (1 − Faktor × Verschmutzung); 1,5 → bei voller Verschmutzung −50 % der Uferprämie.</summary>
         public const float PollutedShoreFactor = 1.5f;
@@ -169,6 +177,7 @@ namespace CityBuilder.Simulation.LandValue
             f.Services = PoliceWeight * C(i.Police) + FireWeight * C(i.Fire) + HealthWeight * C(i.Health)
                          + EducationWeight * C(i.Education) + LibraryWeight * C(i.Library);
             f.Park = ParkWeight * C(i.Park);
+            f.Landmark = LandmarkWeight * C(i.Landmark); // Eigene Assets
             // G3 erweitert: verschmutztes Ufer → aus +0,08 wird bis zu −0,04 (stinkender Fluss statt Uferlage)
             f.Water = ShoreWeight * C(i.Shore) * (1f - PollutedShoreFactor * C(i.WaterPollution));
             f.View = ViewWeight * C(i.View);
@@ -180,6 +189,7 @@ namespace CityBuilder.Simulation.LandValue
             f.Garbage = -GarbagePenalty * C(i.Garbage);
             float sum = f.Base + f.RoadAccess + f.JobAccess + f.ExternalAccess + f.Services + f.Park + f.Water + f.View
                         + f.Density + f.Neighborhood + f.Noise + f.Air + f.Garbage;
+            if (f.Landmark > 0f) sum += f.Landmark; // Eigene Assets (ohne Wahrzeichen bitgleich wie vorher)
             f.Target = C(sum);
             return f;
         }

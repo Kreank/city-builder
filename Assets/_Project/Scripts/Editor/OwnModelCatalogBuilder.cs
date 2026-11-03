@@ -20,36 +20,8 @@ namespace CityBuilder.Editor
         const string PaletteMat = ModelsRoot + "/Palette/CB_Palette.mat";
         const string CatalogPath = "Assets/_Project/Resources/OwnModels.asset";
 
-        /// <summary>Dateiname (ohne .fbx) unter Models/Utilities → Id des Versorgungsbauwerks.</summary>
-        static readonly Dictionary<string, string> FacilityFiles = new Dictionary<string, string>
-        {
-            { "CoalPlant", "power_coal" }, { "GasPlant", "power_gas" }, { "WindTurbine", "power_wind" },
-            { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
-            // G3 erweitert: Atomkraftwerk; die Kläranlage liegt als Modell unter Models/Services (Schlüssel mit Ordner)
-            { "NuclearPlant", "power_nuclear" }, { "Services/SewagePlant", "sewage_plant" },
-            // Netze selbst verlegt: Umspannwerk (Modell folgt, bis dahin Platzhalter in UtilityView)
-            { "Substation", "power_substation" },
-        };
-
-        /// <summary>G4: Id des Dienstgebäudes (<c>ServiceCatalog</c>) → Dateinamen unter Models/Services (erster vorhandener gilt).</summary>
-        static readonly Dictionary<string, string[]> ServiceFiles = new Dictionary<string, string[]>
-        {
-            { "police_station", new[] { "PoliceStation" } }, { "fire_station", new[] { "FireStation" } },
-            { "clinic", new[] { "Clinic" } }, { "hospital", new[] { "Hospital" } },
-            { "school_primary", new[] { "PrimarySchool", "School" } }, { "school_high", new[] { "HighSchool", "School" } },
-            { "library", new[] { "Library" } },
-            { "park_small", new[] { "ParkSmall", "Park" } }, { "park_large", new[] { "ParkLarge", "Park" } },
-            { "landfill", new[] { "Landfill" } }, { "incinerator", new[] { "Incinerator" } },
-            // G4 erweitert: Medien
-            { "media_newspaper", new[] { "Newspaper" } }, { "media_radio", new[] { "RadioStation" } }, { "media_tv", new[] { "TVTower" } },
-        };
-
-        /// <summary>ÖPNV: Id → Datei unter Models (mit Unterordner, ohne .fbx; erster vorhandener gilt).</summary>
-        static readonly Dictionary<string, string[]> TransportFiles = new Dictionary<string, string[]>
-        {
-            { "bus_depot", new[] { "Transport/BusDepot" } },
-            { "bus_stop", new[] { "Props/BusStop" } },
-        };
+        // Zuordnung Datei → Id (Versorger, Dienste inkl. Freizeit/Wahrzeichen, ÖPNV) steht in OwnModelDescriptions (Ordnerregeln);
+        // eine Beschreibungsdatei Name.json neben dem FBX hat Vorrang (docs/Modell-Konvention.md).
 
         static bool scheduled;
 
@@ -65,13 +37,53 @@ namespace CityBuilder.Editor
 
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
-            bool relevant = imported.Concat(deleted).Concat(moved)
-                .Any(p => p.StartsWith(ModelsRoot + "/") && (p.EndsWith(".fbx") || p.EndsWith(".png")));
+            // Eigene Assets: auch Beschreibungsdateien (Name.json) lösen den Neubau aus
+            bool relevant = imported.Concat(deleted).Concat(moved).Concat(movedFrom)
+                .Any(p => p.StartsWith(ModelsRoot + "/") && (p.EndsWith(".fbx") || p.EndsWith(".png") || p.EndsWith(".json")));
             if (!relevant || scheduled) return;
             scheduled = true;
             // Eigener Katalog (Versorger/Dienste) + Asset-Katalog (Gebäude/Bäume/Laternen aus Models/Buildings, Nature, Props)
             EditorApplication.delayCall += () => { scheduled = false; Build(); AssetCatalogBuilder.Build(); };
         }
+
+        // --- Eigene Assets: beim Öffnen des Editors neu bauen, wenn sich Modelle/Beschreibungsdateien seit dem letzten Bau
+        // geändert haben (z. B. neue Exporte der Blender-KI, während Unity geschlossen war, oder ein veralteter Katalog im Git)
+        [InitializeOnLoadMethod]
+        static void RebuildIfStale()
+        {
+            EditorApplication.delayCall += () =>
+            {
+                if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+                var catalog = AssetDatabase.LoadAssetAtPath<OwnModelCatalog>(CatalogPath);
+                if (catalog != null && catalog.SourceStamp == SourceStamp()) return;
+                Debug.Log("[OwnModels] Modelle/Beschreibungen geändert – Kataloge werden neu gebaut.");
+                Build();
+                AssetCatalogBuilder.Build();
+            };
+        }
+
+        /// <summary>Stand der Quellen: alle FBX/JSON unter Models mit Größe und Änderungszeit.</summary>
+        static string SourceStamp()
+        {
+            string root = Path.GetFullPath(ModelsRoot);
+            if (!Directory.Exists(root)) return "";
+            var files = Directory.GetFiles(root, "*.*", SearchOption.AllDirectories)
+                .Where(f => f.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase) || f.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, System.StringComparer.Ordinal);
+            var sb = new System.Text.StringBuilder();
+            foreach (var f in files)
+            {
+                var info = new FileInfo(f);
+                sb.Append(f.Substring(root.Length)).Append(':').Append(info.Length).Append(':').Append(info.LastWriteTimeUtc.Ticks).Append('|');
+            }
+            unchecked
+            {
+                ulong h = 14695981039346656037UL;
+                foreach (char c in sb.ToString()) { h ^= c; h *= 1099511628211UL; }
+                return h.ToString("x16");
+            }
+        }
+        // --- Ende Eigene Assets
 
         [MenuItem("City Builder/Build Own Model Catalog")]
         public static void Build()
@@ -85,68 +97,135 @@ namespace CityBuilder.Editor
             }
 
             catalog.Palette = EnsurePaletteMaterial();
-            var entries = new List<OwnModelCatalog.Entry>();
-            foreach (var kv in FacilityFiles)
+            var all = OwnModelDescriptions.Scan();
+            GameObject Load(OwnModelDescriptions.Desc d) => AssetDatabase.LoadAssetAtPath<GameObject>(d.Path);
+            OwnModelCatalog.Entry Make(OwnModelDescriptions.Desc d, string id, GameObject model) => new OwnModelCatalog.Entry
             {
-                string file = kv.Key.Contains("/") ? kv.Key : "Utilities/" + kv.Key; // Schlüssel mit Ordner = anderer Unterordner
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{file}.fbx");
+                Id = id, Model = model, Folder = d.Folder, Role = d.Role, Use = d.Use, Placement = d.Placement, Biome = d.Biome,
+                Tags = d.Tags ?? new string[0], Size = Bounds(model).size,
+            };
+            void Use(OwnModelDescriptions.Desc d, string what) => d.UsedBy = d.UsedBy == null ? what : d.UsedBy + ", " + what;
+            // Mit JSON beschriebene Modelle zuerst (Vorrang vor den Ordnerregeln), sonst nach Pfad
+            var ordered = all.Where(d => d.Json != null).Concat(all.Where(d => d.Json == null)).ToList();
+
+            // --- Versorger (G3)
+            var entries = new List<OwnModelCatalog.Entry>();
+            foreach (var d in ordered.Where(d => d.Role == OwnModelRoles.Facility))
+            {
+                if (!OwnModelDescriptions.IsFacilityId(d.Target)) { d.WaitsFor = $"unbekanntes Versorgungsbauwerk '{d.Target}'"; continue; }
+                var dup = entries.FirstOrDefault(e => e.Id == d.Target);
+                if (dup != null) { d.WaitsFor = $"doppelt – {d.Target} nutzt schon {dup.Model.name}"; continue; }
+                var model = Load(d);
                 if (model == null) continue;
-                entries.Add(new OwnModelCatalog.Entry { Id = kv.Value, Model = model });
-                Debug.Log($"[OwnModels] {kv.Value} ← {kv.Key}.fbx, Größe {Bounds(model).size}");
+                entries.Add(Make(d, d.Target, model));
+                Use(d, $"Versorgung {d.Target}");
+                Debug.Log($"[OwnModels] {d.Target} ← {OwnModelDescriptions.Key(d)}.fbx, Größe {Bounds(model).size}");
             }
             catalog.Facilities = entries.ToArray();
 
-            // --- G4 Dienste
+            // --- G4 Dienste inkl. Freizeit/Wahrzeichen: zuerst JSON („service“ = Dienst-Id oder Dienstart), dann die Ordnerregeln
+            // (je Id der erste vorhandene Kandidat, z. B. PrimarySchool vor School)
             var services = new List<OwnModelCatalog.Entry>();
-            foreach (var kv in ServiceFiles)
+            foreach (var d in all.Where(d => d.Json != null && d.Role == OwnModelRoles.Service))
             {
-                GameObject model = null;
-                string file = null;
-                foreach (var candidate in kv.Value)
-                {
-                    model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Services/{candidate}.fbx");
-                    if (model != null) { file = candidate; break; }
-                }
+                var ids = OwnModelDescriptions.ServiceIdsFor(d.Target).Where(id => services.All(e => e.Id != id)).ToList();
+                if (ids.Count == 0) { d.WaitsFor = $"unbekannter oder schon belegter Dienst '{d.Target}'"; continue; }
+                var model = Load(d);
                 if (model == null) continue;
-                services.Add(new OwnModelCatalog.Entry { Id = kv.Key, Model = model });
-                Debug.Log($"[OwnModels] {kv.Key} ← Services/{file}.fbx, Größe {Bounds(model).size}");
+                foreach (var id in ids) services.Add(Make(d, id, model));
+                Use(d, "Dienst " + string.Join(", ", ids));
             }
-            catalog.Services = services.ToArray();
-            // --- Ende G4
-
-            // --- Fußgänger: alle FBX unter Models/People (Id = Dateiname, s. OwnModelCatalog.People)
-            var people = new List<OwnModelCatalog.Entry>();
-            if (AssetDatabase.IsValidFolder($"{ModelsRoot}/People"))
-                foreach (string guid in AssetDatabase.FindAssets("t:GameObject", new[] { $"{ModelsRoot}/People" }))
-                {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!path.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase)) continue;
-                    var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                    if (model == null) continue;
-                    people.Add(new OwnModelCatalog.Entry { Id = Path.GetFileNameWithoutExtension(path), Model = model });
-                    Debug.Log($"[OwnModels] Person {Path.GetFileNameWithoutExtension(path)} ← {path}, Größe {Bounds(model).size}");
-                }
-            people.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
-            catalog.People = people.ToArray();
-            // --- Ende Fußgänger
-
-            // --- ÖPNV (Depot, Haltestelle); fehlt das Modell, zeichnet TransitView Platzhalter
-            var transport = new List<OwnModelCatalog.Entry>();
-            foreach (var kv in TransportFiles)
+            foreach (var kv in OwnModelDescriptions.ServiceFiles)
+            {
+                if (services.Any(e => e.Id == kv.Key)) continue;
                 foreach (var candidate in kv.Value)
                 {
-                    var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{candidate}.fbx");
+                    var d = all.FirstOrDefault(x => x.Json == null && x.Role == OwnModelRoles.Service && OwnModelDescriptions.Key(x) == candidate);
+                    var model = d != null ? Load(d) : null;
                     if (model == null) continue;
-                    transport.Add(new OwnModelCatalog.Entry { Id = kv.Key, Model = model });
+                    services.Add(Make(d, kv.Key, model));
+                    Use(d, "Dienst " + kv.Key);
                     Debug.Log($"[OwnModels] {kv.Key} ← {candidate}.fbx, Größe {Bounds(model).size}");
                     break;
                 }
-            catalog.Transport = transport.ToArray();
-            // --- Ende ÖPNV
+            }
+            foreach (var d in all.Where(d => d.Role == OwnModelRoles.Service && d.UsedBy == null && d.WaitsFor == null))
+                d.WaitsFor = "Dienst hat schon ein anderes Modell";
+            catalog.Services = services.ToArray();
 
+            // --- Fußgänger: Rolle person (Models/People/*.fbx), Id = Dateiname
+            var people = new List<OwnModelCatalog.Entry>();
+            foreach (var d in all.Where(d => d.Role == OwnModelRoles.Person))
+            {
+                var model = Load(d);
+                if (model == null) continue;
+                people.Add(Make(d, d.Name, model));
+                Use(d, "Fußgänger");
+            }
+            people.Sort((x, y) => string.CompareOrdinal(x.Id, y.Id));
+            catalog.People = people.ToArray();
+
+            // --- ÖPNV (Depot, Haltestelle); fehlt das Modell, zeichnet TransitView Platzhalter
+            var transport = new List<OwnModelCatalog.Entry>();
+            foreach (var d in ordered.Where(d => d.Role == OwnModelRoles.Transport))
+            {
+                if (string.IsNullOrEmpty(d.Target) || transport.Any(e => e.Id == d.Target)) { d.WaitsFor = "ÖPNV-Id fehlt oder schon belegt"; continue; }
+                var model = Load(d);
+                if (model == null) continue;
+                transport.Add(Make(d, d.Target, model));
+                Use(d, $"ÖPNV {d.Target}");
+            }
+            catalog.Transport = transport.ToArray();
+
+            // --- Eigene Assets: Landwirtschaft, Infrastruktur, Requisiten, Büsche, Felsen (Id = Dateiname)
+            var extras = new List<OwnModelCatalog.Entry>();
+            foreach (var d in ordered)
+            {
+                string usedBy = null;
+                switch (d.Role)
+                {
+                    case OwnModelRoles.Agriculture:
+                        if (OwnModelDescriptions.AgricultureUses.Contains(d.Use ?? "")) usedBy = $"Landwirtschaft ({d.Use}) – FarmView";
+                        else d.WaitsFor = $"Landwirtschaft: Verwendung '{d.Use}' unbekannt";
+                        break;
+                    case OwnModelRoles.Infrastructure:
+                        if (OwnModelDescriptions.InfrastructureUses.Contains(d.Use ?? "")) usedBy = $"Infrastruktur ({d.Use})";
+                        else d.WaitsFor = $"Infrastruktur: Verwendung '{d.Use}' unbekannt";
+                        break;
+                    case OwnModelRoles.Prop: usedBy = $"Straßen-/Parkausstattung ({d.Placement}) – StreetFurnitureView"; break;
+                    case OwnModelRoles.Bush: usedBy = "Büsche (Waldrand, Parks) – NatureDetailView"; break;
+                    case OwnModelRoles.Rock: usedBy = "Felsen (Hänge, Gebirge) – NatureDetailView"; break;
+                    default: continue;
+                }
+                if (usedBy == null) continue;
+                if (extras.Any(e => e.Id == d.Name)) { d.WaitsFor = $"doppelter Dateiname {d.Name}"; continue; }
+                var model = Load(d);
+                if (model == null) continue;
+                extras.Add(Make(d, d.Name, model));
+                Use(d, usedBy);
+            }
+            extras.Sort((x, y) => string.CompareOrdinal(x.Id, y.Id));
+            catalog.Extras = extras.ToArray();
+
+            // --- Rollen des Asset-Katalogs (AssetCatalogBuilder): Gebäude je Zone, Bäume, Laternen
+            foreach (var d in all)
+            {
+                if (d.Role == OwnModelRoles.Building)
+                {
+                    if (AssetCatalogBuilder.IsZoneName(d.Zone)) Use(d, $"Gebäude {d.Zone}{(d.Level > 0 ? $" Stufe {d.Level}" : "")} (AssetCatalog)");
+                    else d.WaitsFor = $"Gebäude: Zone '{d.Zone}' unbekannt";
+                }
+                else if (d.Role == OwnModelRoles.Tree) Use(d, "Bäume (AssetCatalog, ScenicPropsView)");
+                else if (d.Role == OwnModelRoles.StreetLamp) Use(d, "Straßenlaternen (AssetCatalog, ScenicPropsView)");
+                else if (d.UsedBy == null && d.WaitsFor == null) d.WaitsFor = $"Rolle '{d.Role}' ohne Verwendung";
+            }
+            OwnModelDescriptions.WriteReport(all);
+
+            catalog.SourceStamp = SourceStamp(); // Eigene Assets
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste, {transport.Count} ÖPNV, {people.Count} Personen → {CatalogPath}");
+            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste, {transport.Count} ÖPNV, " +
+                      $"{people.Count} Personen, {extras.Count} weitere → {CatalogPath}; ohne Verwendung: {all.Count(d => d.UsedBy == null)} (s. {OwnModelDescriptions.UnusedReport})");
         }
 
         static Material EnsurePaletteMaterial()

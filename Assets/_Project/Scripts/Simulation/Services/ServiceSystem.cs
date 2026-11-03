@@ -64,6 +64,7 @@ namespace CityBuilder.Simulation.Services
             ServiceKinds.Police, ServiceKinds.Fire, ServiceKinds.Health, ServiceKinds.EducationPrimary, ServiceKinds.EducationSecondary,
             ServiceKinds.Library, ServiceKinds.Park, ServiceKinds.Garbage,
             ServiceKinds.Media, // G4 erweitert: Zeitung/Radio/TV
+            ServiceKinds.Leisure, ServiceKinds.Sport, ServiceKinds.Landmark, // Eigene Assets: Freizeit, Sport, Wahrzeichen
         };
         static readonly int GarbageChannel = Array.IndexOf(Channels, ServiceKinds.Garbage);
         static readonly int FireChannel = Array.IndexOf(Channels, ServiceKinds.Fire);
@@ -222,7 +223,7 @@ namespace CityBuilder.Simulation.Services
             float best = 0f;
             foreach (var f in facilities.Values)
             {
-                if (f.Type.Channel != serviceKind) continue;
+                if (f.Type.Channel != serviceKind && f.Type.ExtraChannel != serviceKind) continue; // Eigene Assets: Zweitkanal
                 float factor;
                 if (f.Type.Walking) factor = DistanceFactor(f.DistanceTo(p), f.Type.Range);
                 else
@@ -232,7 +233,7 @@ namespace CityBuilder.Simulation.Services
                     if (seg == null) continue;
                     factor = f.Reach.Factor(seg, seg.ClosestT(p));
                 }
-                best = MathF.Max(best, factor * f.LoadFactor);
+                best = MathF.Max(best, factor * f.Type.Strength * f.LoadFactor);
             }
             return best;
         }
@@ -266,6 +267,16 @@ namespace CityBuilder.Simulation.Services
         }
 
         public float TotalGarbage { get { float s = 0f; foreach (var st in states.Values) s += st.Garbage; return s; } }
+
+        // --- Eigene Assets: Wahrzeichen
+        /// <summary>
+        /// Gibt es ein Rathaus? Voraussetzung für spätere Funktionen der Etappe 7 („Land gründen“) – vorerst nur dieses Flag.
+        /// </summary>
+        public bool HasTownHall { get { foreach (var f in facilities.Values) if (f.Type == ServiceCatalog.TownHall) return true; return false; } }
+
+        /// <summary>Attraktivität der Stadt (Summe <see cref="ServiceType.Attractiveness"/> aller Bauwerke) – Zahl für späteren Tourismus.</summary>
+        public float Attractiveness { get { float s = 0f; foreach (var f in facilities.Values) s += f.Type.Attractiveness; return s; } }
+        // --- Ende Eigene Assets
 
         // ------------------------------------------------------------ Kosten (Stadtkasse bucht – Agent „budget“)
 
@@ -311,6 +322,10 @@ namespace CityBuilder.Simulation.Services
                 case ServiceKinds.Library:
                 case ServiceKinds.Park:
                 case ServiceKinds.Media: return residents; // Medien: Leser/Hörer/Zuschauer = Einwohner
+                case ServiceKinds.Leisure: return residents; // Eigene Assets: Freizeitanlagen wie Parks
+                // Sport (Zweitkanal) und Wahrzeichen belasten nicht: Kapazität zählt im Hauptkanal, Wahrzeichen sind „unbegrenzt“
+                case ServiceKinds.Sport:
+                case ServiceKinds.Landmark: return 0f;
                 case ServiceKinds.Garbage: return residents * 0.01f + workers * (b.Zone == ZoneType.Industry ? 0.02f : 0.005f);
                 default: return 0f;
             }
@@ -400,6 +415,11 @@ namespace CityBuilder.Simulation.Services
         ServiceBuildError Check(ServicePlan plan)
         {
             var type = plan.Type;
+            // --- Eigene Assets: einmalige Bauwerke (Rathaus)
+            if (type.Unique)
+                foreach (var f in facilities.Values)
+                    if (f.Type == type && f.Id != plan.MovingId) return ServiceBuildError.AlreadyBuilt;
+            // --- Ende
             var corners = ServiceGeometry.Corners(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in corners) if (!InWorld(c)) return ServiceBuildError.OutOfWorld;
             if (terrain.IsWater(plan.Position)) return ServiceBuildError.OnWater;
@@ -556,10 +576,19 @@ namespace CityBuilder.Simulation.Services
                     float factor = f.Type.Walking
                         ? DistanceFactor(f.DistanceTo(b.Position), f.Type.Range)
                         : f.Reach != null ? f.Reach.Factor(seg, b.FrontT) : 0f;
+                    factor *= f.Type.Strength; // Eigene Assets: Wirkungsstärke (Standard 1)
                     if (factor <= 0f) continue;
                     int c = Array.IndexOf(Channels, f.Type.Channel);
                     if (!links[c].TryGetValue(b.Id, out var bl)) links[c][b.Id] = bl = new BuildingLinks { Building = b };
                     bl.Links.Add(new Link { Facility = f, Factor = factor });
+                    // --- Eigene Assets: Zweitkanal (Sport bei Sportanlagen, Freizeit beim Musikpavillon)
+                    int extra = f.Type.ExtraChannel != null ? Array.IndexOf(Channels, f.Type.ExtraChannel) : -1;
+                    if (extra >= 0 && extra != c)
+                    {
+                        if (!links[extra].TryGetValue(b.Id, out var xl)) links[extra][b.Id] = xl = new BuildingLinks { Building = b };
+                        xl.Links.Add(new Link { Facility = f, Factor = factor });
+                    }
+                    // --- Ende
                 }
             }
         }

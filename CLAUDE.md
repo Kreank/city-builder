@@ -694,9 +694,43 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Eigene Modelle**: FBX unter `Assets/_Project/Models/Services/<Name>.fbx` werden automatisch übernommen
   (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
+  Freizeit/Wahrzeichen aus `Models/Leisure/` bzw. `Models/Landmarks/` (s. „Freizeit, Wahrzeichen & Lärmschutzwand“); Zuordnung
+  zentral in `Editor/OwnModelDescriptions.cs`, `Name.json` geht vor (s. „Eigene Assets“).
 - Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
+
+## Freizeit, Wahrzeichen & Lärmschutzwand (Eigene Assets, 2026-11-03)
+- **Als Dienstarten im `ServiceCatalog`** (gleiche Platzregeln, Front-Ausrichtung, Bauwerks-Sperre, Kosten/Unterhalt, Verschieben,
+  Speichern, Kacheln in der Kategorie „Dienste“ – getrennt nach Art): neue `ServiceKinds.Leisure` („leisure“), `Sport` („sport“,
+  Teilkanal) und `Landmark` („landmark“), beide Hauptarten in `ServiceKinds.All` (Overlay, Inspektor). Neue `ServiceType`-Felder:
+  `ExtraChannel` (zweiter Kanal, Last zählt nur im Hauptkanal), `RoadFrontRequired` (Radius-Wirkung, aber Zufahrt nötig),
+  `Unique`, `Strength` (Faktor auf die Entfernungswirkung, Standard 1 = bitgleich wie vorher), `Attractiveness`.
+- **Freizeit** (Modelle Models/Leisure): Spielplatz 16×16 (Fußweg 250 m), Sportplatz 48×32 (600 m, + Sport), Tennisplätze 32×24
+  (500 m, + Sport, Stärke 0,8), Freibad 40×32 (3 min Fahrt, Zufahrt, + Sport), Stadion 80×64 (6 min, Zufahrt, Lärm 0,6 / 260 m,
+  Attraktivität 30), Riesenrad 24×24 (5 min, Zufahrt, Attraktivität 15). Bedarf = Einwohner (wie Parks), Sport/Wahrzeichen
+  belasten nicht (`DemandOf` 0).
+- **Wahrzeichen** (Models/Landmarks, Wirkung über Radius × Stärke): Rathaus 36×28 (**einmalig**, Zufahrt, 700 m, Flag
+  `ServiceSystem.HasTownHall` als Voraussetzung für Etappe 7 „Land gründen“; zweites → `ServiceBuildError.AlreadyBuilt`),
+  Kirche 24×36 (Zufahrt), Museum 34×30 (Zufahrt, Attraktivität 25), Burg 44×44 (900 m, 40), Burgruine, Denkmal, Brunnen, Obelisk,
+  Musikpavillon (+ Freizeit). `ServiceSystem.Attractiveness` = Summe (Zahl für späteren Tourismus).
+- **Bürger** (kleiner Block in `CitizenServiceBinding`, Hooks `CitizenSystem.LeisureCoverage/SportCoverage/LandmarkPride`, ohne
+  solche Bauwerke 0 – kein 0,5-Neutralwert, weil Bonus): Freizeit + 0,012 × Abdeckung je Bewertung (≈ +0,12/Tag), Gesundheits-Ziel
+  + 0,1 × Sport, Zufriedenheit + 0,04 × Stolz und Gemüt-Ziel + 0,03 × Stolz. Umfeld-Cache speichert die drei Werte (citizens v2).
+- **Bodenwert:** Faktor „Wahrzeichen“ 0,10 × `CoverageAt(landmark)` (`LandValueRules.LandmarkWeight`, Beitrag im Inspektor).
+- **Lärmschutzwand** `Simulation/Environment/NoiseBarrierSystem` (`world.NoiseBarriers`, Abschnitt „noisebarriers“): gerade Stücke
+  4–400 m (`Plan(a, b)` → `Build`, Kette im Werkzeug), 60 €/m („Straßenbau“), Unterhalt 0,35 €/m/Woche („Lärmschutz“), Abriss 25 %;
+  nicht auf Fahrbahn/Gehweg (ebenerdig), Bauwerken oder Gebäuden (kein Abriss), Straßen dürfen sie nicht durchqueren
+  (Bauwerks-Sperre Art „barrier“), Grundstücke auf der Wand wachsen nicht (`LotBlocker`). `SnapToRoad(p)` rastet 1 m hinter der
+  Gehweg-Außenkante auf der Seite des Mauszeigers ein. **Wirkung:** `NoiseSystem` stempelt Straßenlärm nahe einer Wand zellweise mit
+  `Attenuation(quelle, zelle)` – kreuzt die Sichtlinie eine Wand, kommen 30 % direkt dahinter bis 70 % nach 160 m an; vor der Wand
+  und ohne Wände bitgleich wie vorher (Dienst-/Versorger-Lärm wird nicht gedämpft). Werkzeug: Dienste-Werkzeug,
+  `ServiceAction.NoiseBarrier` (Kachel „Lärmschutzwand“, Strg = frei, RMB/Esc beendet die Kette), Abriss über „Dienstgebäude“.
+- Tests `OwnAssetsTests` (Freizeit → Freizeit/Gesundheit, Stadion braucht Zufahrt/macht Lärm, Wahrzeichen → Bodenwert/Stolz/
+  Attraktivität, Rathaus einmalig, Wand dämpft dahinter und nicht davor, Sperren/Kosten, Speichern/Laden + Determinismus).
+- Später: Freizeitanlagen als echte Freizeitziele im Tagesablauf (wie Parks), Stadion-Veranstaltungen mit Verkehr, Tourismus aus
+  der Attraktivität, Wand-Lärmschutz auch für Dienst-/Industrielärm, Wände an Kurven entlang (heute gerade Stücke), Dienste dürfen
+  noch auf Wänden platziert werden (Sperre fehlt dort).
 
 ## Bodenwert & Ausbaustufen (G6)
 - `Simulation/LandValue`: `LandValueRules` (alle Formeln/Zahlen, Platzhalter fürs Balancing), `LandValueSystem`
@@ -1094,8 +1128,35 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   optionale Kindobjekte `LegL`, `LegR`, `ArmL`, `ArmR` schwingen beim Gehen um ihren eigenen Ursprung (= Hüft-/Schultergelenk,
   Drehachse X). Gezeichnet per Instancing (ein Teil je MeshFilter), keine Farbvariation (mehrere Modelle je Gruppe verwenden).
   Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
-  zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
-  Transport/*, Nature/Bush_*/Rock_*, übrige Props.
+  zusätzlich Newspaper, RadioStation, TVTower (Medien).
+- **Automatik für neue Modelle (Eigene Assets, 2026-11-03):** Beschreibungsdatei **`Name.json`** neben dem FBX (Felder `role`,
+  `use`, `zone`, `level`, `placement`, `biome`, `service`, `facility`, `transport`, `tags`, `waitsFor`) hat Vorrang vor den
+  Ordnerregeln; beides steht in `Editor/OwnModelDescriptions.cs` (eine Stelle für alle Zuordnungen), Anleitung für die Blender-KI:
+  **`docs/Modell-Konvention.md`**. `OwnModelCatalogBuilder` baut daraus `Facilities`/`Services` (inkl. Leisure/Landmarks)/
+  `Transport`/`People` und neu **`Extras`** (Rollen agriculture, infrastructure, prop, bush, rock; je Eintrag `Role`, `Use`,
+  `Placement`, `Tags`, `Size`; Abfrage `Extra(name)`, `WithRole(role)`, `Find(role, use, tag)`), der `AssetCatalogBuilder` nimmt
+  Gebäude (Zone, feste Stufe `level` → `ModelEntry.Level`), Bäume und Laternen aus derselben Zuordnung. Neubau bei jeder FBX-/
+  PNG-/**JSON**-Änderung und beim Editorstart, wenn der Quellen-Stempel (`OwnModelCatalog.SourceStamp`) abweicht. Ungenutzte
+  Modelle → **`Models/_Unused.txt`** (erzeugt, im `.gitignore`; „wartet auf: Flughafen/Hafen/Taxi/U-Bahn/Bahn/Klappbrücke …“,
+  darunter alle verwendeten mit Ort) und Editor-Log.
+- **Darstellung der neuen Modelle** (Begleiter am RoadTool, Block „Eigene Assets“; fehlt ein Modell, bleibt alles wie vorher):
+  `Game/Assets/ModelParts` (Prefab → instanzierbare Teile je MeshFilter, bewegliche Kindobjekte getrennt, `PoseAt`) +
+  `PartsRenderer` (Instancing mit Palette, Kacheln für Entfernungs-LOD), `ModelSpinner` (dreht „Wheel“ des Riesenrads).
+  `Zoning/FarmView`: Industriegrundstücke mit Landwirtschafts-Firma (Rezept „farm“) zeigen fest aus der Gebäude-Id Hof, Windmühle
+  (Flügel drehen), Weide, Grünland mit Kühen, Obstgarten, Weinberg, Gewächshaus oder Acker (Weizen/Mais/Raps/Kartoffel/Gemüse) –
+  Äcker je Monat (Klima, Südhalbkugel versetzt): gepflügt → Aufwuchs (Meadow) → reif → abgeerntet mit Heuballen, Traktoren März–
+  Oktober; `BuildingView` lässt diese Grundstücke aus (`FarmView.Handles`). Das Rezept kennt nur Getreide + Vieh, Obst/Wein/Gemüse
+  sind optische Spielarten. `Roads/InfrastructureDecoView`: Brückenpfeiler-Modell an den Mesh-Pfeilerstellen
+  (`RoadMeshBuilder.StructureSpots`, Mesh-Pfeiler entfallen über `RoadMeshBuilder.ModelPillars`), Tunnelportale am Übergang Trog →
+  Tunnel (Öffnung nach außen), Schilderbrücken 160 m vor jeder Autobahn-Abfahrt (Knoten mit abgehender Rampe), Baustellen-Set an
+  Gebäuden im Bau. `UtilityView`: Hochspannungsmast = `PowerPylon` (6 Seile an den Isolatoren). `Environment/NatureDetailView`:
+  Büsche am Waldrand (Waldraster 0,3 ± 0,3), selten auf Wiesen, entlang der Parkränder; Felsen nach Steigung (ab ~14°) und Höhe
+  (> 40 m), Straßen räumen weg, nicht auf Gebäuden/Bauwerken/Wasser (LOD 900/1600 m). `Environment/StreetFurnitureView`: Requisiten
+  auf den Gehwegen der Stadtstraßen (11-m-Raster, 45 % belegt, gewichtet: Mülleimer > Bank/Pflanzkübel > Hydrant > …; nicht ≤ 6 m
+  an Kreuzungen, ≤ 5 m vor Zufahrten, ≤ 12 m an Haltestellen, ≤ 2,5 m an Laternen, nicht auf Brücken/in Tunneln, nur wenn der
+  Gehweg breit genug ist) und in Parks (innerer Ring, Kiosk nur im großen Park), LOD 450 m. `Environment/NoiseBarrierView`:
+  Lärmschutzwände als 16-m-Kacheln. BusStop: wie bisher über `OwnModelCatalog.Transport` („bus_stop“).
+  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance/TrainStation, Infrastructure/Drawbridge.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -1264,7 +1325,8 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   Werte werden übersprungen. Nachschlage-Wörterbücher kanonisch (`w.IntDictionary`, nach Schlüssel sortiert); Wörterbücher,
   die **durchlaufen** werden, sind `Core.StableMap` (gleiche Reihenfolge wie `Dictionary`, Platzbelegung speicherbar).
   `System.Random` gibt es in der Simulation nicht mehr → `Core.CompatRandom` (gleiche Zahlenfolge, speicherbar) bzw. `SimRandom`.
-- **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s).
+- **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s;
+  `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -1361,6 +1423,10 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
      (im Editor noch nicht visuell abgenommen). Später: Abfahrten innerhalb des Ticks verteilen, CarShare neu abstimmen, Rad-Darstellung
    - ✅ Speichern & Laden: versioniertes Binärformat mit Abschnitten/Migrationen, alle Systeme `ISaveable`, Determinismus
      nach dem Laden, Spielmenü (Esc) mit Autosave/Schnellspeichern. Später: Cloud/Multiplayer-Stände, Vorschaubild, Replays aus Commands
+   - ✅ Eigene Assets eingebaut: Freizeitanlagen + Wahrzeichen (Rathaus einmalig, Bodenwert/Stolz/Attraktivität), Lärmschutzwand
+     (dämpft Lärm), Bauernhöfe je Jahreszeit, Brückenpfeiler/Tunnelportale/Schilderbrücken/Baustellen/Hochspannungsmast, Büsche/
+     Felsen, Straßen-/Parkausstattung; Beschreibungsdatei `Name.json` + Bericht `_Unused.txt` (im Editor noch nicht visuell
+     abgenommen). Wartet auf Funktion: Flughafen, Hafen/Küste, Taxi, U-Bahn, Bahn, Klappbrücke
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;

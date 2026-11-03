@@ -30,6 +30,7 @@ namespace CityBuilder.Editor
             public bool Vehicle;     // Längsachse auf +Z, Front erkennen
             public float MaxWidth = float.MaxValue; // Fahrzeuge dürfen nicht breiter als die Spur werden
             public Material Material; // gesetzt: alle Teile bekommen dieses Material (eigene Modelle → Paletten-Material)
+            public int Level;         // Eigene Assets: feste Ausbaustufe aus Name.json (0 = nach Höhe)
         }
 
         // ------------------------------------------------------------ eigene Blender-Modelle (Assets/_Project/Models)
@@ -48,6 +49,29 @@ namespace CityBuilder.Editor
                 .Select(p => new Spec { Hint = dir + "/", Name = Path.GetFileNameWithoutExtension(p), Fit = Fit.Native, Material = mat })
                 .ToArray();
         }
+
+        // --- Eigene Assets: Zuordnung über Beschreibungsdatei Name.json oder Ordnerregeln (OwnModelDescriptions)
+        static List<OwnModelDescriptions.Desc> described;
+
+        static Spec[] OwnDescribed(IEnumerable<OwnModelDescriptions.Desc> list)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{OwnModels}/Palette/CB_Palette.mat");
+            return list.OrderBy(d => d.Path, System.StringComparer.Ordinal)
+                .Select(d => new Spec
+                {
+                    Hint = Path.GetDirectoryName(d.Path).Replace('\\', '/') + "/", Name = d.Name, Fit = Fit.Native, Material = mat, Level = d.Level,
+                })
+                .ToArray();
+        }
+
+        static Spec[] OwnBuildings(string zone) => OwnDescribed(OwnModelDescriptions.Buildings(described, zone));
+        static Spec[] OwnRole(string role) => OwnDescribed(OwnModelDescriptions.WithRole(described, role));
+
+        /// <summary>Gültiger Zonenname (= Feld im <see cref="AssetCatalog"/>)?</summary>
+        public static bool IsZoneName(string zone) =>
+            !string.IsNullOrEmpty(zone) && System.Enum.TryParse<CityBuilder.Simulation.Zoning.ZoneType>(zone, out var z) &&
+            z != CityBuilder.Simulation.Zoning.ZoneType.None;
+        // --- Ende Eigene Assets
 
         static Spec V(string hint, string name, float length, float maxWidth = 2.3f) =>
             new Spec { Hint = hint, Name = name, Fit = Fit.Length, Target = length, Vehicle = true, MaxWidth = maxWidth };
@@ -205,17 +229,19 @@ namespace CityBuilder.Editor
             catalog.Trucks = BakeAll(catalog, allPrefabs, Trucks);
             catalog.Buses = BakeAll(catalog, allPrefabs, Buses);
             catalog.Trams = BakeAll(catalog, allPrefabs, Trams);
-            // Eigene Blender-Modelle nach Ordner (ohne Namensliste): Buildings/<Zone>, Nature/Tree_*, Props/StreetLamp
-            catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps.Concat(Own("Props", "StreetLamp")).ToArray());
+            // Eigene Blender-Modelle nach Beschreibungsdatei (Name.json: role building/tree/streetlamp) oder Ordnerregel
+            // (Buildings/<Zone>, Nature/Tree_*, Props/StreetLamp*) – s. OwnModelDescriptions
+            described = OwnModelDescriptions.Scan();
+            catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps.Concat(OwnRole(OwnModelRoles.StreetLamp)).ToArray());
             catalog.TrafficLights = BakeAll(catalog, allPrefabs, Lights).Take(1).ToArray();
-            catalog.Trees = BakeAll(catalog, allPrefabs, Trees.Concat(Own("Nature", "Tree_")).ToArray());
-            catalog.ResidentialLow = BakeAll(catalog, allPrefabs, ResLow.Concat(Own("Buildings/ResidentialLow")).ToArray());
-            catalog.ResidentialMedium = BakeAll(catalog, allPrefabs, ResMedium.Concat(Own("Buildings/ResidentialMedium")).ToArray());
-            catalog.ResidentialHigh = BakeAll(catalog, allPrefabs, ResHigh.Concat(Own("Buildings/ResidentialHigh")).ToArray());
-            catalog.Mixed = BakeAll(catalog, allPrefabs, MixedB.Concat(Own("Buildings/Mixed")).ToArray());
-            catalog.Retail = BakeAll(catalog, allPrefabs, RetailB.Concat(Own("Buildings/Retail")).ToArray());
-            catalog.Office = BakeAll(catalog, allPrefabs, OfficeB.Concat(Own("Buildings/Office")).ToArray());
-            catalog.Industry = BakeAll(catalog, allPrefabs, IndustryB.Concat(Own("Buildings/Industry")).ToArray());
+            catalog.Trees = BakeAll(catalog, allPrefabs, Trees.Concat(OwnRole(OwnModelRoles.Tree)).ToArray());
+            catalog.ResidentialLow = BakeAll(catalog, allPrefabs, ResLow.Concat(OwnBuildings("ResidentialLow")).ToArray());
+            catalog.ResidentialMedium = BakeAll(catalog, allPrefabs, ResMedium.Concat(OwnBuildings("ResidentialMedium")).ToArray());
+            catalog.ResidentialHigh = BakeAll(catalog, allPrefabs, ResHigh.Concat(OwnBuildings("ResidentialHigh")).ToArray());
+            catalog.Mixed = BakeAll(catalog, allPrefabs, MixedB.Concat(OwnBuildings("Mixed")).ToArray());
+            catalog.Retail = BakeAll(catalog, allPrefabs, RetailB.Concat(OwnBuildings("Retail")).ToArray());
+            catalog.Office = BakeAll(catalog, allPrefabs, OfficeB.Concat(OwnBuildings("Office")).ToArray());
+            catalog.Industry = BakeAll(catalog, allPrefabs, IndustryB.Concat(OwnBuildings("Industry")).ToArray());
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -307,7 +333,7 @@ namespace CityBuilder.Editor
                 foreach (var t in temporary) Object.DestroyImmediate(t);
 
                 Normalize(mesh, spec);
-                return new ModelEntry { Name = spec.Name, Mesh = mesh, Materials = materials.ToArray(), Size = mesh.bounds.size };
+                return new ModelEntry { Name = spec.Name, Mesh = mesh, Materials = materials.ToArray(), Size = mesh.bounds.size, Level = spec.Level };
             }
             finally
             {

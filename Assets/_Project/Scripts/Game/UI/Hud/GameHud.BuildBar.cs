@@ -79,7 +79,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Versorgung (J): Kraftwerke, Umspannwerke, Pumpen · Hochspannung, Ortsnetz (Freileitung/Erdkabel), Rohre, Kanäle selbst verlegen");
-            CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll · ⇧4 Abdeckungs-Ansicht");
+            CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll, Medien, Freizeit, Wahrzeichen, Lärmschutzwand · ⇧4 Abdeckungs-Ansicht");
             CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
             CategoryButton(cats, Category.Traffic, HudIconKind.TrafficLight, "Verkehr", "Verkehrsregeln (T), Stau-Ansicht (V), Verkehrsaufkommen");
@@ -597,12 +597,21 @@ namespace CityBuilder.Game.UI.Hud
                     $"{t.DisplayName} · {ServiceKinds.DisplayName(t.Kind)} · Kapazität {BuildLabels.Number(t.Capacity)} {t.CapacityUnit}/Tag · {range} · " +
                     $"Fläche {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerWeek)}/Woche"));
             }
+            // --- Eigene Assets: Lärmschutzwand (Linienbauwerk wie Leitungen) im Dienste-Werkzeug
+            tiles.Add(Container("cb-tile-sep"));
+            tiles.Add(Tile("Lärmschutzwand", $"{CityBuilder.Simulation.Environment.NoiseBarrierSystem.CostPerMeter:0} €/m", ServiceSwatch, HudIconKind.Road,
+                () => serviceTool.Select(ServiceTool.ServiceAction.NoiseBarrier),
+                () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.NoiseBarrier,
+                "Lärmschutzwand entlang von Straßen ziehen (rastet neben dem Gehweg ein, Strg = frei) · dämpft den Straßenlärm dahinter · " +
+                "Klick = Punkt, RMB/Esc = fertig"));
+            // --- Ende Eigene Assets
             panelBody.Add(tiles);
 
             var info = Container("cb-info-row");
             var summary = Text("", "cb-muted");
             panelSlowRefresh.Add(() => summary.text =
-                $"{s.FacilityCount} Dienste · Unterhalt {BuildLabels.Money((float)s.WeeklyUpkeep())}/Woche · liegender Müll {s.TotalGarbage:0.#} t");
+                $"{s.FacilityCount} Dienste · Unterhalt {BuildLabels.Money((float)s.WeeklyUpkeep())}/Woche · liegender Müll {s.TotalGarbage:0.#} t" +
+                $" · Attraktivität {s.Attractiveness:0}{(s.HasTownHall ? " · Rathaus ✓" : "")}"); // Eigene Assets
             info.Add(summary);
             panelBody.Add(info);
         }
@@ -726,7 +735,7 @@ namespace CityBuilder.Game.UI.Hud
                 tiles.Add(Tile("Dienstgebäude", "Dienste", DangerSwatch, HudIconKind.Service,
                     () => serviceTool.Select(ServiceTool.ServiceAction.Remove),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Remove,
-                    "Polizei, Schule, Park … anklicken – 25 % der Baukosten zurück"));
+                    "Polizei, Schule, Park, Wahrzeichen, Lärmschutzwand … anklicken – 25 % der Baukosten zurück"));
             AddTransitBulldozeTile(tiles); // ÖPNV
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt."));

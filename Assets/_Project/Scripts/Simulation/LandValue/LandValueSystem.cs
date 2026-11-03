@@ -153,6 +153,7 @@ namespace CityBuilder.Simulation.LandValue
                 i.Education = Cov(ServiceKinds.Education);
                 i.Library = Cov(ServiceKinds.Library);
                 i.Park = services.CoverageAt(ServiceKinds.Park, p); // Fußweg, braucht keine Straße
+                i.Landmark = services.CoverageAt(ServiceKinds.Landmark, p); // Eigene Assets: Wahrzeichen über Radius
             }
 
             i.Density = LandValueRules.Saturate(units.Sample(p), LandValueRules.DensitySaturation);
