@@ -163,6 +163,23 @@ namespace CityBuilder.Simulation.Trade
         }
     }
 
+    public enum TradeNewsKind : byte { ContractSigned, Embargo, TariffRaised }
+
+    /// <summary>Nachricht des Handels an den Spieler (Medien, HUD).</summary>
+    public readonly struct TradeNews
+    {
+        public readonly TradeNewsKind Kind;
+        public readonly int Country;
+        public readonly string CountryName;
+        /// <summary>Vertrag: Laufzeit in Wochen; Embargo: Beziehung; Zoll: neuer Satz (0..1).</summary>
+        public readonly double Value;
+        /// <summary>Vertrag: Gut bzw. „ein Handelsabkommen“.</summary>
+        public readonly string Detail;
+        public readonly int Day;
+        public TradeNews(TradeNewsKind kind, int country, string name, double value, string detail, int day)
+        { Kind = kind; Country = country; CountryName = name; Value = value; Detail = detail; Day = day; }
+    }
+
     /// <summary>Ergebnis eines Handels-Commands.</summary>
     public readonly struct TradeResult
     {

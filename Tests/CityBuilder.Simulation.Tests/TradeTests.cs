@@ -331,12 +331,12 @@ namespace CityBuilder.Simulation.Tests
             var cheap = t.Offer(t.Execute(new ProposeContractCommand(player, seller, TradeSide.Buy,
                 new ContractTerms { Good = oil, UnitsPerWeek = 10, Weeks = 2, Price = Math.Round(sp * 0.3, 2) })).Id);
             var huge = t.Offer(t.Execute(new ProposeContractCommand(player, seller, TradeSide.Buy,
-                new ContractTerms { Good = oil, UnitsPerWeek = 1e12, Weeks = 2, Price = Math.Round(sp * 1.6, 2) })).Id);
+                new ContractTerms { Good = oil, UnitsPerWeek = 1e12, Weeks = 2, Price = Math.Round((sp + t.Geography.Route(seller, player).UnitCost(oil)) * 1.6, 2) })).Id);
             t.SimulateDay();
             Assert.Equal(OfferStatus.Rejected, cheap.Status);
-            Assert.Contains("Preis zu niedrig", cheap.Reason);
+            Assert.True(cheap.Reason.Contains("Preis zu niedrig"), cheap.Reason);
             Assert.Equal(OfferStatus.Rejected, huge.Status);
-            Assert.Contains("Menge zu groß", huge.Reason);
+            Assert.True(huge.Reason.Contains("Menge zu groß"), huge.Reason);
         }
 
         [Fact]
@@ -414,6 +414,120 @@ namespace CityBuilder.Simulation.Tests
                              $"Reichweite Σ {coverWithout:0.0} → {coverWith:0.0} Tage");
             Assert.True(after < before * 0.8, $"Defizit der Käufer sinkt: {before:0.0} → {after:0.0}");
             Assert.True(coverWith > coverWithout);
+        }
+
+        // ------------------------------------------------------------ Kalibrierung der Länder-Volkswirtschaften
+
+        /// <summary>Mittlere Tagesleistung (Lebensmittel mit dem Jahresmittel der Ernte).</summary>
+        static double Potential(NationEconomy n, int c) =>
+            n.Population * n.CapacityPerCapita[c] * (c == (int)GoodsCategory.Food ? n.Climate.AnnualHarvestFactor : 1.0);
+
+        [Theory]
+        [InlineData(2024)]
+        [InlineData(7)]
+        public void WorldEconomy_BalancedOnAverage_CountriesSpecialized(int seed)
+        {
+            var p = NewPlanet(seed, new PlanetSettings());
+            var t = NewTrade(p);
+            t.AiEnabled = false;
+            var prod = new double[GoodsCategories.Count];
+            var dem = new double[GoodsCategories.Count];
+            for (int d = 0; d < 120; d++)
+            {
+                t.SimulateDay();
+                if (d < 30) continue;
+                foreach (var n in p.Economy.Nations)
+                    for (int c = 0; c < GoodsCategories.Count; c++) { prod[c] += n.Production[c]; dem[c] += n.Demand[c]; }
+            }
+            for (int c = 0; c < GoodsCategories.Count; c++)
+            {
+                double ratio = prod[c] / dem[c];
+                output.WriteLine($"{(GoodsCategory)c,-11} Welt Produktion/Bedarf {ratio:0.00}");
+                Assert.InRange(ratio, 0.85, 1.15);
+            }
+            // Spezialisierung: Länder mit Primärstärke X haben in X Kapazität über dem eigenen Bedarf und über dem Rest der Welt
+            var primaryCategory = new Dictionary<Strength, GoodsCategory[]>
+            {
+                [Strength.Agriculture] = new[] { GoodsCategory.Food },
+                [Strength.RawMaterials] = new[] { GoodsCategory.Wood, GoodsCategory.Minerals, GoodsCategory.Energy },
+                [Strength.Industry] = new[] { GoodsCategory.Industrial },
+                [Strength.Technology] = new[] { GoodsCategory.Technology },
+                [Strength.Tourism] = new[] { GoodsCategory.Tourism },
+            };
+            foreach (var kv in primaryCategory)
+            {
+                var group = p.Economy.Nations.Where(n => n.Country.Profile.Primary == kv.Key).ToList();
+                if (group.Count == 0) continue;
+                var others = p.Economy.Nations.Where(n => n.Country.Profile.Primary != kv.Key).ToList();
+                double Best(NationEconomy n) => kv.Value.Max(c => Potential(n, (int)c) / Math.Max(1.0, n.Demand[(int)c]));
+                double mine = group.Average(Best), rest = others.Average(Best);
+                output.WriteLine($"Primär {kv.Key,-13} ({group.Count}): Kapazität/Bedarf {mine:0.00} · übrige {rest:0.00}");
+                Assert.True(mine > 1.05, $"{kv.Key}: Überschuss erwartet ({mine:0.00})");
+                Assert.True(mine > rest, $"{kv.Key}: stärker als der Rest ({mine:0.00} vs {rest:0.00})");
+            }
+        }
+
+        [Fact]
+        public void OneYear_WithoutTradeGapsGrow_WithTradeMuchSmaller()
+        {
+            double Gap(Planet p) => p.Economy.Nations.Sum(n => Enumerable.Range(0, GoodsCategories.Count)
+                .Where(c => TradeGoods.IsTradeable((GoodsCategory)c))
+                .Sum(c => Math.Max(0.0, TradeRules.TargetCoverDays * n.Demand[c] - n.Stock[c]) * GoodsCategories.BasePrice[c]));
+            (double early, double end, double sum) Run(bool ai)
+            {
+                var p = NewPlanet(2024, new PlanetSettings());
+                var t = NewTrade(p, 9);
+                t.AiEnabled = ai;
+                double early = 0, sum = 0;
+                for (int d = 0; d < 365; d++)
+                {
+                    t.SimulateDay();
+                    if (d == 29) early = Gap(p);
+                    if (d >= 60) sum += Gap(p);
+                }
+                return (early, Gap(p), sum);
+            }
+            var off = Run(false);
+            var on = Run(true);
+            output.WriteLine($"Lagerlücke weltweit (Wert unter 20 Tagen Reichweite): ohne Handel Tag 30 {off.early / 1e9:0.0} G€ → Tag 365 {off.end / 1e9:0.0} G€; " +
+                             $"mit Handel Tag 365 {on.end / 1e9:0.0} G€ · Summe Tag 60–365 ohne {off.sum / 1e9:0} G€, mit {on.sum / 1e9:0} G€ ({(1 - on.sum / off.sum) * 100:0} % kleiner)");
+            Assert.True(off.end > off.early, "ohne Handel wachsen die Defizite");
+            Assert.True(on.sum < off.sum * 0.75, "mit Handel deutlich kleinere Lagerlücken");
+            Assert.True(on.end < off.end * 0.75);
+        }
+
+        [Fact]
+        public void News_ContractTariffEmbargo_ForMedia()
+        {
+            var p = NewPlanet();
+            var t = NewTrade(p);
+            t.AiEnabled = false;
+            var news = new List<TradeNews>();
+            t.News += news.Add;
+            int player = p.PlayerCountryId, npc = Npc(t);
+            var o = t.Execute(new ProposeContractCommand(player, npc, TradeSide.Buy,
+                new ContractTerms { Good = GoodsCatalog.Steel, UnitsPerWeek = 5, Weeks = 3, Price = 200 }));
+            t.Execute(new AcceptOfferCommand(npc, o.Id));
+            Assert.Contains(news, n => n.Kind == TradeNewsKind.ContractSigned && n.Country == npc && n.Detail == "Stahl" && n.Value == 3);
+            t.Execute(new SetTariffCommand(npc, player, 0.3));
+            Assert.Contains(news, n => n.Kind == TradeNewsKind.TariffRaised && n.Country == npc && Math.Abs(n.Value - 0.3) < 1e-9);
+            // eigene Zollerhöhung des Spielers ist keine Meldung „Land X erhöht“
+            int before = news.Count;
+            t.Execute(new SetTariffCommand(player, -1, 0.2));
+            Assert.Equal(before, news.Count);
+            // Embargo: Beziehung fällt unter −50 (Kündigungen in Serie)
+            for (int i = 0; i < 20 && !news.Exists(n => n.Kind == TradeNewsKind.Embargo); i++)
+            {
+                var r = t.Execute(new ProposeContractCommand(player, npc, TradeSide.Buy,
+                    new ContractTerms { Good = GoodsCatalog.Steel, UnitsPerWeek = 5, Weeks = 3, Price = 200 }));
+                var c = t.Execute(new AcceptOfferCommand(npc, r.Id));
+                t.Execute(new CancelContractCommand(player, c.Id));
+            }
+            Assert.Contains(news, n => n.Kind == TradeNewsKind.Embargo && n.Country == npc);
+            Assert.True(t.Relation(player, npc) < TradeRules.RelationEmbargo);
+            // Vorlagen der Medien haben die Platzhalter
+            foreach (var topic in new[] { Services.Content.HeadlineTopic.TradeDeal, Services.Content.HeadlineTopic.Embargo, Services.Content.HeadlineTopic.TariffRaise })
+                Assert.Contains("{Land}", Services.Content.Headlines.Template(topic, 0).title);
         }
 
         [Fact]

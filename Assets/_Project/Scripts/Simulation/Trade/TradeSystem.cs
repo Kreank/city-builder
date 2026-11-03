@@ -228,6 +228,18 @@ namespace CityBuilder.Simulation.Trade
             return r;
         }
 
+        /// <summary>
+        /// Nachrichten, die den Spieler betreffen (für Medien/HUD): Vertrag geschlossen, Embargo (Beziehung fällt unter −50),
+        /// Zollerhöhung eines anderen Landes gegen uns. Handler dürfen keine Commands ausführen.
+        /// </summary>
+        public event Action<TradeNews> News;
+
+        void Report(TradeNewsKind kind, int country, double value, string detail)
+        {
+            if (country < 0 || country >= nations.Count) return;
+            News?.Invoke(new TradeNews(kind, country, nations[country].Country.Name, value, detail, Day));
+        }
+
         /// <summary>Ergebnis des zuletzt ausgeführten Commands (UI-Rückmeldung).</summary>
         public TradeResult LastResult { get; private set; }
 
@@ -290,6 +302,9 @@ namespace CityBuilder.Simulation.Trade
             o.RespondedBy = party;
             o.ContractId = c.Id;
             o.Reason = reason ?? "angenommen";
+            if (c.Involves(PlayerId))
+                Report(TradeNewsKind.ContractSigned, c.Partner(PlayerId), c.Terms.Weeks,
+                    c.Kind == ContractKind.Agreement ? "ein Handelsabkommen" : c.Good.Name);
             if (c.Kind == ContractKind.Agreement)
             {
                 agreements[seller, buyer]++;
@@ -360,7 +375,10 @@ namespace CityBuilder.Simulation.Trade
                 if (target < 0) return TradeResult.Fail("Grundzoll braucht einen Satz");
             }
             else rate = Math.Round(Math.Clamp(rate, 0.0, TradeRules.MaxTariff), 3);
+            double before = TariffRate(party, PlayerId);
             nations[party].Tariffs.Set(target, rate);
+            double after = TariffRate(party, PlayerId);
+            if (!IsPlayer(party) && PlayerId >= 0 && after > before + 1e-9) Report(TradeNewsKind.TariffRaised, party, after, null);
             return new TradeResult(true, target < 0 ? $"Grundzoll {rate * 100:0} %" : double.IsNaN(rate) ? "Grundzoll gilt" : $"Zoll {rate * 100:0} %");
         }
 
@@ -661,8 +679,11 @@ namespace CityBuilder.Simulation.Trade
         void AddRelation(int a, int b, float delta)
         {
             if (a == b) return;
-            float v = Math.Clamp(relation[a, b] + delta, TradeRules.RelationMin, TradeRules.RelationMax);
+            float old = relation[a, b];
+            float v = Math.Clamp(old + delta, TradeRules.RelationMin, TradeRules.RelationMax);
             relation[a, b] = relation[b, a] = v;
+            if (old >= TradeRules.RelationEmbargo && v < TradeRules.RelationEmbargo && (IsPlayer(a) || IsPlayer(b)))
+                Report(TradeNewsKind.Embargo, IsPlayer(a) ? b : a, v, null);
         }
 
         void WeeklyRelations()

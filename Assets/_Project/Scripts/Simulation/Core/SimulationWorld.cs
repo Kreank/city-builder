@@ -209,6 +209,7 @@ namespace CityBuilder.Simulation.Core
                 world.Trade = new Trade.TradeSystem(world.Planet, world.Clock, unchecked(seed * 31 + world.Settings.WorldSeed));
                 world.Trade.AttachCity(world.Goods, world.Economy);
                 world.AddSystem(world.Trade);
+                if (world.Media != null) CityBuilder.Simulation.Trade.TradeMedia.Connect(world.Trade, world.Media); // Schlagzeilen zum Handel
             }
             // --- Ende Etappe 8
             return world;
