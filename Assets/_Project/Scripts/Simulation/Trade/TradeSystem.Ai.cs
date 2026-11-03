@@ -188,6 +188,13 @@ namespace CityBuilder.Simulation.Trade
             return new OfferEvaluation(u, prob, reason);
         }
 
+        /// <summary>Nicht eingetragenes Angebot für eine Vorschau der Bewertung (UI: „Einschätzung“); null bei ungültigen Angaben.</summary>
+        public TradeOffer PreviewOffer(int from, int to, TradeSide side, ContractTerms terms)
+        {
+            if (terms?.Good == null || to < 0 || to >= nations.Count || to == from || from < 0 || from >= nations.Count) return null;
+            return new TradeOffer { From = from, To = to, Side = side, Terms = terms.Clone(), CreatedDay = Day, ExpiresDay = Day, Status = OfferStatus.Open };
+        }
+
         // ------------------------------------------------------------ Antworten (täglich)
 
         void RespondToOffers()

@@ -78,6 +78,7 @@ namespace CityBuilder.Game.UI.Hud
         HelpWindow help;
         WorldMapUiWindow worldMap;
         GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
+        TradeWindow tradeWindow; // Etappe 8 Handel (F11)
         VisualElement resourceFlyout;
 
         /// <summary>Wahr, solange die neue UI läuft (sonst greift das RoadTool auf die alte IMGUI-Leiste zurück).</summary>
@@ -213,6 +214,7 @@ namespace CityBuilder.Game.UI.Hud
             var goodsComp = tool.GetComponent<CityBuilder.Game.Goods.GoodsPanel>();
             if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
             // --- Ende G5
+            tradeWindow = Windows.Add(new TradeWindow()); // Etappe 8 Handel (F11), nur mit Weltkarte sichtbar
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
         }
@@ -470,6 +472,13 @@ namespace CityBuilder.Game.UI.Hud
             goodsBtn.Add(Icon(HudIconKind.Briefcase));
             topBar.Add(goodsBtn);
             // --- Ende G5
+
+            // --- Etappe 8 Handel (F11) – nur mit den neuen Fenstern und Weltkarte
+            var tradeBtn = Btn(null, () => tradeWindow?.Toggle(), () => tradeWindow != null && tradeWindow.IsOpen,
+                "Handel (F11): Länder, Weltpreise, Angebote, Verträge, Zölle", null, "cb-icon-btn");
+            tradeBtn.Add(Icon(HudIconKind.Coins));
+            topBar.Add(tradeBtn);
+            // --- Ende Etappe 8
 
             var helpBtn = Btn(null, () => help?.Toggle(), () => help != null && help.IsOpen, "Hilfe & Tasten (F1)", null, "cb-icon-btn");
             helpBtn.Add(Icon(HudIconKind.Help));
