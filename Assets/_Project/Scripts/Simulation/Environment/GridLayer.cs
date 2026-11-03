@@ -57,6 +57,9 @@ namespace CityBuilder.Simulation.Environment
         public float Sample(Vector2 world) =>
             TryWorldToCell(world, out int x, out int y) ? cells[y * Width + x] : 0f;
 
+        /// <summary>Nach direktem Schreiben in <see cref="RawValues"/> aufrufen (erhöht <see cref="Version"/>).</summary>
+        public void MarkChanged() => Version++;
+
         public void Clear()
         {
             Array.Clear(cells, 0, cells.Length);
