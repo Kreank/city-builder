@@ -6,7 +6,7 @@ namespace CityBuilder.Simulation.Economy
     /// Buchungen eines Zeitraums (ein Tag oder eine Spielwoche). Beträge je Kategorie sind immer ≥ 0;
     /// ob Einnahme oder Ausgabe, sagt die Kategorie (<see cref="Budget.IsIncome"/>).
     /// </summary>
-    public sealed class BudgetPeriod
+    public sealed partial class BudgetPeriod
     {
         readonly double[] amounts = new double[Budget.Count];
         readonly Dictionary<string, double> services = new Dictionary<string, double>();

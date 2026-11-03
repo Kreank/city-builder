@@ -41,7 +41,7 @@ namespace CityBuilder.Simulation.Zoning
     /// Zellen von 8 × 8 m, bis zu 4 Reihen tief. Wird bei jeder Netzänderung neu berechnet; was gemalt wurde,
     /// steht separat in der <see cref="ZoneMap"/> und bleibt dadurch erhalten.
     /// </summary>
-    public sealed class ZoneGrid
+    public sealed partial class ZoneGrid
     {
         public const float CellSize = 8f;
         public const int Depth = 4;

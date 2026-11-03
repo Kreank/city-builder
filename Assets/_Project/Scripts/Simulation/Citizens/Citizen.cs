@@ -136,6 +136,8 @@ namespace CityBuilder.Simulation.Citizens
         public bool HasCarTrip => TripId != 0;
         /// <summary>Bis wann die aktuelle Tätigkeit dauert (Arbeit, Einkauf).</summary>
         internal long BusyUntil;
+        /// <summary>Lesend: bis zu diesem Tick dauert die aktuelle Tätigkeit (Arbeit, Einkauf, Freizeit, kurz nach Ankunft) – Fußgänger-Darstellung.</summary>
+        public long BusyUntilTick => BusyUntil;
         internal int LastWorkDay = -1;
 
         // ------------------------------------------------------------ Bedürfnismodell

@@ -170,13 +170,30 @@ namespace CityBuilder.Simulation.Goods
 
                 // Import: Weltmarkt + Fracht + Transport ab Außenanschluss
                 if (!routeKnown) { route = WorldRoute(buyer, true); routeKnown = true; }
+                double tariffRate = TradeGateway?.SpotTariffRate(g) ?? 0.0; // Etappe 8: Zoll des Spielers
                 double importUnit = route.Ok
-                    ? m.WorldPrice * (1.0 + route.FreightShare) + TruckCost(route.Distance) / amount
+                    ? m.WorldPrice * (1.0 + route.FreightShare + tariffRate) + TruckCost(route.Distance) / amount
                     : double.MaxValue;
+
+                // --- Etappe 8 Handel: Vertragsware im Grenzlager (Lkw ab Außenanschluss, Fernfracht trug der Verkäufer)
+                float contractAmount = 0f;
+                double contractUnit = double.MaxValue;
+                if (TradeGateway != null && route.Ok)
+                {
+                    float avail = TradeGateway.ImportAvailable(g);
+                    if (avail >= GoodsRules.MinShipment)
+                    {
+                        contractAmount = MathF.Min(amount, avail);
+                        contractUnit = TradeGateway.ImportUnitPrice(g) + TruckCost(route.Distance) / contractAmount;
+                    }
+                }
+                // --- Ende Etappe 8
 
                 if (best == null && !route.Ok) return;
                 float shipped;
-                if (best != null && bestUnit <= importUnit) shipped = DispatchLocal(best, buyer, g, bestAmount, bestDist, now);
+                if (contractAmount > 0f && contractUnit <= Math.Min(importUnit, best != null ? bestUnit : double.MaxValue) * ContractPreference)
+                    shipped = DispatchContractImport(buyer, g, contractAmount, route, now); // Etappe 8
+                else if (best != null && bestUnit <= importUnit) shipped = DispatchLocal(best, buyer, g, bestAmount, bestDist, now);
                 else shipped = DispatchImport(buyer, g, amount, route, now);
                 want -= shipped;
             }
@@ -217,8 +234,12 @@ namespace CityBuilder.Simulation.Goods
             double value = m.WorldPrice * (double)amount;
             double truck = TruckCost(route.Distance);
             double freight = value * route.FreightShare + truck;
-            buyer.Cash -= value;
-            buyer.Today.Purchases += value;
+            // --- Etappe 8: Zoll auf Weltmarkt-Importe (Stadtkasse), zählt zum Einkaufswert der Firma
+            double tariff = TradeGateway != null ? value * TradeGateway.SpotTariffRate(g) : 0.0;
+            if (tariff > 0) TradeGateway.BookTariff(tariff);
+            // --- Ende Etappe 8
+            buyer.Cash -= value + tariff;
+            buyer.Today.Purchases += value + tariff;
             buyer.Today.Imported += amount;
             buyer.Incoming[k] += amount;
             Charge(buyer, freight);
@@ -231,11 +252,85 @@ namespace CityBuilder.Simulation.Goods
                 Kind = ShipmentKind.Import, Good = g, Amount = amount,
                 FromBuildingId = 0, ToBuildingId = buyer.BuildingId, ConnectionNodeId = route.Node?.Id ?? 0,
                 From = from, To = buyer.Building.Entrance,
-                Value = value, TransportCost = freight, TruckEstimate = truck, PayerBuildingId = buyer.BuildingId,
+                Value = value + tariff, TransportCost = freight, TruckEstimate = truck, PayerBuildingId = buyer.BuildingId,
             };
             Launch(s, null, route.Node, buyer.Building, null, route.Distance, true, route.Hinterland, now);
             return amount;
         }
+
+        // ------------------------------------------------------------ Etappe 8 Handel: Vertragsware
+
+        /// <summary>Vertragsware wird bis zu diesem Faktor teurer als die beste Alternative noch genommen (liegt schon bereit).</summary>
+        const double ContractPreference = 1.05;
+        /// <summary>Exportverträge werden bis herunter auf diesen Füllstand des Ausgangslagers beliefert.</summary>
+        const float ContractKeepFill = 0.1f;
+
+        float DispatchContractImport(Firm buyer, GoodType g, float amount, Route route, long now)
+        {
+            int k = g.Index;
+            var m = markets[k];
+            double value = TradeGateway.TakeImport(g, amount);
+            double truck = TruckCost(route.Distance);
+            buyer.Cash -= value;
+            buyer.Today.Purchases += value;
+            buyer.Today.Imported += amount;
+            buyer.Incoming[k] += amount;
+            Charge(buyer, truck);
+            m.Today.Imported += amount;
+            m.Today.ImportValue += value;
+
+            var from = route.Node != null ? route.Node.Position : buyer.Building.Entrance + new Vector2(route.Distance, 0f);
+            var s = new Shipment
+            {
+                Kind = ShipmentKind.Import, Good = g, Amount = amount, IsContract = true,
+                FromBuildingId = 0, ToBuildingId = buyer.BuildingId, ConnectionNodeId = route.Node?.Id ?? 0,
+                From = from, To = buyer.Building.Entrance,
+                Value = value, TransportCost = truck, TruckEstimate = truck, PayerBuildingId = buyer.BuildingId,
+            };
+            Launch(s, null, route.Node, buyer.Building, null, route.Distance, true, route.Hinterland, now);
+            return amount;
+        }
+
+        /// <summary>Beliefert offene Exportverträge (vor dem Weltmarkt-Export): Lkw zum Außenanschluss, die Stadtkasse zahlt den Vertragspreis.</summary>
+        void ContractExport(Firm seller, GoodType g, float cap, ref Route route, ref bool routeKnown, long now)
+        {
+            int k = g.Index;
+            var m = markets[k];
+            for (int load = 0; load < 2; load++)
+            {
+                float wanted = TradeGateway.ExportWanted(g);
+                float avail = seller.OutputStock[k] - cap * ContractKeepFill;
+                float amount = MathF.Min(g.LoadUnits, MathF.Min(wanted, avail));
+                if (amount < GoodsRules.MinShipment) return;
+                if (!routeKnown) { route = WorldRoute(seller, false); routeKnown = true; }
+                if (!route.Ok) return;
+                double truck = TruckCost(route.Distance);
+                double net = TradeGateway.ExportUnitPrice(g) - truck / amount;
+                // wie beim Weltmarkt-Export: nur wenn es sich lohnt – volle Lager immer
+                if (net < m.LocalPrice * GoodsRules.ExportMinPriceRatio && seller.OutputStock[k] < cap * GoodsRules.DumpFill) return;
+                double value = TradeGateway.ExportDispatched(g, amount);
+                seller.OutputStock[k] -= amount;
+                if (seller.OutputStock[k] < 1e-5f) seller.OutputStock[k] = 0f;
+                seller.Cash += value;
+                seller.Today.Revenue += value;
+                seller.Today.Sold += amount;
+                seller.Today.Exported += amount;
+                Charge(seller, truck);
+                m.Today.Exported += amount;
+                m.Today.ExportValue += value;
+
+                var to = route.Node != null ? route.Node.Position : seller.Building.Entrance + new Vector2(route.Distance, 0f);
+                var s = new Shipment
+                {
+                    Kind = ShipmentKind.Export, Good = g, Amount = amount, IsContract = true,
+                    FromBuildingId = seller.BuildingId, ToBuildingId = 0, ConnectionNodeId = route.Node?.Id ?? 0,
+                    From = seller.Building.Entrance, To = to,
+                    Value = value, TransportCost = truck, TruckEstimate = truck, PayerBuildingId = seller.BuildingId,
+                };
+                Launch(s, seller.Building, null, null, route.Node, route.Distance, true, route.Hinterland, now);
+            }
+        }
+        // ------------------------------------------------------------ Ende Etappe 8
 
         // ------------------------------------------------------------ Export
 
@@ -251,6 +346,7 @@ namespace CityBuilder.Simulation.Goods
                     var g = o.Good;
                     int k = g.Index;
                     float cap = seller.OutputCapacity[k];
+                    if (TradeGateway != null && cap > 0f) ContractExport(seller, g, cap, ref route, ref routeKnown, now); // Etappe 8: Verträge zuerst
                     if (cap <= 0f || seller.OutputStock[k] < cap * GoodsRules.ExportFill) continue;
                     if (!routeKnown) { route = WorldRoute(seller, false); routeKnown = true; }
                     if (!route.Ok) break;
@@ -405,7 +501,11 @@ namespace CityBuilder.Simulation.Goods
             if (s.Done) return;
             s.Done = true;
             deliveredToday++;
-            if (s.Kind == ShipmentKind.Export) return; // Erlös wurde beim Abschicken gebucht
+            if (s.Kind == ShipmentKind.Export)
+            {
+                if (s.IsContract) TradeGateway?.ExportArrived(s.Good, s.Amount); // Etappe 8: am Außenanschluss → Grenzlager
+                return; // Erlös wurde beim Abschicken gebucht
+            }
             var f = FirmAt(s.ToBuildingId);
             if (f == null) { Stats.LostShipments++; return; }
             int k = s.Good.Index;

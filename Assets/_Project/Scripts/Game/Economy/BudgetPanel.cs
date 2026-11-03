@@ -32,7 +32,7 @@ namespace CityBuilder.Game.Economy
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.mKey.wasPressedThisFrame) visible = !visible;
             estimateAge += Time.unscaledDeltaTime;
         }

@@ -26,7 +26,7 @@ namespace CityBuilder.Simulation.Economy
     /// </para>
     /// Rein deterministisch: kein Zufall, Summen in fester Reihenfolge.
     /// </summary>
-    public sealed class EconomySystem : ISimulationSystem, IConstructionBudget
+    public sealed partial class EconomySystem : ISimulationSystem, IConstructionBudget
     {
         public int TickInterval => SimulationClock.TicksPerDay;
 
@@ -177,6 +177,15 @@ namespace CityBuilder.Simulation.Economy
             Book(CurrentWeek, category, amount);
         }
         // --- Ende ÖPNV
+
+        // --- Etappe 8 Handel: Buchung einer Einnahme (Zölle, Vertragsverkauf, Strafen) bzw. Ausgabe ohne Geldprüfung
+        /// <summary>Bucht einen Betrag ≥ 0 in eine Kategorie (Vorzeichen aus <see cref="Budget.IsIncome"/>), ohne Prüfung des Rahmens.</summary>
+        public void Post(BudgetCategory category, double amount)
+        {
+            if (!(amount > 0)) return;
+            Book(CurrentWeek, category, amount);
+        }
+        // --- Ende Etappe 8
 
         /// <summary>Kurzform: prüfen und abbuchen. false = zu wenig Geld (nichts gebucht).</summary>
         public bool TrySpend(BudgetCategory category, double amount)

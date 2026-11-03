@@ -7,7 +7,7 @@ namespace CityBuilder.Simulation.Citizens
     /// Gleicher Seed → gleiche Folge auf jeder Plattform (Unity/Mono, .NET, Server) – Grundlage für
     /// Multiplayer, Replays und Tests. Keine Uhrzeit, kein globaler Zustand.
     /// </summary>
-    public sealed class SimRandom
+    public sealed partial class SimRandom
     {
         uint s0, s1, s2, s3;
 

@@ -76,7 +76,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -216,10 +216,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
 - Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
+  Fußgänger (Platzhalter-Fahrten, Park, Laden, Haustür) zeichnet `PeopleView` (s. „Fußgänger“).
 - Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
   Mitglieder abgeleitet, nicht gespeichert. Familienstand je Bürger: `Citizen.Relationship`/`PartnerId` (Bedürfnismodell).
 - Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
-  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
+  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`, `BusyUntilTick` (Ende der Tätigkeit); `Vehicle.StartTime` (Verkehrszeit beim Start).
 
 ## Bürgerverhalten (Bedürfnisse)
 - Dateien in `Simulation/Citizens`: `Needs.cs` (Bedürfnisse, Gewichte je Lebensphase, `ServiceIds`), `Personality.cs`,
@@ -284,6 +285,59 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Später: Kinder gehen wirklich zur Schule (Tagesablauf), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
   aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter ✅ (s. „ÖPNV“: Stau → eher Bus). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
   für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
+
+## Fußgänger (sichtbare Bürger)
+- **Simulation** `Simulation/People` (rein, getestet in `PedestrianTests`): `SidewalkGraph` = ungerichtetes Gehwegnetz aus dem
+  Straßennetz (nur Typen mit Gehweg beidseits; neu gebaut bei `RoadNetwork.Version`). Knoten = Gehweg-Enden je Arm (links/
+  rechts vom Knoten weg), Kanten = Gehweg entlang des Segments (`SampledCurve.OffsetAt` mit dem `Offset` der Gehweg-Spur =
+  Fahrbahnrand + halbe Gehwegbreite, zwischen den Trimm-Abständen), Gehwegecke (Mitte zwischen Bordstein und Außenkante aus
+  `JunctionGeometry.Layout`, im Knick entlang des versetzten Eckstücks), **Querung** (Zebrastreifen am Armende quer über die
+  Fahrbahn, Bordstein → Fahrbahnhöhe) nur an Kreuzungsflächen (`NodeShape.Junction`) und Sackgassen-Enden, +6 m Zuschlag.
+  Wegfindung A* (Luftlinie). Zugang: `TryAccessAtT` (Seite aus der Lage des Gebäudes), `TryNearestAccess`, `TryAccessAtNode`.
+  `PedestrianRoute` = Linienzug mit Höhe (Gehweg +0,2 m, Fahrbahn +0,05 m) und Belag je Punkt.
+- `PedestrianPlanner` (je Welt): Endpunkte (Haustür = Zufahrt − 1 m, Park = Tor an der Straßenseite + Luftlinie zur Parkmitte,
+  Außenanschluss, freier Punkt), Routen-Cache je Start/Ziel (geleert bei Netzänderung, max. 30 000), `RouteBudget` (neue
+  Routen je Frame). `Pose(citizen, time, activitySince)` → `PedestrianPose` (Hidden/Walking/Standing/Waiting, Ort, Höhe,
+  Richtung, m/Tick): Platzhalter-Fahrt (kein Auto) linear über die Route zwischen `TripStartTick` und `PlannedArrivalTick`
+  (Tempo = Routenlänge / Fahrzeit → Ankunft passt immer zur Simulation); Park: Hinweg (wenn der Beginn beobachtet wurde),
+  Platz je Bürger auf der Parkfläche mit kleiner Runde, Rückweg in den letzten `ParkWalkTicks` vor `Citizen.BusyUntilTick`
+  (gleiche Formel wie das Bürgersystem); Spaziergang im Viertel = 40 m auf dem eigenen Gehweg hin und her; Einkauf = die
+  letzten 3 Ticks vor dem Laden; Ankunft zu Hause = 2 Ticks vor der Haustür. Neu lesend: `Citizen.BusyUntilTick`.
+- **ÖPNV-Erweiterungsstelle:** `PedestrianPlanner.Transit` bzw. in Unity `PeopleView.TransitHook`
+  (`Func<Citizen, double, TransitPose>`): `TransitPose.WaitingAt(stop, h, facing)` (steht am Haltestellenpunkt),
+  `InVehicle` (unsichtbar), `Walk(from, fromPoint, to, toPoint, start, end)` (Fußweg über die Gehwege, Place.None = Punkt).
+  **Verbunden** über `TransitPedestrians` (Simulation/People, liest nur `CitizenSystem.RideOf`/`TransitSystem`; `PeopleView`
+  nimmt sie, wenn `TransitHook` null ist): Fahrgast wartet → zuerst Fußweg Tür → Haltestelle in **Verkehrszeit** ab
+  `Passenger.StartTime` (Gehweglänge ÷ `TransitRules.WalkSpeed` 1,3 m/s, 1 Tick = `TrafficSystem.Dt` 0,25 s → echtes
+  Gehtempo), dann Stehen auf dem Gehweg der Halteseite (`WaitPoint`: 0,6 m zum Bordstein, ±2,5 m gestreut, Blick zur Straße;
+  `StopSide.Both` → Seite nach Id). Im Bus → unsichtbar. Nach dem Aussteigen Fußweg vom Gehweg des Ziel-Halts zum Ziel in den
+  letzten Ticks vor `PlannedArrivalTick` (Formel wie `CitizenSystem.OnRideEnded`: Luftlinie ÷ 1 500 m/Tick, + 3 außerhalb).
+  Die Fahrt entfernt das Bürgersystem beim Aussteigen – `TransitPedestrians.Observe` merkt sie sich je Frame. Statistische
+  Fahrgäste (`TransitRealShare`) und unbeobachtete Fahrten: unsichtbar.
+  **Zeitbasis im Bürgersystem** (nur dokumentiert, nicht umgebaut): `TransitSystem.StartRide` lässt sofort warten (Fußweg zur
+  Haltestelle ohne Dauer; die Planung `TransitOption.AccessMeters`/`PerceivedSeconds` rechnet ihn aber in Verkehrszeit) – die
+  Darstellung zeigt ihn trotzdem in Verkehrszeit; wer einsteigt, bevor er sichtbar ankommt, verschwindet unterwegs. Dauer in
+  Spielticks (Zeitraffer) haben: Platzhalter-Fußwege (`CitizenSystem.StartTrip`: `dist / OtherMetersPerTick`), Fußweg vom
+  Ziel-Halt (`OnRideEnded`: `rest / OtherMetersPerTick`) und Parkwege (`TryLeisure`: `walk`). Für echtes Gehtempo müssten diese
+  drei Stellen in Verkehrszeit rechnen (z. B. Ankunft über `traffic.Time` + Strecke ÷ 1,3 m/s statt `ArriveTick`), bzw.
+  `StartRide` erst nach dem Zugangsweg in die Warteschlange stellen.
+- **Darstellung** `Game/People/PeopleView` (Begleiter am RoadTool): je Frame alle Bürger mit billiger Vorprüfung (Start/Ziel
+  in Reichweite), dann Pose, Sichtkegel, bis `FarDistance` 520 m (Kamera höher → nichts), höchstens `MaxVisible` 3 000 (nächste
+  zuerst); bis `NearDistance` 170 m volle Figur (Beine/Arme schwingen um Hüfte/Schulter, Wippen, Senioren gebeugt, Schatten),
+  darüber 2 Quader ohne Schatten. Neue Routen höchstens 24 je Frame. `Graphics.RenderMeshInstanced`, ein Material je Farbe.
+  Seitliche Streuung ±0,85 m (auf Zebrastreifen ±0,5 m), Schrittfrequenz in Echtzeit. Freizeitbeginn beobachtet die View
+  (Wechsel in `Activity.Leisure`), die Simulation speichert ihn nicht.
+- **Figuren** `PeopleFigures`: Platzhalter aus Quadern, 1,75 m (Kleinkind 0,55×, Kind 0,74×, Jugendliche 0,93×, Kopf relativ
+  größer), Farben nach Bürger-Id (Haut 5, Haare 5 bzw. grau/weiß bei Senioren, Oberteil 12 / Kinder kräftig / Senioren gedeckt,
+  Hose 6). Eigene Modelle (`OwnModelCatalog.People`, s. „Eigene Assets“) ersetzen die Platzhalter: je Gruppe zufällig nach Id,
+  fehlt die Gruppe, Erwachsene skaliert.
+- **Inspektor:** Fußgänger anklickbar (`InspectorPicking`: Kugel um die zuletzt gezeichnete Körpermitte, Vorrang wie Fahrzeuge)
+  → Bürger; Ring um die Person und Verfolgen (`PeopleView.TryGetPosition`).
+- **Zeitverzerrung:** 1 Tick = 6 Spielminuten = 0,1 s Echtzeit bei Tempo 1. Platzhalter-Fußwege dauern meist 1–2 Ticks →
+  Fußgänger laufen sichtbar im Zeitraffer (z. B. 600 m in 0,2 s). Deutlich länger sichtbar sind Park, Spaziergang, Laden, Tür.
+  Echt wirkende Gehgeschwindigkeit bräuchte Fußwege in Verkehrszeit (wie Autos) im Bürgersystem – offen.
+- Leistung (Testprojekt, Info): Raster 13×13 Straßen (312 Segmente) → Gehwegnetz 17 ms, 500 Routen 75 ms (inkl. JIT).
+  Unity noch nicht gestartet (Optik, Frame-Zeiten ungeprüft).
 
 ## Spiel-UI (UI Toolkit, Phase 1)
 - `Game/UI/Hud/GameHud` (+ `GameHud.BuildBar.cs`), Begleiter am `RoadTool` (zuletzt angehängt). Erzeugt zur Laufzeit
@@ -364,7 +418,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 ## Inspektor (Auswählen-Modus, Übersicht Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
   Liest nur. Klick = Strahl gegen Gebäude (Grundstück × `VisualHeight`), Versorgungsbauwerke (Fläche × grobe
-  Platzhalterhöhe) und Fahrzeuge (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
+  Platzhalterhöhe), Fahrzeuge und Fußgänger (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
   Geländepunkt unter der Maus. Rechtsklick/Klick ins Leere hebt auf (Panel schließt, außer die Stadtübersicht ist offen),
   „← Zurück“ geht den Verlauf zurück.
 - Auswahl = Art + Id (`Selection`), jedes Frame neu nachgeschlagen; verschwundenes Fahrzeug → Auswahl springt zum
@@ -483,8 +537,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
   Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
   Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
-  Arbeitslosigkeit ≥ 12 %. Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
-  {Einwohner} {Prozent} {Medium}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  Arbeitslosigkeit ≥ 12 %, Handel (Vertrag, Embargo, Zollerhöhung über `Report`, s. Etappe 8). Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium} {Land}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
   **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
   `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
   `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
@@ -659,7 +713,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Markt je Gut:** Bestand = Ausgangs- + Eingangslager aller Firmen; Zielbestand = 3 Tage Bedarf (Eingänge der Belegschaft +
   Haushaltswünsche, geglättet 0,3). Zielpreis = Grund × clamp(1 + 0,6 × (1 − (Bestand+1)/(Ziel+1)), 0,5, 1,8); lokaler Preis
   läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
-  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage).
+  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage); mit Weltkarte stattdessen der Weltpreis der Länder (Etappe 8).
 - **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
   Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
   Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
@@ -748,7 +802,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kapazität je Kopf aus Profil/Vorkommen, Ernte und Heizbedarf aus dem Klima der Hauptstadt, Vorleistungen (Erz+Energie+Holz →
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
-  Startpreis spiegelt Knappheit). `Balance(cat)` = Überschuss/Defizit je Tag für die spätere Handels-KI, `WorldPrice` =
+  Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
   produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
   vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
@@ -777,8 +831,87 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
 - Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
-  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Handel zwischen Ländern
-  (Etappe 8 über `Balance`/`Price`), Stadt-Wirtschaft (G5) speist ins Spieler-Land, Wechsel in andere Städte (LOD detailliert).
+  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
+  Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
+
+## Handel (Etappe 8)
+- `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
+  `TradeContract` (Bedingungen, Angebot, Vertrag, Lieferung, Gedächtnis), `TradeCommands`, `NationTrade` (Persönlichkeit, Zölle,
+  Vertrauen), `CityTradeDepot` (Grenzlager), `TradeRules` (alle Zahlen). Nur mit Weltkarte: `CreateDefault` legt `world.Trade` an,
+  sobald `world.Planet.Economy` existiert (läuft zuletzt; Tests ohne Welt bleiben unverändert). G5 kennt nur `Goods/ITradeGateway`.
+- **Güter ↔ Kategorien:** Agrar = Getreide, Vieh, Mehl, Lebensmittel; Holz = Holz, Bretter; Erze/Baustoffe = Erz, Sand, Zement,
+  Baustoffe; Energie = Kohle, Erdöl; Industrie = Stahl, Kunststoff, Glas; Konsum = Kleidung, Möbel; Technik = Elektronik, Fahrzeuge;
+  Tourismus ohne Gut. 1 Wareneinheit = Grundpreis Gut / Grundpreis Kategorie Kategorie-Einheiten (wertgleich).
+- **Preise:** Länderpreis je Gut = Grundpreis × (Kategoriepreis/Kategorie-Grundpreis des Landes) × (1 ± 6 % Hash je Land/Gut).
+  **Weltpreis** = Σ Länderpreis × w / Σ w, w = geglättetes Handelsvolumen (Kategorie-Einheiten/Tag, EMA 0,1) + 2 % der Produktion.
+  Die Stadt bekommt ihn über `GoodsSystem.WorldPriceSource` (begrenzt 0,5–2 × G5-Grundpreis) statt des Rauschens → Paritätsband,
+  Import/Export und Standortwahl reagieren auf Knappheit der Länder.
+- **Transport** (`TradeGeography`, einmal beim Start): Handelsort = Hauptstadt (Spieler: Mitte der Startregion); Landweg nur auf
+  derselben Landmasse (Großkreis × 1,35 × 0,03 €/t·km), Seeweg über den nächsten Küstenpunkt (Breitensuche über Land: Vor-/Nachlauf
+  × 0,03 + Großkreis Hafen–Hafen × 1,25 × 0,004 €/t·km + 2 × 4 €/t Umschlag) – der billigere gewinnt. Frachttonnen = max(Gewicht,
+  Volumen × 0,4). Lieferzeit = ⌈1 + Land/600 km + See/500 km (+2 Hafentage)⌉ Tage. Der Verkäufer trägt die Fernfracht (frei Grenze).
+- **Schnittstelle (Spieler = NPC):** `ProposeContractCommand` (Angebot „verkaufe“ / Nachfrage „kaufe“ an ein Land oder alle; auch
+  Handelsabkommen), `AcceptOfferCommand`, `RejectOfferCommand`, `WithdrawOfferCommand`, `CancelContractCommand`, `SetTariffCommand`.
+  `Submit` reiht ein (nächster Tick), `Execute` sofort (UI, KI); `CommandLog` für Replays. `ContractTerms`: Gut, Menge/Woche, Wochen
+  (1–52), Festpreis oder Weltpreis × Faktor, Strafanteil. Angebote gelten 7 Tage und werden **in der nächsten Nacht** beantwortet
+  (während des Handelstags gestellte erst in der übernächsten).
+- **Verträge:** Start am Folgetag (Spieler als Verkäufer: +6 Tage Vorlauf zum Sammeln), wöchentlicher Versand, Ankunft nach der
+  Lieferzeit, Bezahlung bei Ankunft (Preis am Versandtag). Fehlmenge → Strafe = Fehlmenge × Preis × Strafanteil an den Käufer,
+  Vertrauen des Käufers − (0,05 + 0,3 × Fehlquote), Beziehung − (4 + 12 × Fehlquote), Erinnerung „Vertragsbruch“; volle Lieferung:
+  Vertrauen +0,01, Beziehung +0,4. Kündigung: Gebühr = min(4, Restwochen) × Wochenwert × Strafanteil × 0,5, Vertrauen −0,1,
+  Beziehung −6; Ware unterwegs kommt noch an. Handelsabkommen: beide Zölle 0 für die Laufzeit (26 Wochen), Beziehung +0,5/Woche.
+- **NPC-Seite:** Lager in Kategorie-Einheiten (`NationEconomy.Stock`); Versand nur über einer Reserve von 3 + 12 × (1 − Verlässlichkeit)
+  Tagen Bedarf, unter 10 Tagen Reichweite bricht ein Land mit Wahrscheinlichkeit 0,5 × (1 − Verlässlichkeit) bewusst.
+- **Stadt (`CityTradeDepot`, Vertragspartei = Stadtkasse):** Importware landet im Grenzlager (Kasse zahlt „Handel: Einkauf“), Firmen
+  beziehen sie wie einen Import per Lkw ab Außenanschluss zu Vertragspreis + Zoll gegen das Lieferland („Handel: Verkauf“ + „Zölle“),
+  wenn das höchstens 5 % teurer ist als lokal/Weltmarkt. Exportverträge: Firmen liefern vor dem Weltmarkt-Export bis 10 % Restfüllung,
+  wenn Vertragspreis − Lkw ≥ 90 % lokal (volle Lager immer), Kasse zahlt den Vertragspreis; am Versandtag geht die Ware aus dem
+  Grenzlager, Fernfracht zahlt die Kasse, das Käuferland zahlt bei Ankunft. Importware 14 Tage nach der letzten Ankunft bzw.
+  Exportware ohne Vertrag geht zu 85 % des Weltpreises weg. **Grundzoll** des Spielers verteuert Weltmarkt-Importe der Firmen (Teil
+  des Einkaufswerts) und geht an die Kasse. Neue Kassen-Kategorien (hinten angefügt): Zölle, Handel: Verkauf, Vertragsstrafen
+  (erhalten) | Handel: Einkauf (inkl. Fracht), Vertragsstrafen (gezahlt); `EconomySystem.Post(cat, betrag)`.
+- **Beziehungen/Politik:** Beziehung je Länderpaar −100..100, Start 10 ± 25 (Hash), Nachbarn −8; Drift 2 %/Woche zum Startwert;
+  Zoll von A gegen B über 10 % kostet je Woche (Satz − 0,1) × 10 Punkte; unter −50 Embargo (keine Annahme, Verträge werden gekündigt).
+  Zölle: `TariffSchedule` je Land (Grundzoll + Satz je Lieferland), NPC-Grundzoll = Protektionismus × 20 %; Vergeltung: liegt der Zoll
+  eines Landes gegen n mehr als 5 Punkte über dem Satz von n, hebt ein protektionistisches n (≥ 0,3) wöchentlich um 2 Punkte nach,
+  ohne Grund zurück zum Grundzoll. Vertrauen je gerichtetem Paar 0..1 (Start 0,6, Drift 1 %/Woche), Gedächtnis 12 Einträge je Land.
+- **NPC = Utility AI** (`TradeSystem.Ai.cs`, keine Sprach-KI): Persönlichkeit (Risiko, Protektionismus, Verlässlichkeit,
+  Geschäftssinn; Hash + Profil). Lagebild täglich: Reichweite = Lager/Bedarf, Netto = Saldo ± Verträge; Defizit = 0,6 × (20 −
+  Reichweite)/20 + 0,8 × (−Netto/Bedarf); Überschuss = (0,6 × (Reichweite − 35)/60 + 0,8 × Netto/Bedarf) × (1 + 0,3 Primär-/0,15
+  Sekundärstärke). **Bewertung** eines Angebots = Summe von Bausteinen (Preis gegen Inlandspreis inkl. Zoll/Fracht × Geschäftssinn,
+  Bedarf, Menge gegen Bedarf/Lieferfähigkeit, Schutz eigener Stärken, eigener Bedarf beim Verkauf, Überschuss, Strafe, Beziehung,
+  Vertrauen, Festpreis-Laufzeit) + 0,1 → Annahme mit 1/(1 + e^(−U/T)), T = 0,08 + 0,15 × Risiko; **Grund** = stärkster Gegen- bzw.
+  Fürgrund („zu teuer: höchstens …“, „Preis zu niedrig: mindestens …“, „Menge zu groß“, „Bedarf gedeckt“, „kein Vertrauen nach
+  Vertragsbruch“ …). **Wochenentscheidung** (je Land jeden 7. Tag, gestaffelt): Softmax (T = 0,05 + 0,2 × Risiko) über Nichtstun
+  (0,15), Kaufen je Defizit-Kategorie, Verkaufen je Überschuss-Kategorie, Handelsabkommen (Partner mit Beziehung ≥ 25 und laufendem
+  Vertrag); Partner per Softmax (Überschuss/Defizit, Beziehung, Vertrauen, Preisvorteil, Lieferzeit), Menge aus Bedarf und
+  Lieferfähigkeit (beim Spieler aus Importen/Kapazität der Stadt), Laufzeit 4 + 8 × (1 − Risiko) ± 2 Wochen, Preis zwischen
+  Untergrenze Verkäufer × 1,04 und Obergrenze Käufer nach Geschäftssinn, Weltpreis-Kopplung mit Wahrscheinlichkeit 0,7 × Risiko.
+  Höchstens 2 Angebote je Entscheidung, 3 offene je Land, 6 offene an den Spieler (1 je Land).
+- **UI:** `Game/UI/Windows/TradeWindow` (mittig, **F11**, Münz-Knopf in der oberen Leiste, „Handel“ beim Land in der Weltkarte):
+  Länder (Beziehung, Stärken, Persönlichkeit, Vertrauen in uns, Handelsweg, Zölle, Lage je Kategorie, Gedächtnis, Abkommen anbieten),
+  Weltpreise mit Wochentrend + lokalem Preis + Grenzlager, Angebote (annehmen/ablehnen, eigene mit Antwort/Begründung, neues Angebot
+  mit Vorschau der NPC-Einschätzung über `PreviewOffer` + `Evaluate`), Verträge (Lieferstatus, unterwegs, Grenzlager, Kündigen),
+  Zölle (Grundzoll, Satz je Land, Handelsbuchungen der Kasse). Aktionen per `Execute` (wirkt auch bei Pause). Optik ungetestet.
+- **Leistung** (Testprojekt): 36 Länder, 1 Jahr Länder + Handel ≈ 120 ms (≈ 0,33 ms/Tag, seit der Kalibrierung mehr Verträge),
+  Handel allein ≈ 60 ms/Jahr, Wege 8 ms.
+- **Kalibrierung der Länder-Volkswirtschaften** (`WorldEconomy.Calibrate`, `NationEconomy.TickDay`): Vorher war die Welt global knapp
+  (Produktion/Bedarf Industrie 0,43, Technik 0,00). Ursachen: (1) Vorleistungen nach Reihenfolge – Konsum nahm alle Industriegüter,
+  Technik bekam nichts; jetzt bekommt jeder Abnehmer seinen Anteil (Lager / noch offener Bedarf aller späteren Abnehmer).
+  (2) Kapazitäten je Kopf passten nicht zum Bedarf inkl. Vorleistungen (überschlagen: Industrie ~0,19 statt ~0,35 je Kopf, Energie ~0,5 statt
+  ~1,1). Jetzt wird beim Erzeugen je Kategorie weltweit skaliert, rückwärts durch die Kette (Endprodukte gegen Haushalte, Industrie
+  gegen Haushalte + Vorleistungen, dann Rohstoffe; Heizen/Kühlen, Ernte und Tourismus-Saison im Jahresmittel): Σ Kapazität =
+  Σ Bedarf × 1,04 (Lebensmittel 1,12 wegen 0,5 %/Tag Verderb). Länderunterschiede bleiben relativ. Ergebnis (Seeds 2024/7):
+  Welt-Produktion/Bedarf je Kategorie 0,90–1,09; Länder mit Primärstärke haben 1,16–1,64 × Kapazität ihres Bedarfs (übrige 0,9–1,6).
+  Ein Jahr ohne Handel: Lagerlücke (Wert unter 20 Tagen Reichweite) wächst von 544 auf 607 G€; mit Handel Tag 365 269 G€,
+  Summe Tag 60–365 36 % kleiner.
+- **Medien** (`TradeMedia.Connect` in `CreateDefault`, Event `TradeSystem.News`): Schlagzeilen-Themen `TradeDeal` („Handelsvertrag
+  mit {Land}“ bei jedem Vertrag/Abkommen des Spielers), `Embargo` (Beziehung zum Spieler fällt unter −50), `TariffRaise` (ein Land
+  erhöht seinen Zoll gegen uns); neuer Platzhalter {Land}. Nur mit Medienhaus sichtbar, Sperrfristen wie üblich.
+- **Später (Stufe 2+):** Regierungen/Bündnisse (Zollunion, gemeinsame Außenzölle, Sanktionen, Abstimmungen), Diplomatie-Aktionen
+  (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße, Tourismus als
+  Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
+  Städten (Etappe 7), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
@@ -789,6 +922,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
   (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
   `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
+  **Personen** (Fußgänger): alle `People/*.fbx` (Ordner anlegen, wenn das erste Modell kommt) → `OwnModelCatalog.People`,
+  Id = Dateiname; Gruppe nach Präfix `Toddler*`, `Child*`/`Kid*`, `Teen*`, `Senior*`, sonst Erwachsene. Konvention: Ursprung =
+  Mitte zwischen den Füßen, Front +Z, 1 Einheit = 1 m (~1,75 m groß; grobe Einheitenfehler werden korrigiert), Paletten-Material;
+  optionale Kindobjekte `LegL`, `LegR`, `ArmL`, `ArmR` schwingen beim Gehen um ihren eigenen Ursprung (= Hüft-/Schultergelenk,
+  Drehachse X). Gezeichnet per Instancing (ein Teil je MeshFilter), keine Farbvariation (mehrere Modelle je Gruppe verwenden).
   Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
   zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
   Transport/*, Nature/Bush_*/Rock_*, übrige Props.
@@ -873,7 +1011,47 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
 - Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
-  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie, sichtbare Wartende.
+  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
+
+## Speichern & Laden
+- **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
+  `partial class XyzSystem` in `XyzSystem.Save.cs` (konfliktarm), Anmeldung in `Persistence/SaveRegistry.Collect`
+  (eine Zeile, Reihenfolge = Lesereihenfolge) – oder einfach per `AddSystem`: registrierte `ISaveable`-Systeme werden
+  automatisch hinten angehängt. `SaveLoadTests` vergleicht **alle** Abschnitte → neue Systeme sind sofort im Test.
+- Format (`Simulation/Persistence`): Kopf unkomprimiert (Magic „CBSV“, Formatversion, Spielversion, Name, Tick der
+  Simulationsuhr – keine Systemzeit –, Einwohner, Kontostand, Länge, FNV-1a-64-Prüfsumme), danach GZip mit Abschnitten
+  (Id als Text, Version, Länge, Bytes). Unbekannter Abschnitt → übersprungen, fehlender → Standardzustand der frischen
+  Welt, neuere Abschnittsversion → `SaveLoadException`. Beschädigt/abgeschnitten → `SaveLoadException` mit Meldung
+  (Abschnitt genannt), nie ein Absturz; die alte Welt bleibt dann unberührt.
+- `ISaveable` (`SaveId`, `SaveVersion`, `Write(SaveWriter)`, `Read(SaveReader, version)`), optional `IAfterLoad`
+  (nach allen Abschnitten, z. B. Querverweise wie Bürger ↔ Fahrgast) und `IBeforeSave` (nur ohnehin fällige Nacharbeit,
+  z. B. Spurgraph nach Bau im Pausenmodus). `Write` darf nichts verändern. **Enums immer über den Namen**
+  (`w.Name(e)`/`r.Name<T>()`, Felder je Enum `NamedFloats`/`NamedDoubles`, Güter/Kanäle über ihre Id) – unbekannte
+  Werte werden übersprungen. Nachschlage-Wörterbücher kanonisch (`w.IntDictionary`, nach Schlüssel sortiert); Wörterbücher,
+  die **durchlaufen** werden, sind `Core.StableMap` (gleiche Reihenfolge wie `Dictionary`, Platzbelegung speicherbar).
+  `System.Random` gibt es in der Simulation nicht mehr → `Core.CompatRandom` (gleiche Zahlenfolge, speicherbar) bzw. `SimRandom`.
+- **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s).
+- Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
+  alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
+  Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
+  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege. **Gespeichert, obwohl „abgeleitet“**, weil sie
+  bewusst nur bei Änderungen neu gerechnet werden und dazwischen eine Momentaufnahme sind: Zonenraster (Geländehöhen beim
+  Aufbau), Versorgungsnetze, Dienst-Zuordnung, Grobraster des Bodenwerts, Umfeld-Cache und Gebäudelisten der Bürger,
+  ÖPNV-Routen, KI-Lagebild des Handels.
+- **Verkehr: laufende Fahrzeuge werden vollständig gespeichert** (Spur/Verbindung, Position, Route, Wartezustand,
+  Reihenfolge je Spur, Stau-Index je Spur) – nur so laufen geladene Welten bitgleich weiter; Bürger, Lkw-Ladungen und
+  Busse behalten ihr Fahrzeug, niemand geht verloren.
+- Determinismus-Test: Welt A spielt, speichert, B lädt; A und B laufen weiter (auch mit gleichen Spieleraktionen,
+  Speichern mitten im Tag, nach Bau ohne Tick, Handels-Command in der Warteschlange) und müssen je Abschnitt bitgleich sein
+  (`SaveGame.SectionHashes`/`StateHash` = FNV über die Abschnittsbytes) plus unabhängige Beobachtungen.
+- Leistung (Testprojekt, Info): 15 000 Bürger speichern ≈ 0,1 s, laden ≈ 0,17 s (inkl. Welt erzeugen), Datei ≈ 2,8 MB.
+- Unity: `SimulationRunner.ReplaceWorld`/`NewGame` + Event `WorldReplaced` (Views lösen alte Abos, verwerfen Caches/Objekte,
+  bauen neu auf – neue Views bitte ebenso). `Game/Persistence/SaveManager` (Begleiter am RoadTool): Ablage
+  `Application.persistentDataPath/Saves/*.cbsave`, Schreiben im Hintergrund (atomar), Autosave alle N Spielminuten
+  (PlayerPrefs, Ringpuffer 3), **Strg+S** Schnellspeichern, **Strg+L** Schnellladen. `SaveMenuWindow` (mittig, **Esc**
+  wenn Esc sonst nichts tat; pausiert): Speichern/Speichern unter/Laden (Liste mit Spielzeit, Einwohner, Kontostand,
+  Größe)/Neues Spiel (Seed, Startregion)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
+  Im Editor noch nicht visuell abgenommen.
 
 ## Roadmap
 1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
@@ -899,7 +1077,11 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
      ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
-     Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
+     Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
+     ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
+     Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
+     (im Editor noch nicht visuell abgenommen). Später: Fußwege in Verkehrszeit (echtes Gehtempo), Abkürzungen durch Parks,
+     freie Fußwege/Plätze, Ampelphasen an Zebrastreifen, inkrementeller Gehweg-Neubau (✅ ÖPNV verbunden: Wartende, Fußwege zur/von der Haltestelle)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
      ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,
@@ -928,6 +1110,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
      Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
      bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
+   - ✅ Speichern & Laden: versioniertes Binärformat mit Abschnitten/Migrationen, alle Systeme `ISaveable`, Determinismus
+     nach dem Laden, Spielmenü (Esc) mit Autosave/Schnellspeichern. Später: Cloud/Multiplayer-Stände, Vorschaubild, Replays aus Commands
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
@@ -935,4 +1119,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
+   - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
+     Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
+     Persönlichkeit/Gedächtnis, Beziehungen, Vertrauen, Zölle, Handelsabkommen, Stadtkasse (Zölle, Strafen, Vertragshandel),
+     Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
+     Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port

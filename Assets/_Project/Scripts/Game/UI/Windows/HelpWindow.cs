@@ -26,7 +26,7 @@ namespace CityBuilder.Game.UI.Windows
 
         public override void Poll()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.f1Key.wasPressedThisFrame) open = !open;
         }
 
@@ -61,6 +61,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("X", "Unterirdisch-Ansicht");
                 ui.Field("M", "Stadtkasse");
                 ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen)");
+                ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
                 ui.Field("F1", "diese Hilfe");
             }
             ui.Section("Zeit & Kamera");

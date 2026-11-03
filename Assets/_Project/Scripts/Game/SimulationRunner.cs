@@ -45,17 +45,7 @@ namespace CityBuilder.Game
 
         void Awake()
         {
-            World = SimulationWorld.CreateDefault(new WorldSettings
-            {
-                SizeMeters = worldSize,
-                GenerateTerrain = generateTerrain,
-                TerrainSeed = terrainSeed,
-                UnlimitedFunds = unlimitedFunds,
-                StartingFunds = startingFunds,
-                GenerateWorld = generateWorld,   // Welt (Etappe 5)
-                WorldSeed = worldSeed,
-                StartRegion = startRegion,
-            });
+            World = SimulationWorld.CreateDefault(CreateSettings());
             if (World.Planet != null)
                 Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
                           $"{World.Planet.GenerationMilliseconds:0} ms. Start: {World.StartRegion.Name} ({World.Planet.PlayerCountry.Name})");
@@ -79,6 +69,46 @@ namespace CityBuilder.Game
             if (ticks == maxTicksPerFrame) accumulator = 0f;
         }
 
+        // --- Speichern & Laden: Welt ersetzen (Laden, Neues Spiel)
+        /// <summary>
+        /// Die Welt wurde ersetzt (<see cref="ReplaceWorld"/>). Views, die Objekte der alten Welt zwischenspeichern oder
+        /// deren Ereignisse abonniert haben, bauen sich hier neu auf (alte Abos lösen, neue setzen, Caches verwerfen).
+        /// </summary>
+        public event System.Action WorldReplaced;
+        /// <summary>Zählt Weltwechsel (0 = Startwelt) – für Views, die lieber vergleichen als abonnieren.</summary>
+        public int WorldGeneration { get; private set; }
+
+        /// <summary>Einstellungen aus dem Inspector; <paramref name="worldSeed"/>/<paramref name="startRegion"/> überschreiben (Neues Spiel).</summary>
+        public WorldSettings CreateSettings(int? worldSeed = null, int? startRegion = null) => new WorldSettings
+        {
+            SizeMeters = worldSize,
+            GenerateTerrain = generateTerrain,
+            TerrainSeed = terrainSeed,
+            UnlimitedFunds = unlimitedFunds,
+            StartingFunds = startingFunds,
+            GenerateWorld = generateWorld,   // Welt (Etappe 5)
+            WorldSeed = worldSeed ?? this.worldSeed,
+            StartRegion = startRegion ?? this.startRegion,
+        };
+
+        /// <summary>Ersetzt die laufende Welt (geladener Spielstand oder neues Spiel) und meldet <see cref="WorldReplaced"/>.</summary>
+        public void ReplaceWorld(SimulationWorld world)
+        {
+            World = world ?? throw new System.ArgumentNullException(nameof(world));
+            accumulator = 0f;
+            WorldGeneration++;
+            WorldReplaced?.Invoke();
+        }
+
+        /// <summary>Neues Spiel mit den Einstellungen des Inspectors (optional anderer Welt-Seed/andere Startregion).</summary>
+        public SimulationWorld NewGame(int? worldSeed = null, int? startRegion = null, int? seed = null)
+        {
+            var world = SimulationWorld.CreateDefault(CreateSettings(worldSeed, startRegion), seed ?? 12345);
+            ReplaceWorld(world);
+            return world;
+        }
+        // --- Ende Speichern & Laden
+
         public void SetSpeed(int index) => SpeedIndex = Mathf.Clamp(index, 0, SpeedMultipliers.Length - 1);
 
         /// <summary>Anzahl der Tempostufen inkl. Pause (Index 0).</summary>
@@ -96,7 +126,7 @@ namespace CityBuilder.Game
 
         void HandleSpeedInput()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current; // null während einer Texteingabe
             if (kb == null) return;
 
             if (kb.spaceKey.wasPressedThisFrame) TogglePause();

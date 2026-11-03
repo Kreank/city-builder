@@ -8,7 +8,7 @@ namespace CityBuilder.Simulation.Environment
     /// Höhenkarte der Welt (Gitterpunkte im Abstand <see cref="CellSize"/>). Hält die natürliche Höhe
     /// und die aktuelle (von Straßen angepasste) Höhe. Später auch Grundlage für Klima, Fruchtbarkeit, Rohstoffe.
     /// </summary>
-    public sealed class TerrainMap : IGround
+    public sealed partial class TerrainMap : IGround
     {
         readonly float[] natural;
         readonly float[] current;

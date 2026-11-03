@@ -116,8 +116,9 @@ namespace CityBuilder.Simulation.Utilities
         readonly EnvironmentLayers environment;
         readonly Vector2 min, max;
 
-        readonly Dictionary<int, UtilityFacility> facilities = new Dictionary<int, UtilityFacility>();
-        readonly Dictionary<int, UtilityLine> lines = new Dictionary<int, UtilityLine>();
+        // StableMap: Durchlauf-Reihenfolge wie Dictionary, aber speicherbar (Spielstand, Determinismus)
+        readonly StableMap<int, UtilityFacility> facilities = new StableMap<int, UtilityFacility>();
+        readonly StableMap<int, UtilityLine> lines = new StableMap<int, UtilityLine>();
         readonly Dictionary<int, UtilityStatus> status = new Dictionary<int, UtilityStatus>();
         // Je Art (Strom, Wasser, Abwasser) – Index = (int)UtilityKind
         readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>(), new List<UtilityNetwork>() };
@@ -815,10 +816,24 @@ namespace CityBuilder.Simulation.Utilities
             return changed;
         }
 
+        /// <summary>
+        /// Übergangsfrist nach dem Laden eines alten Spielstands (v1, Straßen trugen Strom/Wasser): so viele Ticks zählt
+        /// keine Ausfalldauer, damit der Spieler Hochspannung, Umspannwerk und Ortsnetz („Entlang Straßen verlegen“) nachrüsten kann.
+        /// </summary>
+        public int MigrationGraceTicks { get; private set; }
+        /// <summary>Übergangsfrist für alte Spielstände: 5 Spieltage.</summary>
+        public const int MigrationGraceAfterV1 = 5 * SimulationClock.TicksPerDay;
+
         void UpdateDurations()
         {
             // Dauer zählt erst, wenn die Art verlangt wird – sonst würde das erste Kraftwerk sofort alle Altbauten räumen
             bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
+            if (MigrationGraceTicks > 0)
+            {
+                // Netze selbst verlegt: alter Spielstand – während der Übergangsfrist zählt keine Ausfalldauer
+                MigrationGraceTicks = Math.Max(0, MigrationGraceTicks - TickInterval);
+                power = water = sewage = false;
+            }
             foreach (var b in city.Buildings)
             {
                 if (!status.TryGetValue(b.Id, out var s)) continue;

@@ -7,7 +7,7 @@ namespace CityBuilder.Simulation.Zoning
     /// Was der Spieler gemalt hat, als Raster (4 m) über der Welt – unabhängig von den Zellen,
     /// damit die Zonierung erhalten bleibt, wenn Straßen zerteilt/umgebaut werden.
     /// </summary>
-    public sealed class ZoneMap
+    public sealed partial class ZoneMap
     {
         const float Cell = 4f;
         readonly byte[] data;

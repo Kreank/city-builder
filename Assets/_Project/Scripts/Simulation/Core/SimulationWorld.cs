@@ -132,6 +132,7 @@ namespace CityBuilder.Simulation.Core
         public static SimulationWorld CreateDefault(WorldSettings settings = null, int seed = 12345)
         {
             var world = new SimulationWorld(settings ?? new WorldSettings());
+            world.Seed = seed; // Speichern & Laden: CreateDefault(settings, seed) baut die Welt beim Laden neu auf
             world.AddSystem(new NoiseSystem());
             world.Traffic = new TrafficSystem(world.Roads, world.Min, world.Max, seed);
             world.AddSystem(world.Traffic);
@@ -201,6 +202,17 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
+
+            // --- Etappe 8 Handel zwischen Ländern (nur mit Weltkarte): Weltpreis aus den Ländern, Verträge über das Grenzlager,
+            // Zölle/Strafen in der Stadtkasse; läuft nach dem WorldSystem (Länder sind schon einen Tag weiter)
+            if (world.Planet?.Economy != null)
+            {
+                world.Trade = new Trade.TradeSystem(world.Planet, world.Clock, unchecked(seed * 31 + world.Settings.WorldSeed));
+                world.Trade.AttachCity(world.Goods, world.Economy);
+                world.AddSystem(world.Trade);
+                if (world.Media != null) CityBuilder.Simulation.Trade.TradeMedia.Connect(world.Trade, world.Media); // Schlagzeilen zum Handel
+            }
+            // --- Ende Etappe 8
             return world;
         }
 
@@ -230,8 +242,18 @@ namespace CityBuilder.Simulation.Core
         /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Transit.TransitSystem Transit { get; private set; }
 
+        /// <summary>Etappe 8: Handel zwischen Ländern (null ohne Weltkarte). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Trade.TradeSystem Trade { get; private set; }
+
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }
+
+        // --- Speichern & Laden
+        /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>
+        public int Seed { get; private set; } = 12345;
+        /// <summary>Alle Systeme in Ausführungsreihenfolge (Spielstand: ISaveable-Systeme werden automatisch erfasst).</summary>
+        public IReadOnlyList<ISimulationSystem> Systems => systems;
+        // --- Ende Speichern & Laden
 
         public void AddSystem(ISimulationSystem system)
         {

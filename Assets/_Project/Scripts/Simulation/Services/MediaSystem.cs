@@ -45,7 +45,7 @@ namespace CityBuilder.Simulation.Services
     /// Bürgersystem (Gemüt der Erreichten, vorsichtig dosiert). Ereignis <see cref="Published"/> für die HUD.
     /// </para>
     /// </summary>
-    public sealed class MediaSystem : ISimulationSystem
+    public sealed partial class MediaSystem : ISimulationSystem
     {
         public int TickInterval => 5;
 
@@ -159,6 +159,11 @@ namespace CityBuilder.Simulation.Services
         {
             if (f.Type.ConcernRadius > 0f) Queue(HeadlineTopic.NuclearPlantBuilt, "plant" + f.Id, Values(("Name", f.Type.DisplayName)));
         }
+
+        // --- Etappe 8 Handel: Meldungen anderer Systeme (Handelsvertrag, Embargo, Zollerhöhung)
+        /// <summary>Schlagzeile von außen einreihen (gleicher <paramref name="key"/> nur einmal, Abklingzeit wie üblich).</summary>
+        public void Report(HeadlineTopic topic, string key, params (string key, string value)[] values) => Queue(topic, key, Values(values));
+        // --- Ende Etappe 8
 
         void Queue(HeadlineTopic topic, string key, Dictionary<string, string> values, int street = 0) =>
             pending.Add(new Candidate { Topic = topic, Key = key, Values = values, Street = street });

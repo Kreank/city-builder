@@ -27,6 +27,7 @@ namespace CityBuilder.Game.Traffic
         {
             runner = r;
             baseMaterial = lit;
+            r.WorldReplaced += () => laneVersion = rulesVersion = -1; // Speichern & Laden: neu aufbauen
         }
 
         void Start()

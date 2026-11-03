@@ -41,7 +41,7 @@ namespace CityBuilder.Simulation.World
     /// begrenzen die Produktion. Preis passt sich träge an (Lager gegen Zielbestand). Grundlage der späteren Handels-KI:
     /// <see cref="Balance"/> = Überschuss (+) bzw. Defizit (−) je Tag.
     /// </summary>
-    public sealed class NationEconomy
+    public sealed partial class NationEconomy
     {
         public const int TargetStockDays = 20;
         public const int MaxStockDays = 120;
@@ -56,6 +56,9 @@ namespace CityBuilder.Simulation.World
             (GoodsCategory.Technology, GoodsCategory.Industrial, 0.4), (GoodsCategory.Technology, GoodsCategory.Energy, 0.3),
             (GoodsCategory.Tourism, GoodsCategory.Food, 0.2), (GoodsCategory.Tourism, GoodsCategory.Energy, 0.1),
         };
+
+        /// <summary>Vorleistungen (Ausgabe, Eingang, Menge je Einheit) – für die Welt-Kalibrierung.</summary>
+        internal static IReadOnlyList<(GoodsCategory output, GoodsCategory input, double amount)> InputTable => Inputs;
 
         static readonly GoodsCategory[] ProductionOrder =
         {
@@ -112,6 +115,19 @@ namespace CityBuilder.Simulation.World
             }
         }
 
+        internal void CalibrateCapacity(int c, double scale) => CapacityPerCapita[c] *= scale;
+
+        /// <summary>Startpreise nach der Kalibrierung neu aus Bedarf/Kapazität (wie im Konstruktor).</summary>
+        internal void ResetStartPrices()
+        {
+            for (int c = 0; c < GoodsCategories.Count; c++)
+            {
+                double demand = Population * GoodsCategories.PerCapitaDemand[c];
+                double cap = Population * CapacityPerCapita[c];
+                Price[c] = GoodsCategories.BasePrice[c] * Math.Clamp(Math.Sqrt(Math.Max(1e-6, demand) / Math.Max(1e-6, cap)), 0.4, 2.5);
+            }
+        }
+
         /// <summary>Ein Spieltag.</summary>
         public void TickDay(int day)
         {
@@ -124,20 +140,34 @@ namespace CityBuilder.Simulation.World
             for (int c = 0; c < GoodsCategories.Count; c++) household[c] = Population * GoodsCategories.PerCapitaDemand[c];
             household[(int)GoodsCategory.Energy] += Population * (0.8 * w.Heating + 0.3 * w.Cooling);
 
-            // Produktion in Kettenreihenfolge, Vorleistungen aus dem Lager
+            // Produktion in Kettenreihenfolge, Vorleistungen aus dem Lager.
+            // Etappe 8 (Kalibrierung): Teilen sich mehrere Abnehmer eine Vorleistung (Industriegüter → Konsum und Technik),
+            // bekommt jeder seinen Anteil am Lager (Lager / noch offener Gesamtbedarf) – vorher nahm der erste in der
+            // Reihenfolge alles und Technik stand weltweit still.
+            var potentials = new double[GoodsCategories.Count];
+            var openNeed = new double[GoodsCategories.Count];
             foreach (var cat in ProductionOrder)
             {
                 int c = (int)cat;
                 double potential = Population * CapacityPerCapita[c];
                 if (cat == GoodsCategory.Food) potential *= w.Harvest;
                 if (cat == GoodsCategory.Tourism) potential *= 0.6 + 0.6 * (w.Season == Season.Summer ? 1.0 : 0.4);
+                potentials[c] = potential;
+                foreach (var (o, input, amount) in Inputs)
+                    if (o == cat) openNeed[(int)input] += potential * amount;
+            }
+            foreach (var cat in ProductionOrder)
+            {
+                int c = (int)cat;
+                double potential = potentials[c];
                 double factor = 1.0;
                 foreach (var (o, input, amount) in Inputs)
                 {
                     if (o != cat) continue;
                     double need = potential * amount;
                     Demand[(int)input] += need;
-                    if (need > 0) factor = Math.Min(factor, Stock[(int)input] / need);
+                    if (need > 0) factor = Math.Min(factor, Stock[(int)input] / Math.Max(need, openNeed[(int)input]));
+                    openNeed[(int)input] -= need;
                 }
                 factor = Math.Clamp(factor, 0.0, 1.0);
                 double produced = potential * factor;
@@ -176,7 +206,7 @@ namespace CityBuilder.Simulation.World
     }
 
     /// <summary>Alle Länder-Volkswirtschaften der Welt (LOD „aggregiert“), täglicher Schritt über <see cref="WorldSystem"/>.</summary>
-    public sealed class WorldEconomy
+    public sealed partial class WorldEconomy
     {
         public IReadOnlyList<NationEconomy> Nations => nations;
         readonly List<NationEconomy> nations = new List<NationEconomy>();
@@ -213,7 +243,66 @@ namespace CityBuilder.Simulation.World
                 country.Economy = e;
                 nations.Add(e);
             }
+            Calibrate();
         }
+
+        /// <summary>
+        /// Etappe 8: Kapazität je Kategorie weltweit skalieren, sodass die Welt im Mittel ausgeglichen ist (Σ Kapazität ≈ Σ Bedarf
+        /// × Zuschlag für Verderb/Schwund). Länderunterschiede (Stärken, Vorkommen, Klima) bleiben relativ erhalten → einzelne Länder
+        /// haben Überschuss bzw. Defizit, das der Handel ausgleicht. Reihenfolge rückwärts durch die Kette: erst Endprodukte gegen
+        /// den Haushaltsbedarf, dann Industriegüter gegen Haushalte + Vorleistungen, dann Rohstoffe. Heizen/Kühlen und Jahreszeiten
+        /// (Ernte, Tourismus-Saison) gehen mit ihrem Jahresmittel ein.
+        /// </summary>
+        void Calibrate()
+        {
+            int k = GoodsCategories.Count;
+            var household = new double[k];
+            var meanFactor = new double[nations.Count, k];
+            for (int i = 0; i < nations.Count; i++)
+            {
+                var n = nations[i];
+                double heat = 0, cool = 0, tour = 0, harvest = 0;
+                const int samples = 52;
+                for (int s = 0; s < samples; s++)
+                {
+                    var w = n.Climate.On(s * 7);
+                    heat += w.Heating; cool += w.Cooling; harvest += w.Harvest;
+                    tour += 0.6 + 0.6 * (w.Season == Season.Summer ? 1.0 : 0.4);
+                }
+                heat /= samples; cool /= samples; tour /= samples; harvest /= samples;
+                for (int c = 0; c < k; c++)
+                {
+                    household[c] += n.Population * GoodsCategories.PerCapitaDemand[c];
+                    meanFactor[i, c] = 1.0;
+                }
+                household[(int)GoodsCategory.Energy] += n.Population * (0.8 * heat + 0.3 * cool);
+                meanFactor[i, (int)GoodsCategory.Food] = harvest;
+                meanFactor[i, (int)GoodsCategory.Tourism] = tour;
+            }
+            // rückwärts durch die Kette (Ausgaben vor ihren Eingängen)
+            var order = new[]
+            {
+                GoodsCategory.Tourism, GoodsCategory.Technology, GoodsCategory.Consumer, GoodsCategory.Industrial,
+                GoodsCategory.Energy, GoodsCategory.Minerals, GoodsCategory.Wood, GoodsCategory.Food,
+            };
+            var demand = (double[])household.Clone();
+            foreach (var cat in order)
+            {
+                int c = (int)cat;
+                double capacity = 0;
+                for (int i = 0; i < nations.Count; i++) capacity += nations[i].Population * nations[i].CapacityPerCapita[c] * meanFactor[i, c];
+                double target = demand[c] * (cat == GoodsCategory.Food ? CalibrationFood : CalibrationMargin);
+                double scale = capacity > 0 ? target / capacity : 1.0;
+                for (int i = 0; i < nations.Count; i++) nations[i].CalibrateCapacity(c, scale);
+                // Vorleistungen dieser (jetzt kalibrierten) Produktion erhöhen den Bedarf der Eingänge
+                foreach (var (o, input, amount) in NationEconomy.InputTable)
+                    if (o == cat) demand[(int)input] += target * amount;
+            }
+            for (int i = 0; i < nations.Count; i++) nations[i].ResetStartPrices();
+        }
+
+        /// <summary>Zielverhältnis Welt-Kapazität / Welt-Bedarf (Lebensmittel verderben 0,5 %/Tag im Lager, alles andere 0,1 %).</summary>
+        public const double CalibrationMargin = 1.04, CalibrationFood = 1.12;
 
         public void TickDay(int day)
         {

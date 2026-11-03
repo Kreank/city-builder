@@ -26,11 +26,15 @@ namespace CityBuilder.Simulation.Services.Content
         NewBusLine,
         BusOverloaded,
         BusLate,
+        // --- Etappe 8 Handel
+        TradeDeal,
+        Embargo,
+        TariffRaise,
     }
 
     /// <summary>
     /// Schlagzeilen-Vorlagen als mitgelieferte Daten (wie <c>Citizens/Content</c>, keine KI zur Laufzeit).
-    /// Platzhalter: {Straße}, {Anzahl}, {Steuer}, {Satz}, {Name}, {Einwohner}, {Prozent}, {Medium}.
+    /// Platzhalter: {Straße}, {Anzahl}, {Steuer}, {Satz}, {Name}, {Einwohner}, {Prozent}, {Medium}, {Land} (Etappe 8).
     /// Nicht auflösbare Platzhalter → nächste Vorlage. Je Thema eine Grundstimmung (Ton −1..+1).
     /// </summary>
     public static class Headlines
@@ -151,6 +155,23 @@ namespace CityBuilder.Simulation.Services.Content
                 ("Warten auf den Bus", "Pünktlichkeit auf {Name}: {Prozent} %. {Medium} fragt: Wann kommen Busspuren?"),
             },
             // --- Ende ÖPNV
+            // --- Etappe 8 Handel
+            /* TradeDeal */ new[]
+            {
+                ("Handelsvertrag mit {Land}", "Die Stadt hat einen Vertrag über {Name} mit {Land} geschlossen – Laufzeit {Anzahl} Wochen."),
+                ("Neuer Handelspartner: {Land}", "{Land} und die Stadt einigen sich: {Name} für {Anzahl} Wochen."),
+            },
+            /* Embargo */ new[]
+            {
+                ("Embargo! {Land} bricht den Handel ab", "Die Beziehungen zu {Land} sind am Tiefpunkt – Verträge werden gekündigt."),
+                ("Eiszeit mit {Land}", "{Land} will keine Geschäfte mehr mit uns machen. {Medium} fragt: Was nun?"),
+            },
+            /* TariffRaise */ new[]
+            {
+                ("Zollerhöhung: {Land} verlangt {Satz} %", "{Land} hebt den Zoll auf unsere Waren auf {Satz} % – Exporteure sind besorgt."),
+                ("Zollstreit mit {Land}", "Neue Zölle von {Satz} %: {Land} antwortet auf unsere Handelspolitik."),
+            },
+            // --- Ende Etappe 8
         };
 
         public static int TopicCount => ByTopic.Length;
@@ -182,6 +203,9 @@ namespace CityBuilder.Simulation.Services.Content
                 case HeadlineTopic.PopulationMilestone: return 0.6f;
                 case HeadlineTopic.BusOverloaded: return -0.4f; // ÖPNV
                 case HeadlineTopic.BusLate: return -0.35f;      // ÖPNV
+                case HeadlineTopic.TradeDeal: return 0.4f;      // Etappe 8
+                case HeadlineTopic.Embargo: return -0.7f;       // Etappe 8
+                case HeadlineTopic.TariffRaise: return -0.35f;  // Etappe 8
                 default: return 0.5f; // Eröffnungen
             }
         }

@@ -104,6 +104,7 @@ namespace CityBuilder.Game.Utilities
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => { placingLine = false; AlongAll = false; alongPlan = null; }; // Speichern & Laden
             // UX: Esc/Rechtsklick beenden die Leitungskette bzw. „alle Straßen“ (sonst zurück zum Auswählen)
             tool.RegisterOperation(() => Active && (placingLine || (Current == UtilityAction.AlongRoads && AlongAll)),
                 () => { placingLine = false; AlongAll = false; });
@@ -199,7 +200,7 @@ namespace CityBuilder.Game.Utilities
         void Update()
         {
             if (tool == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.jKey.wasPressedThisFrame) tool.ToggleMode(RoadTool.Mode.Utility); // UX: erneut J = Auswählen
             if (!Active) return;

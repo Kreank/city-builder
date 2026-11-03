@@ -93,6 +93,15 @@ namespace CityBuilder.Game.UI.Windows
                 if (c.IsPlayer) ui.Chip("Spieler", Tone.Accent);
                 if (selectedCountry >= 0 && !c.IsPlayer) ui.Chip("Auswahl", Tone.Muted);
             }
+            // --- Etappe 8 Handel: Land im Handelsfenster öffnen
+            if (!c.IsPlayer && World?.Trade != null && TradeWindow.Current != null)
+            {
+                int id = c.Id;
+                using (ui.Actions())
+                    ui.ActionButton("Handel", () => { TradeWindow.Current.OpenFor(id); Close(); }, ActionStyle.Primary, false, true,
+                        $"Beziehung {World.Trade.Relation(p.PlayerCountryId, id):+0;−0} · Angebote, Verträge, Zölle (F11)");
+            }
+            // --- Ende Etappe 8
             var e = c.Economy;
             using (ui.Grid(3))
             {

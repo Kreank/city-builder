@@ -350,7 +350,7 @@ namespace CityBuilder.Simulation.LandValue
         // ------------------------------------------------------------ Grobraster
 
         /// <summary>Einfaches Grobraster mit bilinearer Abtastung (nur intern).</summary>
-        sealed class CoarseGrid
+        sealed partial class CoarseGrid
         {
             readonly float[] v;
             readonly int n;

@@ -4,7 +4,7 @@ using System.Numerics;
 namespace CityBuilder.Simulation.Environment
 {
     /// <summary>Alle Umwelt-Raster einer Welt. Weitere (Wasser, Boden, Klima ...) kommen hier dazu.</summary>
-    public sealed class EnvironmentLayers
+    public sealed partial class EnvironmentLayers
     {
         /// <summary>Lärm 0..1 – wird jeden Durchlauf neu aus den Quellen berechnet.</summary>
         public GridLayer Noise { get; }

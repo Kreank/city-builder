@@ -47,7 +47,7 @@ namespace CityBuilder.Game.UI.Windows
 
         public override void Poll()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.f6Key.wasPressedThisFrame)
             {
                 open = !open;

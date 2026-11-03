@@ -34,6 +34,7 @@ namespace CityBuilder.Game.Utilities
         public void Init(SimulationRunner r, Material lit, Material transparent)
         {
             runner = r;
+            r.WorldReplaced += () => shownStatus = shownCity = shownStructure = -1; // Speichern & Laden: neu aufbauen
             okMarker = Colored(lit, Ok, "UtilityOk");
             badMarker = Colored(lit, Bad, "UtilityBad");
             sourceMarker = Colored(lit, Source, "UtilitySource");
@@ -64,7 +65,7 @@ namespace CityBuilder.Game.Utilities
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.oKey.wasPressedThisFrame)
                 Current = Current == Overlay.None ? Overlay.Power : Current == Overlay.Power ? Overlay.Water : Current == Overlay.Water ? Overlay.Sewage : Overlay.None;
         }

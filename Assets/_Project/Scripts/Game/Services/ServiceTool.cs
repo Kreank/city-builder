@@ -55,6 +55,7 @@ namespace CityBuilder.Game.Services
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => cachedRoadVersion = cachedStructureVersion = -1; // Speichern & Laden
             okMaterial = new Material(transparent) { name = "ServicePreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
             badMaterial = new Material(transparent) { name = "ServicePreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
             for (int i = 0; i < Buckets; i++)
@@ -117,7 +118,7 @@ namespace CityBuilder.Game.Services
         void Update()
         {
             if (tool == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.digit4Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
                 tool.ToggleMode(RoadTool.Mode.Service); // UX: erneut 4 = Auswählen

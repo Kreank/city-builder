@@ -125,7 +125,7 @@ namespace CityBuilder.Game.UI.Panels
             center = newCenter;
             right = Pick(WindowSlot.Right);
 
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
                 if (center != null) { center.Window.Close(); dirty = true; EscapeConsumedFrame = Time.frameCount; }
