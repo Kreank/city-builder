@@ -54,12 +54,15 @@ namespace CityBuilder.Game.Inspect
         }
 
         public static bool CanMove(SelectionKind kind) =>
-            kind == SelectionKind.Service || kind == SelectionKind.Facility || kind == SelectionKind.TransitDepot;
+            kind == SelectionKind.Service || kind == SelectionKind.Facility || kind == SelectionKind.TransitDepot
+            || kind == SelectionKind.Building; // Wohnhäuser setzen: nur gesetzte Häuser (Begin prüft)
 
         /// <summary>Verschieben beginnen (wechselt ins Auswählen, falls nötig).</summary>
         public void Begin(SelectionKind kind, int id)
         {
             if (!CanMove(kind) || tool == null) return;
+            // Wohnhäuser setzen: von Gebäuden lassen sich nur vom Spieler gesetzte Häuser verschieben
+            if (kind == SelectionKind.Building && !(tool.Runner?.World?.City.GetBuilding(id)?.IsPlayerPlaced ?? false)) return;
             if (!tool.IsSelectMode) tool.SetMode(RoadTool.SelectMode);
             MovingKind = kind;
             MovingId = id;
@@ -106,6 +109,7 @@ namespace CityBuilder.Game.Inspect
                 case SelectionKind.Service: done = UpdateService(w.Services, p, clicked); break;
                 case SelectionKind.Facility: done = UpdateUtility(w.Utilities, p, clicked); break;
                 case SelectionKind.TransitDepot: done = UpdateDepot(w.Transit, p, clicked); break;
+                case SelectionKind.Building: done = UpdateHouse(w.City, p, clicked); break; // Wohnhäuser setzen
                 default: done = true; break;
             }
             if (done) Cancel();
@@ -151,6 +155,20 @@ namespace CityBuilder.Game.Inspect
                 plan.Position, plan.Height);
             return clicked && plan.IsValid && t.MoveDepot(plan);
         }
+
+        // --- Wohnhäuser setzen: gesetztes Haus verschieben (Id, Stufe, Bewohner bleiben; 10 % der Baukosten)
+        bool UpdateHouse(CityBuilder.Simulation.Zoning.CitySystem city, SimVector2 p, bool clicked)
+        {
+            var b = city.GetBuilding(MovingId);
+            var type = CityBuilder.Simulation.Zoning.HouseCatalog.Of(b);
+            if (type == null) return true;
+            var plan = city.PlanMoveHouse(b.Id, p, Rotation);
+            Show(plan.Position, plan.Front, type.Width, type.Depth, plan.Height, 8f, plan.IsValid, true);
+            Label(type.DisplayName, plan.Cost, plan.Aligned, 0, plan.IsValid ? null : CityBuilder.Game.Zoning.HouseTool.ErrorText(plan),
+                plan.Position, plan.Height);
+            return clicked && plan.IsValid && city.MoveHouse(plan);
+        }
+        // --- Ende Wohnhäuser
 
         void Show(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront) =>
             ghost.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront);

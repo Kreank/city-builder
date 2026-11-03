@@ -210,6 +210,7 @@ namespace CityBuilder.Game.UI.Hud
             Windows.Add(new TrafficWindow());
             Windows.Add(new UtilityWindow());
             Windows.Add(new ServiceWindow());
+            Windows.Add(new HouseWindow()); // Wohnhäuser setzen: Anforderungen am Mauszeiger (Werkzeug 6)
             Windows.Add(new TransitWindow()); // ÖPNV: Linienübersicht (F6, offen im ÖPNV-Werkzeug)
             var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
             if (budget != null) Windows.Add(new BudgetWindow(budget));

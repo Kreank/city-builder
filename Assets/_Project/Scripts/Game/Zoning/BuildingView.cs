@@ -172,7 +172,8 @@ namespace CityBuilder.Game.Zoning
         // Mit nur einem Modell bleibt es bei diesem (dann zeigt nur der Platzhalter die Stufe über die Höhe).
         static readonly Dictionary<ModelEntry[], int[]> byHeight = new Dictionary<ModelEntry[], int[]>();
 
-        static ModelEntry PickForLevel(ModelEntry[] list, int variant, int level)
+        /// <summary>Modell je Stufe (auch für die Vorschau des Haus-Werkzeugs).</summary>
+        internal static ModelEntry PickForLevel(ModelEntry[] list, int variant, int level)
         {
             if (!AssetCatalog.Has(list) || list.Length < 2) return AssetCatalog.Pick(list, variant);
             if (!byHeight.TryGetValue(list, out var order))
