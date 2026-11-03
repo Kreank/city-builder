@@ -19,6 +19,8 @@ namespace CityBuilder.Simulation.Services
         OverlapsPole,
         /// <summary>Keine Stadtstraße in Reichweite (Rand ≤ <see cref="ServiceSystem.RoadReach"/>) – Fahrzeuge kommen nicht raus.</summary>
         NoRoadAccess,
+        /// <summary>Zu wenig Geld in der Stadtkasse (Kontostand + Kreditrahmen) oder Baustopp.</summary>
+        InsufficientFunds,
     }
 
     /// <summary>Ein gebautes Dienstgebäude (frei platziert und gedreht wie die Versorger).</summary>

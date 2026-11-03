@@ -123,6 +123,8 @@ namespace CityBuilder.Simulation.Core
             world.Terrain.Budget = world.Economy;
             world.Utilities.Budget = world.Economy;
             world.City.DemandModifier = world.Economy.DemandFactor;
+            world.Services.Budget = world.Economy;          // G4: Baukosten Dienste
+            world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             return world;

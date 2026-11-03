@@ -204,8 +204,8 @@ namespace CityBuilder.Game.Services
             var f = Services.FacilityAt(p, 2f);
             if (f == null) { ghost.SetActive(false); return; }
             ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 7f, false);
-            SetLabel($"{f.Type.DisplayName} abreißen", true, SimConvert.ToWorld(f.Position, f.Height + 12f));
-            if (clicked) Services.Remove(f.Id);
+            SetLabel($"{f.Type.DisplayName} abreißen (+{f.Type.Cost * Simulation.Economy.EconomyRules.DemolitionRefundShare:0} €)", true, SimConvert.ToWorld(f.Position, f.Height + 12f));
+            if (clicked) Services.Demolish(f.Id); // Abrisserlös 25 %
         }
 
         /// <summary>Erreichte Straßen in Stücken einfärben (Farbe nach Entfernungswirkung, aus der Simulation).</summary>
@@ -276,6 +276,7 @@ namespace CityBuilder.Game.Services
                 case ServiceBuildError.OverlapsFacility: return "Überschneidet ein anderes Bauwerk";
                 case ServiceBuildError.OverlapsPole: return "Strommast im Weg";
                 case ServiceBuildError.NoRoadAccess: return $"Keine Zufahrt: Stadtstraße höchstens {ServiceSystem.RoadReach:0} m entfernt nötig";
+                case ServiceBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 default: return null;
             }
         }

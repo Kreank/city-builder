@@ -30,7 +30,7 @@ namespace CityBuilder.Simulation.Services
     /// Direkte Folgen (keine Bürgerwirkungen – die baut das Bedürfnissystem über <see cref="Coverage"/>):
     /// Müll stapelt sich am Gebäude ohne Abfuhr (<see cref="GarbageAt"/>), Brandrisiko-Wert je Gebäude (<see cref="FireRisk"/>).
     /// </summary>
-    public sealed class ServiceSystem : ISimulationSystem
+    public sealed class ServiceSystem : ISimulationSystem, Economy.IUpkeepSource
     {
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten (wie Stadt und Versorgung).</summary>
         public int TickInterval => 5;
@@ -248,15 +248,21 @@ namespace CityBuilder.Simulation.Services
 
         // ------------------------------------------------------------ Kosten (Stadtkasse bucht – Agent „budget“)
 
-        /// <summary>Unterhalt aller Dienste in € je Spielwoche.</summary>
-        public float WeeklyUpkeep()
+        /// <summary>Unterhalt aller Dienste in € je Spielwoche (die Kasse bucht täglich 1/7, Kategorie „Dienste“).</summary>
+        public double WeeklyUpkeep()
         {
-            float s = 0f;
+            double s = 0;
             foreach (var f in facilities.Values) s += f.Type.UpkeepPerWeek;
             return s;
         }
 
         public string UpkeepName => "Dienste";
+        /// <summary><see cref="Economy.IUpkeepSource"/>: Name in der Bilanz.</summary>
+        public string Name => UpkeepName;
+
+        /// <summary>Stadtkasse für Baukosten (null = kostenlos, z. B. reine Tests). Gesetzt von <see cref="SimulationWorld.CreateDefault"/>.</summary>
+        public Economy.IConstructionBudget Budget { get; set; }
+        bool Affordable(float cost) => Budget == null || Budget.CanAfford(cost);
 
         // ------------------------------------------------------------ Bedarf
 
@@ -297,6 +303,8 @@ namespace CityBuilder.Simulation.Services
             var plan = new ServicePlan { Type = type, Position = position, Front = new Vector2(MathF.Sin(a), MathF.Cos(a)), Cost = type.Cost };
             plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
             plan.Error = Check(plan);
+            // Geld zuletzt prüfen: Geometriefehler haben Vorrang (wie Straßen/Versorgung)
+            if (plan.Error == ServiceBuildError.None && !Affordable(plan.Cost)) plan.Error = ServiceBuildError.InsufficientFunds;
             if (plan.Error == ServiceBuildError.None)
             {
                 var sorted = new List<Building>(city.Buildings);
@@ -352,6 +360,8 @@ namespace CityBuilder.Simulation.Services
         public ServiceFacility Build(ServicePlan plan)
         {
             if (plan == null || !plan.IsValid) return null;
+            if (!Affordable(plan.Cost)) return null; // Kasse kann sich seit der Vorschau geändert haben
+            Budget?.Spend(Economy.BudgetCategory.ServiceConstruction, plan.Cost);
             foreach (var b in plan.Displaced) city.RemoveBuilding(b);
             var f = new ServiceFacility
             {
@@ -373,6 +383,16 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Kurzform für Werkzeuge/Tests: planen und bauen, wenn gültig.</summary>
         public ServiceFacility TryBuild(ServiceType type, Vector2 position, float rotationDegrees = 0f) => Build(Plan(type, position, rotationDegrees));
 
+        /// <summary>Spieler-Abriss: entfernt das Gebäude und schreibt 25 % der Baukosten gut (<see cref="Economy.EconomyRules.DemolitionRefundShare"/>).</summary>
+        public bool Demolish(int id)
+        {
+            if (!facilities.TryGetValue(id, out var f)) return false;
+            Remove(id);
+            Budget?.Refund(f.Type.Cost * Economy.EconomyRules.DemolitionRefundShare);
+            return true;
+        }
+
+        /// <summary>Internes Entfernen ohne Erlös (z. B. Straße durchs Gebäude).</summary>
         public bool Remove(int id)
         {
             if (!facilities.TryGetValue(id, out var f)) return false;

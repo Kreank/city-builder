@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Numerics;
 using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.Economy;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
@@ -335,7 +336,7 @@ namespace CityBuilder.Simulation.Tests
             var w = SimulationWorld.CreateDefault();
             Road(w, new Vector2(0, 0), new Vector2(200, 0));
             var s = w.Services;
-            Assert.Equal(0f, s.WeeklyUpkeep());
+            Assert.Equal(0.0, s.WeeklyUpkeep());
             Assert.Equal("Dienste", s.UpkeepName);
             s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(50, -20));
             s.TryBuild(ServiceCatalog.ParkSmall, new Vector2(150, 30));
@@ -343,6 +344,60 @@ namespace CityBuilder.Simulation.Tests
             Assert.All(ServiceCatalog.All, t => Assert.True(t.Cost > 0f && t.UpkeepPerWeek > 0f && t.Capacity > 0f && t.Range > 0f));
             Assert.Equal(ServiceCatalog.All.Length, ServiceCatalog.All.Select(t => t.Id).Distinct().Count());
             Assert.All(ServiceKinds.All, k => Assert.Contains(ServiceCatalog.All, t => t.Kind == k));
+        }
+
+        // ------------------------------------------------------------ Stadtkasse
+
+        static SimulationWorld RealFunds(double funds) =>
+            SimulationWorld.CreateDefault(new WorldSettings { UnlimitedFunds = false, StartingFunds = funds });
+
+        [Fact]
+        public void Upkeep_IsBookedInCityBudget_AsServices()
+        {
+            var w = RealFunds(500000.0);
+            Road(w, new Vector2(0, 0), new Vector2(200, 0));
+            var s = w.Services;
+            Assert.NotNull(s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(50, -20)));
+            Assert.NotNull(s.TryBuild(ServiceCatalog.ParkSmall, new Vector2(150, 30)));
+            var e = w.Economy;
+            for (int i = 0; i < EconomyRules.DaysPerWeek; i++) e.ForceBillDay();
+            var week = e.LastWeek;
+            Assert.NotNull(week);
+            double expected = ServiceCatalog.PoliceStation.UpkeepPerWeek + ServiceCatalog.ParkSmall.UpkeepPerWeek;
+            Assert.Equal(expected, week.Amount(BudgetCategory.Services), 2);
+            Assert.Equal(expected, week.ServiceUpkeep.ToDictionary(kv => kv.Key, kv => kv.Value)["Dienste"], 2);
+        }
+
+        [Fact]
+        public void Construction_CostsMoney_NoMoneyNoBuild_DemolishRefunds25Percent()
+        {
+            var w = RealFunds(100000.0);
+            Road(w, new Vector2(0, 0), new Vector2(200, 0));
+            var s = w.Services;
+            var e = w.Economy;
+            double b0 = e.Balance;
+            var police = s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(50, -20));
+            Assert.NotNull(police);
+            Assert.Equal(b0 - ServiceCatalog.PoliceStation.Cost, e.Balance, 2);
+            Assert.Equal(ServiceCatalog.PoliceStation.Cost, e.CurrentWeek.Amount(BudgetCategory.ServiceConstruction), 2);
+
+            // Spieler-Abriss: 25 % zurück; Straße durchs Gebäude: nichts
+            b0 = e.Balance;
+            Assert.True(s.Demolish(police.Id));
+            Assert.Equal(b0 + ServiceCatalog.PoliceStation.Cost * EconomyRules.DemolitionRefundShare, e.Balance, 2);
+
+            // Kein Geld (auch nicht im Kreditrahmen) → Plan ungültig, nichts gebaut, nichts gebucht
+            var poor = RealFunds(100000.0);
+            Road(poor, new Vector2(0, 0), new Vector2(200, 0));
+            poor.Economy.Spend(BudgetCategory.RoadConstruction, poor.Economy.Balance + EconomyRules.CreditLimit - 1000.0); // Kasse leeren
+            double before = poor.Economy.Balance;
+            var plan = poor.Services.Plan(ServiceCatalog.Hospital, new Vector2(100, -30));
+            Assert.Equal(ServiceBuildError.InsufficientFunds, plan.Error);
+            Assert.Null(poor.Services.Build(plan));
+            Assert.Equal(0, poor.Services.FacilityCount);
+            Assert.Equal(before, poor.Economy.Balance, 2);
+            // Geometriefehler haben Vorrang vor Geld
+            Assert.Equal(ServiceBuildError.OverlapsRoad, poor.Services.Plan(ServiceCatalog.Hospital, new Vector2(100, 5)).Error);
         }
 
         [Fact]
