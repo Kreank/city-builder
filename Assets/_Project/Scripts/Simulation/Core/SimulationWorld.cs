@@ -4,6 +4,7 @@ using System.Numerics;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Traffic;
+using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Core
@@ -83,11 +84,18 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Traffic);
             world.City = new CitySystem(world.Roads, world.Terrain, world.Min, world.Settings.SizeMeters, seed);
             world.AddSystem(world.City);
+            // --- G3 Strom & Wasser (nach Lärm und Stadt: stempelt nach dem Neuzeichnen des Lärms, liest fertige Gebäude)
+            world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
+            world.AddSystem(world.Utilities);
+            // --- Ende G3
             return world;
         }
 
         /// <summary>Zonen und Gebäude. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public CitySystem City { get; private set; }
+
+        /// <summary>Strom &amp; Wasser (G3). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public UtilitySystem Utilities { get; private set; }
 
         public void AddSystem(ISimulationSystem system)
         {
