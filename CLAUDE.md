@@ -19,6 +19,16 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Alles, was es wirklich gibt:** Schiffe, Flugzeuge, Züge, Autobahnen, Straßen, Tunnel, Brücken, Zugbrücken,
   Solarparks, Kohle- und Atomkraftwerke … – Schritt für Schritt. **Tiefgang ist sehr wichtig** (lieber tief als breit).
 
+## Entscheidung: Bürgerverhalten (Konzept, noch nicht umgesetzt)
+- **Spiel-KI im Kern, keine Sprach-KI zur Laufzeit** (bewusst entschieden: keine LLM-„Hauptfiguren“, kein LLM-Erzähler).
+- **Utility AI** mit Bedürfnissen (Wohnen, Arbeit/Einkommen, Versorgung, Gesundheit, Sicherheit, Bildung, Freizeit,
+  Umwelt): Bürger bewerten Optionen und wählen, was ihre Bedürfnisse am meisten verbessert.
+- **Abwechslung statt Uhrwerk:** Persönlichkeit je Bürger (eigene Gewichte), gewichteter Zufall statt immer der besten
+  Option, Gedächtnis/Gewohnheiten (z. B. Stau → Bus), Beziehungen (Freunde, Partner, Kinder) und Lebensereignisse.
+- **KI nur in der Entwicklung:** Ein Sprachmodell erzeugt Inhalte (Persönlichkeiten, Tagesabläufe, Lebensereignisse,
+  Vorlieben, Sprüche), die als Daten mitgeliefert werden – im Spiel keine KI-Kosten, offline lauffähig.
+- Simulation bleibt deterministisch (Multiplayer, Replays, Tests).
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
@@ -34,7 +44,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
-    TrafficOverlayView, TrafficPanel, CitizenPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
+    TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
 - `Assets/_Project/Scripts/Editor/ProjectSetup.cs` – erzeugt `Scenes/Main.unity` + Materialien (Menü „City Builder“)
 - `Assets/_Project/Scripts/Editor/SmokeTest.cs` – baut alles einmal inkl. Unity-Meshes (Menü „City Builder → Smoke Test“)
 - `Tests/CityBuilder.Simulation.Tests` – xUnit-Tests des Kerns ohne Unity (inkl. Verkehrsläufe)
@@ -109,6 +119,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   unversorgte Käufer); `MoveInPull` steuert den Zuzug.
 - Anschlusspunkt: `Building.FrontSegmentId` + `FrontT` (Zufahrt mitten an der Straßenseite).
 - Darstellung: `ZoneView` (nur im Zonen-Werkzeug), `BuildingView` (Katalogmodelle je Zone, sonst Quader).
+  **Zonenanzeige ohne Volltönung:** Platzhalter-Quader sind neutral (6 helle Fassadenfarben, Auswahl über `Variant`);
+  die Zone zeigt eine farbige **Grundstücksplatte** (Bordkante ums Gebäude, 96 % des Grundstücks), normal gedämpft.
+  Im Zonen-Werkzeug und Info-Modus (`BuildingView.HighlightZones`, aus `RoadTool.CurrentMode`) wird die Platte kräftig
+  und Platzhalter werden in Zonenfarbe getönt. Store-Modelle werden nie getönt. `BuildingView.VisualHeight(b)` liefert
+  die sichtbare Höhe (Auswahl/Hervorhebung).
 
 ## Bürger (G2)
 - `Simulation/Citizens`: `Citizen` (Alter, Bildung, Haushalt/Wohnung, Job, Bedürfnis Einkaufen, Tätigkeit, Fahrt),
@@ -129,8 +144,33 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (auch bei Abbruch → Bürger kommt trotzdem an; Sicherheitsnetz 3 Tage). Handler dürfen dort keine Fahrten starten.
   **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
-- Darstellung: `CitizenPanel` (Taste C = `RoadTool.Mode.Inspect`): Statistik, Altersbalken, Bildung; Klick auf
-  Gebäude zeigt Haushalte/Beschäftigte. HUD zeigt Arbeitslose/Pendler.
+- Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
+- Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
+  Mitglieder abgeleitet, nicht gespeichert. Einen Familienstand je Bürger gibt es noch nicht.
+- Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
+  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
+
+## Inspektor (Info-Modus, Taste C)
+- `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
+  Liest nur. Klick = Strahl gegen Gebäude (Grundstück × `VisualHeight`), Versorgungsbauwerke (Fläche × grobe
+  Platzhalterhöhe) und Fahrzeuge (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
+  Geländepunkt unter der Maus. Rechtsklick/„Übersicht“ hebt auf, „← Zurück“ geht den Verlauf zurück.
+- Auswahl = Art + Id (`Selection`), jedes Frame neu nachgeschlagen; verschwundenes Fahrzeug → Auswahl springt zum
+  Fahrer (Bürger). Hervorhebung: gelber Umriss (Boden + Dach) bzw. Ring ums Fahrzeug; bei Bürgern zusätzlich
+  Wohnung (grün) und Arbeitsplatz/Ziel (blau). **Verfolgen** (F oder Häkchen) für Fahrzeug/Bürger über
+  `CameraController.FollowTarget`; Verschieben mit WASD beendet es.
+- Reiter: **Gebäude** Übersicht (Zone/Nutzung, Grundstück, Höhe, Stufe, Bau, Wohnungen/Bewohner, Jobs mit
+  Einheimischen/Einpendlern, anwesend, Zufahrt, Strom/Wasser mit Ausfalldauer und Restzeit bis Verlassen) ·
+  Bewohner (Haushalte mit Art, Mitglieder anklickbar, blätterbar) · Arbeit (Beschäftigte, Bildung, anklickbar) ·
+  Umfeld (Lärm, Abgas, Bodenplatte vs. Ursprungsgelände). **Bürger** Person (Alter, Geburtstag, Bildung,
+  Haushaltsart, Wohnung, Mitglieder) · Alltag (Arbeit/Pendeln/arbeitslos, Arbeitszeit, Tätigkeit, Ort, Fahrt mit
+  Zweck/Ziel/Dauer, Auto anklickbar bzw. Platzhalter-Ankunft, Einkaufsbedürfnis) · Befinden. **Fahrzeug**: Klasse,
+  Tempo, Fahrtdauer (Verkehrszeit), Ort, Ziel, Fahrer. **Versorgungsbauwerk**: Leistung, Netzbilanz, Kosten, Emissionen.
+- **Platzhalter fürs Bedürfnismodell** (zeigen „— (kommt mit Bedürfnismodell)“, keine Zahlen): Bürger Gesundheit,
+  Zufriedenheit, Gemüt, Familienstand; Gebäude Zustand, Zufriedenheit Bewohner/Mitarbeiter/Umfeld; Bodenwert (G6),
+  Dienste in Reichweite (G4), Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
+  Versorgung an der Wohnung, Arbeitslosigkeit, Einkaufsbedürfnis), die das Modell später bewerten kann.
+  Neue Werte: dort statt `Pending` einsetzen.
 
 ## Strom & Wasser (G3)
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
@@ -143,6 +183,21 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`PlanLine` → `BuildLine`); Enden verbinden sich im Umkreis 3 m mit Leitungen (auch mittendrin), Bauwerken, Stadtstraßen,
   Gebäuden. Bauwerke hängen an Stadtstraßen, deren Rand ≤ 8 m entfernt ist; Gebäude an ihrer Vorderstraße.
   Zusammenhang per Union-Find, neu berechnet nur bei Änderung (Straßen-/Stadt-/Bauwerks-Version).
+- **Strommasten** sind Simulationsobjekte (`UtilityLine.Poles`, berechnet in `UtilityPoles.cs` beim `PlanLine`;
+  Vorschau `LinePlan.Poles` mit Fehler je Mast). Regeln: Grundfläche 2×2 m + 0,5 m Rand nie auf Fahrbahn/Gehweg
+  (`RoadType.HalfWidth`, nur über überdeckten Tunneln erlaubt), Wasser, Bauwerken oder Gebäuden; Spannweite
+  ≤ `MaxPoleSpan` 45 m (auch Leitungsende → Endmast). Leitungsenden selbst dürfen auf Straße/Bauwerk liegen
+  (Anschluss), der Endmast rückt dann auf der Leitung nach innen. Blockierte Standorte werden in 1-m-Schritten
+  entlang der Leitung verschoben (Straßen werden so überspannt, Masten beidseits); läuft die Leitung längs einer
+  Straße (|cos| ≥ 0,8), steht der Mast seitlich 1 m neben dem Straßenrand (Seite der Leitung, mittig → rechts in
+  Leitungsrichtung). Kein Standort → Plan ungültig (`PoleOnRoad/-Water/-Facility/-Building`).
+  **Platzverbrauch:** Masten sperren Grundstücke über `CitySystem.LotBlocker`. Steht schon ein Gebäude im Weg, ist
+  der Plan **ungültig mit Hinweis** (kein Abriss – eine Leitung soll nicht unbemerkt Häuser räumen; Bauwerke reißen
+  dagegen ab, weil sie bewusst groß platziert werden).
+  **Straße/Bauwerk später durch einen Mast:** Leitung wird mit denselben Enden neu trassiert (`Revision++`,
+  `ReroutedLines`); geht das nicht, wird sie abgerissen (`LineRemoved`, `LinesRemovedByConstruction`) – Straßenbau
+  hat Vorrang, die Leitung soll aber nach Möglichkeit erhalten bleiben.
+  Wasserrohre haben keine Masten und dürfen weiter unter Straßen liegen.
 - **Bilanz** je Netz: Erzeugung gegen Bedarf (Bedarf aus Haushalten/Jobs-Kapazität, Industrie mehr). Unterdeckung:
   älteste Gebäude (kleinste Id) zuerst, kleinere können noch nachrutschen; der Rest ist unversorgt.
 - **Abfrage für die Stadt**: `world.Utilities.IsSupplied(b)`, `IsSupplied(b, kind)`, `GetStatus(b)` (ja/nein + Ticks ohne),
@@ -153,12 +208,17 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   abklingen/sich verteilen (bisher einzige Quelle → später in ein eigenes Umweltsystem verschieben).
 - Darstellung (`Game/Utilities`, Begleiter des `RoadTool`, Modus `RoadTool.Mode.Utility`): `UtilityTool` (J; Bauleiste
   „Versorgung“, , . drehen, Leitungen in Kette, RMB beendet; Rohre erzwingen die Unterirdisch-Ansicht), `UtilityView`
-  (Platzhalter aus Grundkörpern, Masten alle ≤ 45 m mit Seilen, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar),
+  (Platzhalter aus Grundkörpern, Masten an den Simulations-Standorten mit Fundament und Seilen, Anschlussseil zum
+  Leitungsende, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar; Vorschau im Werkzeug zeigt die Masten, ungültige rot),
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
 - Später: Abwasser/Kläranlage, Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
   Stadtkasse (Kosten/Unterhalt abbuchen), Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
-  Geländeänderungen, Hochspannung vs. Ortsnetz, Wasserqualität/Verschmutzung flussabwärts.
+  Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
+  Wasserqualität/Verschmutzung flussabwärts. **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
+  (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
+  (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
+  Leitungen am selben Punkt zusammenlegen.
 
 ## Store-Assets (nicht im Git, `Assets/ThirdParty/`)
 Import über Package Manager → My Assets (oder Batch `-importPackage`), danach Menü

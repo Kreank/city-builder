@@ -19,6 +19,14 @@ namespace CityBuilder.Simulation.Utilities
         TooSteep,
         TooShort,
         Duplicate,
+        /// <summary>Kein Maststandort: Fahrbahn/Gehweg zu breit zum Überspannen.</summary>
+        PoleOnRoad,
+        /// <summary>Kein Maststandort: Wasser breiter als die Spannweite.</summary>
+        PoleOnWater,
+        /// <summary>Kein Maststandort: Versorger-Bauwerk im Weg.</summary>
+        PoleOnFacility,
+        /// <summary>Kein Maststandort: bestehendes Gebäude im Weg (wird nicht abgerissen).</summary>
+        PoleOnBuilding,
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -42,6 +50,8 @@ namespace CityBuilder.Simulation.Utilities
         public Vector2 A, B;
         public float Cost;
         public UtilityBuildError Error;
+        /// <summary>Geplante Masten (nur Strom), ungültige mit <see cref="PolePlan.Error"/> (Vorschau rot).</summary>
+        public readonly List<PolePlan> Poles = new List<PolePlan>();
         public bool IsValid => Error == UtilityBuildError.None;
         public float Length => Vector2.Distance(A, B);
     }
@@ -63,7 +73,7 @@ namespace CityBuilder.Simulation.Utilities
     /// bleibt folgenlos). Die Stadt-Simulation kann den Zustand über <see cref="IsSupplied(Building)"/> abfragen.
     /// </para>
     /// </summary>
-    public sealed class UtilitySystem : ISimulationSystem
+    public sealed partial class UtilitySystem : ISimulationSystem
     {
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten (wie die Stadt).</summary>
         public int TickInterval => 5;
@@ -126,8 +136,8 @@ namespace CityBuilder.Simulation.Utilities
             this.max = max;
             roads.SegmentAdded += OnSegmentAdded;
             city.BuildingRemoved += b => status.Remove(b.Id);
-            // Auf Versorger-Flächen wachsen keine Gebäude (8-m-Zelle: halbe Zelle Rand)
-            city.LotBlocker = p => FacilityAt(p, ZoneGrid.CellSize * 0.5f) != null;
+            // Auf Versorger-Flächen und Mast-Grundflächen wachsen keine Gebäude (8-m-Zelle: halbe Zelle Rand)
+            city.LotBlocker = p => FacilityAt(p, ZoneGrid.CellSize * 0.5f) != null || PoleNear(p, ZoneGrid.CellSize * 0.5f + PoleFootprintHalf) != null;
         }
 
         public UtilityFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
@@ -246,6 +256,8 @@ namespace CityBuilder.Simulation.Utilities
             facilities[f.Id] = f;
             StructureVersion++;
             FacilityAdded?.Invoke(f);
+            // Masten auf der neuen Fläche: Leitung neu trassieren (oder abreißen, wenn es nicht geht)
+            RerouteLines(p => f.Contains(p, PoleFootprintHalf));
             return f;
         }
 
@@ -282,13 +294,16 @@ namespace CityBuilder.Simulation.Utilities
                     if (l.Kind == kind && ((Vector2.Distance(l.A, a) < 1f && Vector2.Distance(l.B, b) < 1f) ||
                                            (Vector2.Distance(l.A, b) < 1f && Vector2.Distance(l.B, a) < 1f)))
                     { plan.Error = UtilityBuildError.Duplicate; break; }
+            // Stromleitungen brauchen Masten (Wasserrohre liegen unterirdisch und dürfen unter Straßen)
+            if (kind == UtilityKind.Power && plan.Error == UtilityBuildError.None)
+                plan.Error = PlanPoles(a, b, plan.Poles);
             return plan;
         }
 
         public UtilityLine BuildLine(LinePlan plan)
         {
             if (plan == null || !plan.IsValid) return null;
-            var l = new UtilityLine { Id = nextLineId++, Kind = plan.Kind, A = plan.A, B = plan.B };
+            var l = new UtilityLine { Id = nextLineId++, Kind = plan.Kind, A = plan.A, B = plan.B, Poles = PolePositions(plan.Poles) };
             lines[l.Id] = l;
             StructureVersion++;
             return l;
@@ -298,8 +313,10 @@ namespace CityBuilder.Simulation.Utilities
 
         public bool RemoveLine(int id)
         {
-            if (!lines.Remove(id)) return false;
+            if (!lines.TryGetValue(id, out var l)) return false;
+            lines.Remove(id);
             StructureVersion++;
+            LineRemoved?.Invoke(l);
             return true;
         }
 
@@ -598,13 +615,17 @@ namespace CityBuilder.Simulation.Utilities
 
         // ------------------------------------------------------------ Straßenänderungen
 
-        /// <summary>Neue Straße durch ein Bauwerk → Bauwerk wird abgerissen (wie bei Gebäuden).</summary>
+        /// <summary>
+        /// Neue Straße durch ein Bauwerk → Bauwerk wird abgerissen (wie bei Gebäuden).
+        /// Neue Straße durch einen Mast → Leitung wird neu trassiert, geht das nicht, wird sie abgerissen.
+        /// </summary>
         void OnSegmentAdded(RoadSegment s)
         {
             List<int> hit = null;
             foreach (var f in facilities.Values)
                 if (RoadCrossesRect(s, f.Position, f.Front, f.Type.Width, f.Type.Depth, -0.5f)) (hit ?? (hit = new List<int>())).Add(f.Id);
             if (hit != null) foreach (int id in hit) RemoveFacility(id);
+            RerouteLines(p => RoadBlocksPole(s, p));
         }
 
         // ------------------------------------------------------------ Geometrie

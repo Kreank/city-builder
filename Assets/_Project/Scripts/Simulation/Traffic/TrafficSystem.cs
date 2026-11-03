@@ -630,6 +630,7 @@ namespace CityBuilder.Simulation.Traffic
                     Lane = lane,
                     Destination = dest.Node,
                     Route = path,
+                    StartTime = Time,
                 };
                 v.S = MathF.Min(v.Length, lane.Length);
                 v.Speed = MathF.Min(8f, LaneSpeed(lane, v));
@@ -757,6 +758,7 @@ namespace CityBuilder.Simulation.Traffic
                 DestinationT = to.T,
                 Route = bestPath,
                 TripId = tripId,
+                StartTime = Time,
             };
             v.S = startS;
             v.Speed = from.IsNode ? MathF.Min(8f, LaneSpeed(lane, v)) : 0f; // aus der Einfahrt: aus dem Stand

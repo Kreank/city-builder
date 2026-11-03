@@ -108,8 +108,14 @@ namespace CityBuilder.Simulation.Citizens
         public TravelMode Mode { get; internal set; }
         public Place Destination { get; internal set; }
         internal int TripId;
+        /// <summary>Tick, an dem die laufende Fahrt begonnen hat (nur gültig bei <see cref="Activity.Travelling"/>).</summary>
+        public long TripStartTick { get; internal set; }
         /// <summary>Ankunft (Platzhalter-Fahrt) bzw. spätester Zeitpunkt (Auto, Sicherheitsnetz).</summary>
         internal long ArriveTick;
+        /// <summary>Geplante Ankunft einer Platzhalter-Fahrt (zu Fuß/ÖPNV); bei Autofahrten nur das Sicherheitsnetz.</summary>
+        public long PlannedArrivalTick => ArriveTick;
+        /// <summary>Fährt gerade als sichtbares Auto (Fahrzeug über <see cref="CitizenSystem.VehicleOf"/>).</summary>
+        public bool HasCarTrip => TripId != 0;
         /// <summary>Bis wann die aktuelle Tätigkeit dauert (Arbeit, Einkauf).</summary>
         internal long BusyUntil;
         internal int LastWorkDay = -1;
@@ -120,6 +126,53 @@ namespace CityBuilder.Simulation.Citizens
         public override string ToString() => $"Bürger #{Id} ({Age} J., {Activity})";
     }
 
+    /// <summary>
+    /// Haushaltsart – abgeleitet aus den aktuellen Mitgliedern (Alter), nicht gespeichert. Ein eigener
+    /// Familienstand je Bürger existiert noch nicht; bis dahin dient die Haushaltsart als Ersatz.
+    /// </summary>
+    public enum HouseholdKind : byte
+    {
+        Single,
+        Couple,
+        Family,
+        SingleParent,
+        Seniors,
+        /// <summary>Sonstige Konstellation (z. B. drei Erwachsene, nur Kinder übrig).</summary>
+        Other,
+    }
+
+    public static class HouseholdKinds
+    {
+        /// <summary>Art eines Haushalts aus Anzahl und Alter der Mitglieder.</summary>
+        public static HouseholdKind Classify(IReadOnlyList<Citizen> members)
+        {
+            int adults = 0, children = 0, seniors = 0;
+            foreach (var m in members)
+            {
+                if (m.Age < Citizen.AdultAge) children++;
+                else { adults++; if (m.Age >= Citizen.RetirementAge) seniors++; }
+            }
+            if (children > 0) return adults >= 2 ? HouseholdKind.Family : adults == 1 ? HouseholdKind.SingleParent : HouseholdKind.Other;
+            if (adults == 0) return HouseholdKind.Other;
+            if (seniors == adults) return HouseholdKind.Seniors;
+            if (adults == 1) return HouseholdKind.Single;
+            return adults == 2 ? HouseholdKind.Couple : HouseholdKind.Other;
+        }
+
+        public static string DisplayName(HouseholdKind k)
+        {
+            switch (k)
+            {
+                case HouseholdKind.Single: return "Single";
+                case HouseholdKind.Couple: return "Paar";
+                case HouseholdKind.Family: return "Familie";
+                case HouseholdKind.SingleParent: return "Alleinerziehend";
+                case HouseholdKind.Seniors: return "Senioren";
+                default: return "Wohngemeinschaft/sonstige";
+            }
+        }
+    }
+
     /// <summary>Haushalt: wohnt zusammen in einer Wohnung eines Gebäudes.</summary>
     public sealed class Household
     {
@@ -128,6 +181,8 @@ namespace CityBuilder.Simulation.Citizens
         public int MovedInDay { get; internal set; }
         internal readonly List<Citizen> MemberList = new List<Citizen>();
         public IReadOnlyList<Citizen> Members => MemberList;
+        /// <summary>Haushaltsart aus den aktuellen Mitgliedern (ändert sich mit Altern/Tod).</summary>
+        public HouseholdKind Kind => HouseholdKinds.Classify(MemberList);
 
         public override string ToString() => $"Haushalt #{Id} ({MemberList.Count} Personen)";
     }
