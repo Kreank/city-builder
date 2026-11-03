@@ -42,6 +42,12 @@ namespace CityBuilder.Simulation.LandValue
         /// <summary>Abgeschlossene Berechnungsrunden (alle Zellen einmal).</summary>
         public int Cycles { get; private set; }
 
+        /// <summary>
+        /// G3 erweitert (Hook, gesetzt in <c>CreateDefault</c>): Verschmutzung des Gewässers in Ufernähe 0..1
+        /// (<c>WaterQualitySystem.PollutionNear</c>). null = sauber.
+        /// </summary>
+        public Func<Vector2, float> WaterPollutionNear { get; set; }
+
         public LandValueSystem(SimulationWorld world)
         {
             this.world = world ?? throw new ArgumentNullException(nameof(world));
@@ -120,6 +126,8 @@ namespace CityBuilder.Simulation.LandValue
                 i.Shore = ShoreFactor(p);
                 i.View = ViewFactor(p);
             }
+            // G3 erweitert: Verschmutzung des nahen Gewässers (nur am Ufer abgefragt)
+            if (i.Shore > 0f && WaterPollutionNear != null) i.WaterPollution = WaterPollutionNear(p);
 
             float rd = index >= 0 ? roadDist[index] : RoadDistance(p);
             i.RoadAccess = LandValueRules.Falloff(rd, LandValueRules.RoadFullDistance, LandValueRules.RoadZeroDistance);

@@ -82,6 +82,8 @@ namespace CityBuilder.Simulation.Utilities
 
         /// <summary>Nach 2 Spieltagen ohne Versorgung wird ein Gebäude verlassen.</summary>
         public const int AbandonAfterTicks = 2 * SimulationClock.TicksPerDay;
+        /// <summary>Abwasser (G3 erweitert): ohne Entsorgung hält man es länger aus – verlassen nach 4 Spieltagen.</summary>
+        public const int SewageAbandonAfterTicks = 4 * SimulationClock.TicksPerDay;
         /// <summary>Leitungsenden verbinden sich mit allem in diesem Abstand.</summary>
         public const float ConnectRadius = 3f;
         /// <summary>Ein Bauwerk ist an eine Straße angeschlossen, wenn deren Rand höchstens so weit entfernt ist.</summary>
@@ -101,11 +103,12 @@ namespace CityBuilder.Simulation.Utilities
         readonly Dictionary<int, UtilityFacility> facilities = new Dictionary<int, UtilityFacility>();
         readonly Dictionary<int, UtilityLine> lines = new Dictionary<int, UtilityLine>();
         readonly Dictionary<int, UtilityStatus> status = new Dictionary<int, UtilityStatus>();
-        readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>() };
+        // Je Art (Strom, Wasser, Abwasser) – Index = (int)UtilityKind
+        readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>(), new List<UtilityNetwork>() };
         /// <summary>Je Art und Netz: Gebäude (nach Id sortiert).</summary>
-        readonly List<List<Building>>[] networkBuildings = { new List<List<Building>>(), new List<List<Building>>() };
+        readonly List<List<Building>>[] networkBuildings = { new List<List<Building>>(), new List<List<Building>>(), new List<List<Building>>() };
         /// <summary>Je Art: Gebäude-Id → Netz-Id.</summary>
-        readonly Dictionary<int, int>[] buildingNetwork = { new Dictionary<int, int>(), new Dictionary<int, int>() };
+        readonly Dictionary<int, int>[] buildingNetwork = { new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>() };
         int nextFacilityId = 1, nextLineId = 1;
         int builtRoadVersion = -1, builtCityVersion = -1, builtStructureVersion = -1;
 
@@ -174,7 +177,8 @@ namespace CityBuilder.Simulation.Utilities
         public bool IsSatisfied(Building b)
         {
             var s = GetStatus(b);
-            return (s.HasPower || !IsRequired(UtilityKind.Power)) && (s.HasWater || !IsRequired(UtilityKind.Water));
+            return (s.HasPower || !IsRequired(UtilityKind.Power)) && (s.HasWater || !IsRequired(UtilityKind.Water))
+                   && (s.HasSewage || !IsRequired(UtilityKind.Sewage)); // Abwasser: erst mit Kläranlage/Auslass verlangt
         }
 
         /// <summary>Netz, in dem das Gebäude hängt (null = keins).</summary>
@@ -216,6 +220,12 @@ namespace CityBuilder.Simulation.Utilities
             {
                 // Pumpe steht an Land, Wasser muss in Reichweite sein (Ufer)
                 if (terrain.IsWater(plan.Position)) return UtilityBuildError.OnWater;
+                // Atom (G3 erweitert): große Bauwerke am Ufer brauchen trotzdem eine trockene, ebene Grundfläche
+                if (type.DryFootprint)
+                {
+                    foreach (var c in corners) if (terrain.IsWater(c)) return UtilityBuildError.OnWater;
+                    if (hi - lo > MaxFacilitySlope) return UtilityBuildError.TooSteep;
+                }
                 if (!WaterNear(plan.Position, MathF.Max(type.Width, type.Depth) * 0.5f + 20f)) return UtilityBuildError.NeedsWater;
             }
             else
@@ -270,7 +280,7 @@ namespace CityBuilder.Simulation.Utilities
                 Height = plan.Height,
                 Output = plan.Type.Capacity,
             };
-            if (!plan.Type.NeedsWater) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
+            if (!plan.Type.NeedsWater || plan.Type.DryFootprint) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
             facilities[f.Id] = f;
             StructureVersion++;
             FacilityAdded?.Invoke(f);
@@ -429,13 +439,15 @@ namespace CityBuilder.Simulation.Utilities
             {
                 Rebuild(UtilityKind.Power);
                 Rebuild(UtilityKind.Water);
+                Rebuild(UtilityKind.Sewage); // Abwasser (G3 erweitert)
                 builtRoadVersion = roads.Version;
                 builtCityVersion = city.Version;
                 builtStructureVersion = StructureVersion;
                 StatusVersion++;
             }
-            foreach (var f in facilities.Values) f.Output = f.Type.Capacity; // später: Wind/Sonne/Brennstoff
-            bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water);
+            UpdateIncidents(world); // Atom (G3 erweitert): seltener Störfall, s. UtilitySystem.Nuclear.cs
+            foreach (var f in facilities.Values) f.Output = f.Type.Capacity * OutputFactor(f); // später: Wind/Sonne/Brennstoff
+            bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water) | Distribute(UtilityKind.Sewage);
             if (changed) StatusVersion++;
             UpdateDurations();
             Abandon();
@@ -583,6 +595,7 @@ namespace CityBuilder.Simulation.Utilities
                     status.TryGetValue(b.Id, out var s);
                     bool old = s.Has(kind);
                     if (kind == UtilityKind.Power) { s.HasPower = supplied; s.PowerNetwork = id; }
+                    else if (kind == UtilityKind.Sewage) { s.HasSewage = supplied; s.SewageNetwork = id; }
                     else { s.HasWater = supplied; s.WaterNetwork = id; }
                     status[b.Id] = s;
                     if (old != supplied) changed = true;
@@ -594,13 +607,14 @@ namespace CityBuilder.Simulation.Utilities
         void UpdateDurations()
         {
             // Dauer zählt erst, wenn die Art verlangt wird – sonst würde das erste Kraftwerk sofort alle Altbauten räumen
-            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water);
+            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
             foreach (var b in city.Buildings)
             {
                 if (!status.TryGetValue(b.Id, out var s)) continue;
                 if (!b.IsConstructed) { status[b.Id] = default; continue; }
                 s.TicksWithoutPower = s.HasPower || !power ? 0 : s.TicksWithoutPower + TickInterval;
                 s.TicksWithoutWater = s.HasWater || !water ? 0 : s.TicksWithoutWater + TickInterval;
+                s.TicksWithoutSewage = s.HasSewage || !sewage ? 0 : s.TicksWithoutSewage + TickInterval;
                 status[b.Id] = s;
             }
         }
@@ -608,13 +622,14 @@ namespace CityBuilder.Simulation.Utilities
         void Abandon()
         {
             if (!AbandonmentEnabled) return;
-            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water);
-            if (!power && !water) return;
+            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
+            if (!power && !water && !sewage) return;
             List<Building> leave = null;
             foreach (var b in city.Buildings)
             {
                 if (!b.IsConstructed || !status.TryGetValue(b.Id, out var s)) continue;
-                if ((power && s.TicksWithoutPower >= AbandonAfterTicks) || (water && s.TicksWithoutWater >= AbandonAfterTicks))
+                if ((power && s.TicksWithoutPower >= AbandonAfterTicks) || (water && s.TicksWithoutWater >= AbandonAfterTicks)
+                    || (sewage && s.TicksWithoutSewage >= SewageAbandonAfterTicks))
                     (leave ?? (leave = new List<Building>())).Add(b);
             }
             if (leave == null) return;
