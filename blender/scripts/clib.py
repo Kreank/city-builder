@@ -385,6 +385,10 @@ def join(objs, name, origin=(0, 0, 0)):
     bm = bmesh.new()
     bm.from_mesh(me)
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    # n-Ecke (> 4 Punkte, z. B. konkave Umrisse aus prism) selbst triangulieren, damit kein Importer raten muss
+    big = [f for f in bm.faces if len(f.verts) > 4]
+    if big:
+        bmesh.ops.triangulate(bm, faces=big, quad_method='BEAUTY', ngon_method='EAR_CLIP')
     bm.to_mesh(me)
     bm.free()
     for p in me.polygons:
@@ -534,13 +538,17 @@ def build(name, subdir, fn, views=None):
 
 
 def run_family(variants, subdir, views=None):
-    """Baut mehrere Varianten {name: fn}; Kommandozeile nach '--' schraenkt auf Namen ein."""
+    """Baut mehrere Varianten {name: fn} oder {name: (fn, unterordner)}; Kommandozeile nach '--' schraenkt auf
+    Namen ein."""
     import sys
     only = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     for name, fn in variants.items():
         if only and name not in only:
             continue
-        build(name, subdir, fn, views)
+        sd = subdir
+        if isinstance(fn, tuple):
+            fn, sd = fn
+        build(name, sd, fn, views)
 
 
 def finish(objs, name, subdir="Utilities", views=None):

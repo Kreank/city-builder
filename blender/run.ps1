@@ -8,3 +8,6 @@ $out = & $blender --background --factory-startup --python-exit-code 1 --python $
 $pattern = 'CB_|Error|Traceback|File "|line \d+|Exception'
 $out -split "`n" | Where-Object { $_ -match $pattern } | ForEach-Object { $_.TrimEnd() }
 Write-Output ("exit=" + $LASTEXITCODE)
+# Beschreibungsdateien <Name>.json neben den FBX aktualisieren (Rolle, Zone, Stufe ...; s. scripts\write_sidecars.py)
+$side = & $blender --background --factory-startup --python-exit-code 1 --python (Join-Path $PSScriptRoot "scripts\write_sidecars.py") 2>&1 | Out-String
+$side -split "`n" | Where-Object { $_ -match 'CB_SIDECARS|Error|Traceback' } | ForEach-Object { $_.TrimEnd() }
