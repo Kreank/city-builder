@@ -39,9 +39,17 @@ namespace CityBuilder.Simulation.Goods
             public readonly bool Hinterland;
             public readonly RoadNode Node;
             public readonly float Distance;
-            public Route(bool ok, bool hinterland, RoadNode node, float distance) { Ok = ok; Hinterland = hinterland; Node = node; Distance = distance; }
-            public double FreightShare => Hinterland ? GoodsRules.HinterlandFreightShare : GoodsRules.WorldFreightShare;
+            /// <summary>Bahn: eigener Frachtanteil (Güterbahnhof), &lt; 0 = Standard.</summary>
+            readonly double share;
+            public Route(bool ok, bool hinterland, RoadNode node, float distance, double share = -1.0)
+            { Ok = ok; Hinterland = hinterland; Node = node; Distance = distance; this.share = share; }
+            public double FreightShare => share >= 0.0 ? share : Hinterland ? GoodsRules.HinterlandFreightShare : GoodsRules.WorldFreightShare;
         }
+
+        // --- Bahn (Hook, klein): Fernfracht über den Güterbahnhof ist billiger als per Lkw (Anteil am Warenwert je Knoten;
+        // null bzw. &lt; 0 = Standard <see cref="GoodsRules.WorldFreightShare"/>).
+        public Func<RoadNode, double> FreightShareFor { get; set; }
+        // --- Ende Bahn
 
         static List<Firm>[] NewSupplierLists()
         {
@@ -126,7 +134,7 @@ namespace CityBuilder.Simulation.Goods
             if (PreferredGateway != null && g != null) // --- Gateways
             {
                 var n = PreferredGateway(g, import, contract, comp);
-                if (n != null) return new Route(true, false, n, Vector2.Distance(p, n.Position));
+                if (n != null) return new Route(true, false, n, Vector2.Distance(p, n.Position), FreightShareFor?.Invoke(n) ?? -1.0); // Bahn: Frachtanteil
             }
             foreach (var e in externals)
             {

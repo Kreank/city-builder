@@ -40,6 +40,11 @@ namespace CityBuilder.Simulation.Roads
         public Economy.IConstructionBudget Budget { get; set; }
         // --- Ende Stadtkasse
 
+        // --- Bahn (Hook): zusätzliche Prüfung am Ende von RoadBuilder.Validate (Straße quert Gleis bzw. Gleis quert Straße,
+        // Gleisgeometrie). null = keine. Gesetzt vom Bahnsystem für Straßen- und Gleisnetz.
+        public Func<RoadPlan, RoadBuildError> ExternalCheck { get; set; }
+        // --- Ende Bahn
+
         // --- Bauwerks-Sperre (Hook): Bauwerke, die Straßen nicht überbauen dürfen (Dienste, Versorger, später Depots …).
         // RoadBuilder.Plan… prüft dagegen (RoadBuildError.OverlapsStructure). Zonen-Gebäude melden sich hier nicht an.
         readonly List<Func<IEnumerable<StructureBlock>>> structureSources = new List<Func<IEnumerable<StructureBlock>>>();

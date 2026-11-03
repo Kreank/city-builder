@@ -277,11 +277,13 @@ namespace CityBuilder.Simulation.Traffic
                 if (stopGap < gap) { gap = MathF.Max(0.1f, stopGap); leaderSpeed = 0f; }
             }
             // --- Ende ÖPNV
+            bool atBarrier = ApplyBarrier(v, lane, ref gap, ref leaderSpeed); // --- Bahn: geschlossener Bahnübergang = Haltelinie
 
             Advance(v, desired, gap, leaderSpeed, leader);
 
             // Stillstand / Haltelinie
             if (v.Speed < 0.3f) v.WaitTime += Dt; else v.WaitTime = 0f;
+            if (atBarrier && v.WaitTime > BarrierWaitCap) v.WaitTime = BarrierWaitCap; // --- Bahn
             if (v.Speed < 0.3f && length - v.S < 4f) v.StopLineWait += Dt;
             else if (v.Speed > 2f) v.StopLineWait = 0f;
             if (v.LaneChangeCooldown > 0f) v.LaneChangeCooldown -= Dt;

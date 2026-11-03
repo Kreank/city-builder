@@ -45,6 +45,11 @@ namespace CityBuilder.Simulation.Citizens
         BusLate,
         /// <summary>Angenehme, pünktliche Busfahrt.</summary>
         BusRide,
+        // --- Bahn (Stufe 2)
+        /// <summary>Angenehme Fahrt mit dem Fernzug.</summary>
+        TrainRide,
+        /// <summary>Zug kam spät, war voll oder fiel aus.</summary>
+        TrainLate,
     }
 
     /// <summary>
@@ -117,6 +122,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.BusFull: return -0.4f;
                 case MemoryKind.BusLate: return -0.3f;
                 case MemoryKind.BusRide: return 0.25f;
+                case MemoryKind.TrainRide: return 0.3f;  // Bahn
+                case MemoryKind.TrainLate: return -0.3f; // Bahn
                 default: return 0.3f; // QuietEvening
             }
         }
@@ -130,6 +137,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.BusFull:
                 case MemoryKind.BusLate: return 0.75f;
                 case MemoryKind.BusRide: return 0.7f;
+                case MemoryKind.TrainRide: return 0.75f;  // Bahn
+                case MemoryKind.TrainLate: return 0.75f;  // Bahn
                 case MemoryKind.LongCommute: return 0.8f;
                 case MemoryKind.NoShop: return 0.7f;
                 case MemoryKind.NiceShopping: return 0.7f;
@@ -185,6 +194,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.BusFull: return "Bus voll";
                 case MemoryKind.BusLate: return "Bus verspätet";
                 case MemoryKind.BusRide: return "gute Busfahrt";
+                case MemoryKind.TrainRide: return "gute Zugfahrt";      // Bahn
+                case MemoryKind.TrainLate: return "Zug verspätet/voll";  // Bahn
                 default: return "ruhiger Abend";
             }
         }

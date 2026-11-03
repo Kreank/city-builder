@@ -58,6 +58,16 @@ namespace CityBuilder.Simulation.Roads
         OverlapsStructure,
         /// <summary>Gateways: Straße gehört der Welt (vorgebaute Autobahn/Anschlussstelle) – kein Abriss/Umbau.</summary>
         Locked,
+        // --- Bahn (Stufe 2, hinten angefügt): Kreuzung Straße ↔ Gleis (Prüfung über RoadNetwork.ExternalCheck)
+        /// <summary>Ebenerdige Kreuzung mit einem Gleis nicht erlaubt (Autobahn/Rampe, zu spitzer Winkel, zu nah an einer Kreuzung/Weiche, Bahnsteig).</summary>
+        RailCrossing,
+        /// <summary>Straße läuft längs auf einem Gleis bzw. Gleis längs auf einer Straße (nur queren erlaubt).</summary>
+        OverlapsRail,
+        /// <summary>Gleis: Kurve zu eng (Mindestradius) oder Anschluss nicht tangential (Weiche zu steil abzweigend).</summary>
+        TrackGeometry,
+        /// <summary>Gleis ist gerade von einem Zug belegt/reserviert – erst bauen, wenn er vorbei ist.</summary>
+        TrackOccupied,
+        // --- Ende Bahn
     }
 
     public sealed class RoadPlan
@@ -252,7 +262,7 @@ namespace CityBuilder.Simulation.Roads
 
             var startDir = SafeDirection(plan.Control - plan.Start, plan.End - plan.Start);
             var endDir = SafeDirection(plan.Control - plan.End, plan.Start - plan.End);
-            if (!AnchorAngleOk(network, sa, startDir) || !AnchorAngleOk(network, ea, endDir))
+            if (!AnchorAngleOk(network, sa, startDir, type.MinJunctionAngle) || !AnchorAngleOk(network, ea, endDir, type.MinJunctionAngle))
                 return RoadBuildError.AngleTooSharp;
 
             var error = FindCrossings(network, plan);
@@ -277,6 +287,14 @@ namespace CityBuilder.Simulation.Roads
             // Bauwerks-Sperre: Straßen reißen Dienst-/Versorgungsbauwerke nicht mehr ab (Zonen-Gebäude schon)
             plan.BlockedBy = RoadFront.FindBlocking(network, plan.Start, plan.Control, plan.End, type.HalfWidth, plan.HeightAt);
             if (plan.BlockedBy != null) return RoadBuildError.OverlapsStructure;
+
+            // --- Bahn (Hook): Kreuzung mit dem jeweils anderen Netz (Straße ↔ Gleis), Gleisgeometrie
+            if (network.ExternalCheck != null)
+            {
+                var external = network.ExternalCheck(plan);
+                if (external != RoadBuildError.None) return external;
+            }
+            // --- Ende Bahn
 
             return RoadBuildError.None;
         }
@@ -306,7 +324,7 @@ namespace CityBuilder.Simulation.Roads
             }
         }
 
-        static bool AnchorAngleOk(RoadNetwork network, RoadAnchor anchor, Vector2 direction)
+        static bool AnchorAngleOk(RoadNetwork network, RoadAnchor anchor, Vector2 direction, float minAngle)
         {
             switch (anchor.Kind)
             {
@@ -314,13 +332,13 @@ namespace CityBuilder.Simulation.Roads
                     foreach (int id in anchor.Node.SegmentIds)
                     {
                         var dir = RoadGeometry.OutgoingDirection(network.GetSegment(id), anchor.Node);
-                        if (RoadGeometry.Angle(dir, direction) < MinJunctionAngle) return false;
+                        if (RoadGeometry.Angle(dir, direction) < minAngle) return false;
                     }
                     return true;
                 case AnchorKind.Segment:
                     var tangent = anchor.Segment.Tangent(anchor.T);
                     float a = RoadGeometry.Angle(tangent, direction);
-                    return a >= MinJunctionAngle && a <= 180f - MinJunctionAngle;
+                    return a >= minAngle && a <= 180f - minAngle;
                 default:
                     return true;
             }
@@ -357,6 +375,8 @@ namespace CityBuilder.Simulation.Roads
                     var p = Vector2.Lerp(newPts[i], newPts[i + 1], u);
                     // Anschlusspunkte selbst sind keine Kreuzungen
                     if (Vector2.Distance(p, plan.Start) < EndpointTolerance || Vector2.Distance(p, plan.End) < EndpointTolerance) continue;
+                    // --- Bahn: Weichenbereich – das abzweigende Gleis läuft anfangs fast auf dem Stammgleis (keine Kreuzung)
+                    if (plan.Type.IsRail && InSwitchZone(plan, seg, p)) continue;
 
                     float tNew = (i + u) / n;
                     float tSeg = (j + v) / m;
@@ -387,6 +407,18 @@ namespace CityBuilder.Simulation.Roads
             result.Sort((a, b) => a.TNew.CompareTo(b.TNew));
             return RoadBuildError.None;
         }
+
+        // --- Bahn: Länge des Weichenbereichs (abzweigendes Gleis liegt noch neben/auf dem Stammgleis)
+        public const float SwitchZone = 45f;
+
+        static bool InSwitchZone(RoadPlan plan, RoadSegment seg, Vector2 p)
+        {
+            bool AtAnchor(RoadAnchor a, Vector2 end) =>
+                Vector2.Distance(p, end) < SwitchZone &&
+                ((a.Kind == AnchorKind.Segment && a.Segment == seg) || (a.Kind == AnchorKind.Node && seg.Touches(a.Node)));
+            return AtAnchor(plan.StartAnchor, plan.Start) || AtAnchor(plan.EndAnchor, plan.End);
+        }
+        // --- Ende Bahn
 
         static bool IsDuplicate(List<RoadCrossing> list, RoadSegment seg, RoadNode node, Vector2 p)
         {

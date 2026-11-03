@@ -232,6 +232,22 @@ namespace CityBuilder.Simulation.Citizens.Content
                 "Kein Parkplatz suchen – der Bus hält direkt an der {Straße}.",
                 "Die Buslinie ist wirklich praktisch.",
             },
+            // --- Bahn (Stufe 2)
+            /* TrainRide */ new[]
+            {
+                "Mit dem Fernzug ganz entspannt aus der Stadt – kein Stau auf der Autobahn.",
+                "Im Zug habe ich die ganze Fahrt gelesen.",
+                "Der neue Bahnhof ist ein Segen für Pendler wie mich.",
+                "Pünktlich auf die Minute – so macht Bahnfahren Spaß.",
+            },
+            /* TrainLate */ new[]
+            {
+                "Ewig auf dem Bahnsteig gestanden – wo bleibt der Zug?",
+                "Der Zug war so voll, dass ich nicht mehr reingekommen bin.",
+                "Signalstörung, hieß es. Wieder zu spät bei {Firma}.",
+                "Nachts fährt hier ja gar nichts – dann eben doch das Auto.",
+            },
+            // --- Ende Bahn
         };
 
         public static int Count(MemoryKind k) => ByKind[(int)k].Length;

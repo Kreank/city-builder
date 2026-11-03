@@ -245,8 +245,20 @@ namespace CityBuilder.Simulation.Core
             world.Gateways = new Gateways.GatewaySystem(world);
             world.AddSystem(world.Gateways);
             world.Gateways.Connect();
-            if (newGame && world.Settings.PrebuiltConnections) world.Gateways.Generate();
             // --- Ende Gateways
+
+            // --- Bahn (Stufe 2): Gleisnetz, Hauptstrecke auf dem Bahnkorridor, Bahnhöfe, Züge, Bahnübergänge (nach den Gateways:
+            // hängt sich an deren Hooks für Zuzug/Handel an; Züge fahren nach dem Straßenverkehr im Verkehrsschritt)
+            world.Rail = new Rail.RailSystem(world);
+            world.AddSystem(world.Rail);
+            world.Rail.Connect();
+            // --- Ende Bahn
+
+            if (newGame && world.Settings.PrebuiltConnections)
+            {
+                world.Gateways.Generate();
+                world.Rail.BuildMainline(); // Bahn: Fernbahn-Hauptstrecke auf dem freigehaltenen Korridor (gehört der Welt)
+            }
             return world;
         }
 
@@ -289,6 +301,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Außenanbindungen (Autobahn, Bahn, Wasser, Luft) am Kartenrand. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Gateways.GatewaySystem Gateways { get; private set; }
+
+        /// <summary>Bahn (Stufe 2): Gleisnetz, Hauptstrecke, Bahnhöfe, Züge, Bahnübergänge. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Rail.RailSystem Rail { get; private set; }
 
         // --- Speichern & Laden
         /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>

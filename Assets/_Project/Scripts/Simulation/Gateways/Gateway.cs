@@ -116,6 +116,10 @@ namespace CityBuilder.Simulation.Gateways
         /// <summary>Schiffbar nach Breite/Tiefe (<see cref="GatewayRules.NavigableWidth"/>, <see cref="GatewayRules.NavigableDepth"/>).</summary>
         public bool Navigable { get; internal set; }
 
+        // --- Bahn (Stufe 2): Hauptstrecke liegt (vom Bahnsystem gesetzt, abgeleitet, nicht gespeichert)
+        public bool RailBuilt { get; internal set; }
+        // --- Ende Bahn
+
         /// <summary>Alle Zuzügler-Haushalte über diesen Anschluss seit Spielbeginn (verteilt den Zuzug nach Wichtigkeit).</summary>
         public int TotalMoveIns { get; internal set; }
 
@@ -148,7 +152,7 @@ namespace CityBuilder.Simulation.Gateways
                 if (IsOperational) return "befahrbar";
                 switch (Kind)
                 {
-                    case GatewayKind.Rail: return "noch nicht befahrbar (Züge folgen)";
+                    case GatewayKind.Rail: return RailBuilt ? "noch nicht befahrbar (Bahnhof an der Hauptstrecke fehlt)" : "noch nicht befahrbar (Züge folgen)"; // Bahn
                     case GatewayKind.Water: return Navigable ? "noch nicht befahrbar (Schiffe/Hafen folgen)" : "nicht schiffbar (zu schmal/flach)";
                     case GatewayKind.Air: return "noch nicht befahrbar (Flughafen folgt)";
                     default: return "noch nicht befahrbar (folgt)";
