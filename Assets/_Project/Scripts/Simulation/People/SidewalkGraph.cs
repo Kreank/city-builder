@@ -198,7 +198,9 @@ namespace CityBuilder.Simulation.People
                 arms.Add((MathF.Atan2(arm.Dir.Y, arm.Dir.X), arm, li));
             }
             if (arms.Count == 0) return;
-            arms.Sort((x, y) => x.angle.CompareTo(y.angle)); // gegen den Uhrzeigersinn wie JunctionGeometry
+            // Gegen den Uhrzeigersinn; an Kreuzungen exakt in der Reihenfolge des Layouts (Ecken passen dann zu den Armen)
+            if (layout != null) arms.Sort((x, y) => x.layoutIndex.CompareTo(y.layoutIndex));
+            else arms.Sort((x, y) => x.angle.CompareTo(y.angle));
             foreach (var e in arms) armsAt[(node.Id, e.arm.Segment.Id)] = e.arm;
 
             var pts = new List<Vector2>();

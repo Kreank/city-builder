@@ -110,6 +110,34 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
+        public void Route_CurvedArmsAtJunction_StayOnSidewalks()
+        {
+            var net = new RoadNetwork();
+            Road(net, new Vector2(-150, 0), new Vector2(150, 0));
+            // Zwei stark gekrümmte Arme an derselben Kreuzung (Abgangsrichtung ≠ Richtung am gekürzten Ende)
+            var p1 = RoadBuilder.Plan(net, new Vector2(0, 0), 8f, new Vector2(0, 60), new Vector2(-90, 70), 8f, City);
+            Assert.True(p1.IsValid, p1.Error.ToString());
+            RoadBuilder.Build(net, p1);
+            var p2 = RoadBuilder.Plan(net, new Vector2(0, 0), 8f, new Vector2(0, -60), new Vector2(90, -70), 8f, City);
+            Assert.True(p2.IsValid, p2.Error.ToString());
+            RoadBuilder.Build(net, p2);
+            var g = new SidewalkGraph(net);
+            foreach (var (from, side, to, toSide) in new[]
+            {
+                (new Vector2(-100, 0), new Vector2(-100, 20), new Vector2(-80, 70), new Vector2(-80, 50)),
+                (new Vector2(100, 0), new Vector2(100, -20), new Vector2(80, -70), new Vector2(80, -50)),
+                (new Vector2(-100, 0), new Vector2(-100, -20), new Vector2(100, 0), new Vector2(100, -20)),
+            })
+            {
+                var a = Access(g, net, from, side);
+                var b = Access(g, net, to, toSide);
+                var r = Route(g, a, b);
+                output.WriteLine($"{from} → {to}: {r.Length:0.0} m, Querungen {r.Crossings}");
+                AssertOnSidewalks(net, r);
+            }
+        }
+
+        [Fact]
         public void Route_CrossesStreetAtJunction_NotMidBlock()
         {
             var net = new RoadNetwork();
