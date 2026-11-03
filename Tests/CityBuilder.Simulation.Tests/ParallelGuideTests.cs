@@ -42,117 +42,116 @@ namespace CityBuilder.Simulation.Tests
                 yield return new object[] { a.Id, b.Id };
         }
 
-        [Fact]
-        public void Formula_IsHalfWidthsPlusTwiceDepth()
+        // Setzen statt Zonen: Die Bauhilfe richtet sich nach Gebäudetiefen statt nach dem Zonenraster. Die früheren Tests
+        // (Abstand gegen das echte Zonenraster, Reihen-Stufen 1–4, Rasterduldung 1,2 m) prüften ein Modell, das es für neue
+        // Städte nicht mehr gibt; sie sind ersetzt durch dieselben Fragen gegen das echte Setzen von Gebäudereihen
+        // (CitySystem.PlanHouseRow): passt Reihe B bei optimalem Abstand Rücken an Rücken hinter Reihe A, ohne Lücke?
+
+        /// <summary>Bauart je Tiefe (16/24/32 m).</summary>
+        static HouseType TypeOfDepth(float depth) => HouseCatalog.All.First(t => MathF.Abs(t.Depth - depth) < 0.01f);
+
+        /// <summary>Reihe an Straße A (y = 0, Seite +y) und an Straße B (y = d, Seite −y) setzen; liefert die Reihen.</summary>
+        static (HouseRowPlan a, HouseRowPlan b) BackToBack(SimulationWorld w, HouseType type, RoadType ta, RoadType tb, float d)
         {
-            Assert.Equal(64f, ParallelGuides.OptimalEdgeGap());
-            Assert.Equal(6.5f + 6.5f + 64f, ParallelGuides.OptimalAxisDistance(RoadCatalog.CityTwoLane, RoadCatalog.CityTwoLane), 3);
-            Assert.Equal(10f + 6.5f + 64f, ParallelGuides.OptimalAxisDistance(RoadCatalog.CityFourLane, RoadCatalog.CityTwoLane), 3);
-            Assert.Equal(5f + 5f + 40f, ParallelGuides.OptimalAxisDistance(RoadCatalog.CityOneWay1, RoadCatalog.CityOneWay1, 1), 3);
+            float ya = ta.HalfWidth + 3f, yb = d - tb.HalfWidth - 3f;
+            var rowA = w.City.PlanHouseRow(type, new Vector2(30, ya), new Vector2(170, ya));
+            Assert.True(rowA.ValidCount >= 3, $"Reihe A: {string.Join(",", rowA.Items.Select(i => i.Error))}");
+            w.City.BuildHouseRow(rowA);
+            var rowB = w.City.PlanHouseRow(type, new Vector2(30, yb), new Vector2(170, yb));
+            return (rowA, rowB);
+        }
+
+        [Fact]
+        public void Formula_IsHalfWidthsPlusTwiceBuildingDepth()
+        {
+            Assert.Equal(2f * (0.5f + 24f), ParallelGuides.OptimalEdgeGap(), 3);
+            Assert.Equal(33f, ParallelGuides.OptimalEdgeGap(16f), 3);
+            Assert.Equal(65f, ParallelGuides.OptimalEdgeGap(32f), 3);
+            Assert.Equal(6.5f + 6.5f + 33f, ParallelGuides.OptimalAxisDistance(RoadCatalog.CityTwoLane, RoadCatalog.CityTwoLane, 16f), 3);
+            Assert.Equal(10f + 6.5f + 49f, ParallelGuides.OptimalAxisDistance(RoadCatalog.CityFourLane, RoadCatalog.CityTwoLane, 24f), 3);
             foreach (var t in RoadCatalog.All.Where(t => t.Category == RoadCategory.City))
-                output.WriteLine($"{t.Id,-18} halbe Breite {t.HalfWidth,5:0.00} m  optimal zu city_2: {ParallelGuides.OptimalAxisDistance(t, RoadCatalog.CityTwoLane):0.00} m, zu sich selbst: {ParallelGuides.OptimalAxisDistance(t, t):0.00} m");
+                output.WriteLine($"{t.Id,-18} halbe Breite {t.HalfWidth,5:0.00} m  optimal zu city_2: 16 m {ParallelGuides.OptimalAxisDistance(t, RoadCatalog.CityTwoLane, 16f):0.0} · " +
+                                 $"24 m {ParallelGuides.OptimalAxisDistance(t, RoadCatalog.CityTwoLane, 24f):0.0} · 32 m {ParallelGuides.OptimalAxisDistance(t, RoadCatalog.CityTwoLane, 32f):0.0} m");
         }
 
         [Theory]
         [MemberData(nameof(TypePairs))]
-        public void OptimalDistance_GivesGaplessNonOverlappingZones(string idA, string idB)
+        public void OptimalDistance_PutsTwoRowsBackToBack(string idA, string idB)
         {
             var a = RoadCatalog.Get(idA);
             var b = RoadCatalog.Get(idB);
-            float d = ParallelGuides.OptimalAxisDistance(a, b);
-            var w = SimulationWorld.CreateDefault();
-            Road(w, new Vector2(0, 0), new Vector2(200, 0), a);
-            Road(w, new Vector2(0, d), new Vector2(200, d), b);
-            w.City.Grid.Update();
-
-            var cells = CellsBetween(w.City.Grid, d);
-            // 25 Spalten × 4 Reihen je Straße auf der zugewandten Seite
-            Assert.Equal(2 * 25 * ZoneGrid.Depth, cells.Count);
-            // Reihen liegen genau im 8-m-Takt von Rand zu Rand: lückenlos, keine Überlappung
-            var rows = cells.Select(c => MathF.Round(c.cell.Center.Y, 2)).Distinct().OrderBy(y => y).ToList();
-            Assert.Equal(2 * ZoneGrid.Depth, rows.Count);
-            for (int i = 0; i < rows.Count; i++)
-                Assert.Equal(a.HalfWidth + ZoneGrid.CellSize * (i + 0.5f), rows[i], 2);
-            Assert.Equal(d - b.HalfWidth - ZoneGrid.CellSize * 0.5f, rows[rows.Count - 1], 2);
-            // je Straße 4 Reihen
-            Assert.Equal(25 * ZoneGrid.Depth, cells.Count(c => c.block.Segment.Type == a && MathF.Abs(c.block.Segment.Evaluate(0.5f).Y) < 0.1f));
-
-            var info = ParallelGuides.Evaluate(a, b, d);
-            Assert.Equal(ParallelFit.Optimal, info.Fit);
-            Assert.Equal(4, info.ExistingRows);
-            Assert.Equal(4, info.PlannedRows);
-            Assert.Equal(0f, info.Unused, 3);
-            Assert.Equal(0f, info.Overlap, 3);
+            foreach (float depth in new[] { 16f, 32f })
+            {
+                var type = TypeOfDepth(depth);
+                float d = ParallelGuides.OptimalAxisDistance(a, b, depth);
+                var w = SimulationWorld.CreateDefault();
+                Road(w, new Vector2(0, 0), new Vector2(200, 0), a);
+                Road(w, new Vector2(0, d), new Vector2(200, d), b);
+                var (rowA, rowB) = BackToBack(w, type, a, b, d);
+                // Reihe B passt vollständig (keine Überlappung mit Reihe A) …
+                Assert.True(rowB.ValidCount >= 3 && rowB.Items.All(i => i.IsValid || i.Error != HouseBuildError.OverlapsBuilding),
+                    $"Reihe B: {string.Join(",", rowB.Items.Select(i => i.Error))}");
+                // … und die Rückseiten berühren sich (keine Lücke)
+                float backA = rowA.Items[0].Position.Y + depth * 0.5f;
+                float backB = rowB.Items[0].Position.Y - depth * 0.5f;
+                Assert.True(MathF.Abs(backA - backB) < 0.05f, $"Rückseiten {backA} / {backB}");
+                var info = ParallelGuides.Evaluate(a, b, d, depth);
+                Assert.Equal(ParallelFit.Optimal, info.Fit);
+                Assert.Equal(2, info.Rows);
+                Assert.Equal(0f, info.Unused, 3);
+                Assert.Equal(0f, info.Overlap, 3);
+            }
         }
 
         [Fact]
-        public void RowModel_MatchesZoneGrid_ForManyGaps()
+        public void RowModel_MatchesPlacement_ForManyGaps()
         {
+            // Evaluate().Rows (2 = beide Reihen passen) gegen echtes Setzen über viele Abstände
             var t = RoadCatalog.CityTwoLane;
-            for (float gap = 20f; gap <= 76f; gap += 1.3f)
+            var type = HouseCatalog.Medium; // 24 m tief
+            for (float gap = 20f; gap <= 76f; gap += 1.7f)
             {
                 float d = gap + 2f * t.HalfWidth;
                 var w = SimulationWorld.CreateDefault();
                 Road(w, new Vector2(0, 0), new Vector2(200, 0), t);
                 Road(w, new Vector2(0, d), new Vector2(200, d), t);
-                w.City.Grid.Update();
-                var cells = CellsBetween(w.City.Grid, d);
-                int rowsA = cells.Where(c => c.block.Segment.Start.Position.Y < 1f).Select(c => MathF.Round(c.cell.Center.Y, 1)).Distinct().Count();
-                int rowsB = cells.Where(c => c.block.Segment.Start.Position.Y > 1f).Select(c => MathF.Round(c.cell.Center.Y, 1)).Distinct().Count();
-
-                var info = ParallelGuides.Evaluate(t, t, d);
-                output.WriteLine($"Rand {gap:0.0} m: Raster {rowsA}+{rowsB}, Modell {info.ExistingRows}+{info.PlannedRows}, ungenutzt {info.Unused:0.0}, Überlappung {info.Overlap:0.0} · {ParallelGuides.Describe(info)}");
-                Assert.Equal(rowsA, info.ExistingRows);
-                Assert.Equal(rowsB, info.PlannedRows);
+                var info = ParallelGuides.Evaluate(t, t, d, type.Depth);
+                bool fitsA = info.Rows >= 1;
+                var rowA = w.City.PlanHouseRow(type, new Vector2(30, t.HalfWidth + 3f), new Vector2(170, t.HalfWidth + 3f));
+                output.WriteLine($"Rand {gap:0.0} m: Modell {info.Rows} Reihen · {ParallelGuides.Describe(info)}");
+                if (!fitsA) continue; // dann ragt schon Reihe A in die Gegenstraße
+                Assert.True(rowA.ValidCount >= 3);
+                w.City.BuildHouseRow(rowA);
+                var rowB = w.City.PlanHouseRow(type, new Vector2(30, d - t.HalfWidth - 3f), new Vector2(170, d - t.HalfWidth - 3f));
+                bool placedB = rowB.ValidCount > 0;
+                Assert.Equal(info.Rows == 2, placedB);
             }
-        }
-
-        [Theory]
-        [InlineData(1)]
-        [InlineData(2)]
-        [InlineData(3)]
-        [InlineData(4)]
-        public void Stages_GiveNewRoadExactlyItsRows_WithoutWaste(int rows)
-        {
-            var a = RoadCatalog.CityFourLane;
-            var b = RoadCatalog.CityTwoLane;
-            float d = ParallelGuides.OptimalAxisDistance(a, b, rows);
-            var w = SimulationWorld.CreateDefault();
-            Road(w, new Vector2(0, 0), new Vector2(200, 0), a);
-            Road(w, new Vector2(0, d), new Vector2(200, d), b);
-            w.City.Grid.Update();
-
-            var cells = CellsBetween(w.City.Grid, d);
-            Assert.Equal(25 * (ZoneGrid.Depth + rows), cells.Count);
-            var info = ParallelGuides.Evaluate(a, b, d, rows);
-            Assert.Equal(ParallelFit.Optimal, info.Fit);
-            Assert.Equal(rows, info.PlannedRows);
-            Assert.Equal(0f, info.Unused, 3);
         }
 
         [Fact]
         public void TooClose_And_TooFar_AreReported()
         {
             var t = RoadCatalog.CityTwoLane;
-            float opt = ParallelGuides.OptimalAxisDistance(t, t);
+            float opt = ParallelGuides.OptimalAxisDistance(t, t, 24f);
 
-            var tight = ParallelGuides.Evaluate(t, t, opt - 4f);
+            var tight = ParallelGuides.Evaluate(t, t, opt - 4f, 24f);
             Assert.Equal(ParallelFit.Overlap, tight.Fit);
-            Assert.Equal(3, tight.PlannedRows);          // eine Reihe geht verloren …
-            Assert.Equal(4f, tight.Unused, 3);           // … und 4 m bleiben leer
+            Assert.Equal(1, tight.Rows);                  // nur eine Reihe passt …
+            Assert.Equal(4f, tight.Overlap, 3);           // … die zweite würde 4 m überlappen
             Assert.Contains("zu eng", ParallelGuides.Describe(tight));
+            Assert.Contains("nur eine Reihe", ParallelGuides.Describe(tight));
 
-            var slightly = ParallelGuides.Evaluate(t, t, opt - 1f);
+            var slightly = ParallelGuides.Evaluate(t, t, opt - 1f, 24f);
             Assert.Equal(ParallelFit.Overlap, slightly.Fit);
-            Assert.Equal(4, slightly.PlannedRows);        // Raster duldet bis 1,2 m
             Assert.Equal(1f, slightly.Overlap, 3);
             Assert.Contains("1,0 m Überlappung", ParallelGuides.Describe(slightly));
 
-            var wide = ParallelGuides.Evaluate(t, t, opt + 3f);
+            var wide = ParallelGuides.Evaluate(t, t, opt + 3f, 24f);
             Assert.Equal(ParallelFit.Gap, wide.Fit);
             Assert.Equal(3f, wide.Unused, 3);
+            Assert.Equal(2, wide.Rows);
             Assert.Contains("3,0 m Lücke", ParallelGuides.Describe(wide));
-            Assert.Contains("optimal", ParallelGuides.Describe(ParallelGuides.Evaluate(t, t, opt + 0.1f)));
+            Assert.Contains("optimal", ParallelGuides.Describe(ParallelGuides.Evaluate(t, t, opt + 0.1f, 24f)));
         }
 
         [Fact]
@@ -163,30 +162,30 @@ namespace CityBuilder.Simulation.Tests
             var s = Road(w, new Vector2(0, 0), new Vector2(200, 0), a);
             float d = ParallelGuides.OptimalAxisDistance(a, a);
 
-            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d + 3f), a, 4, 6f, out var up));
+            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d + 3f), a, 24f, 6f, out var up));
             Assert.Equal(new Vector2(60, d).X, up.Point.X, 3);
             Assert.Equal(d, up.Point.Y, 3);
             Assert.Equal(s.Id, up.Segment.Id);
 
-            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(120, -d + 2f), a, 4, 6f, out var down));
+            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(120, -d + 2f), a, 24f, 6f, out var down));
             Assert.Equal(-d, down.Point.Y, 3);
             Assert.NotEqual(up.Side, down.Side);
 
             // Verlängerung gerader Straßen über das Ende hinaus
-            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(250, d - 1f), a, 4, 6f, out var ext));
+            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(250, d - 1f), a, 24f, 6f, out var ext));
             Assert.Equal(d, ext.Point.Y, 3);
             Assert.True(ext.T > 1f);
 
             // außerhalb des Radius nicht
-            Assert.False(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d + 10f), a, 4, 6f, out _));
-            // Stufe 2 Reihen: Linie 16 m näher
-            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d - 15f), a, 2, 6f, out var two));
+            Assert.False(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d + 10f), a, 24f, 6f, out _));
+            // Tiefe 16 m statt 24 m: Linie 2 × 8 = 16 m näher
+            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d - 15f), a, 16f, 6f, out var two));
             Assert.Equal(d - 16f, two.Point.Y, 3);
-            // Autobahn bekommt keine Hilfslinien (kein Zonenraster) und eine geplante Autobahn sucht keine
-            Assert.False(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d), RoadCatalog.Highway2, 4, 6f, out _));
+            // Autobahn bekommt keine Hilfslinien (keine Gebäude an der Autobahn) und eine geplante Autobahn sucht keine
+            Assert.False(ParallelGuides.TrySnap(w.Roads, new Vector2(60, d), RoadCatalog.Highway2, 24f, 6f, out _));
             var w2 = SimulationWorld.CreateDefault();
             Road(w2, new Vector2(0, 0), new Vector2(200, 0), RoadCatalog.Highway2);
-            Assert.False(ParallelGuides.TrySnap(w2.Roads, new Vector2(60, d), a, 4, 6f, out _));
+            Assert.False(ParallelGuides.TrySnap(w2.Roads, new Vector2(60, d), a, 24f, 6f, out _));
         }
 
         [Fact]
@@ -202,22 +201,22 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
-        public void SnappedParallelRoad_GivesFullGrid()
+        public void SnappedParallelRoad_FitsTwoRowsBackToBack()
         {
-            // Spielablauf nachgestellt: Start und Ende per Hilfslinie eingerastet, Ende parallel
+            // Spielablauf nachgestellt: Start und Ende per Hilfslinie eingerastet, Ende parallel, dann zwei Reihen setzen
             var w = SimulationWorld.CreateDefault();
             var a = RoadCatalog.CityTram;
             var b = RoadCatalog.CityOneWay2;
             Road(w, new Vector2(0, 0), new Vector2(200, 0), a);
-            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(1.3f, 85f), b, 4, 8f, out var start));
-            Assert.True(RoadGeometry.SnapParallel(start.Point, new Vector2(199f, 88f), start.Tangent, 8f, 8f, out var end));
+            float d = ParallelGuides.OptimalAxisDistance(a, b, 24f);
+            Assert.True(ParallelGuides.TrySnap(w.Roads, new Vector2(1.3f, d + 2f), b, 24f, 8f, out var start));
+            Assert.True(RoadGeometry.SnapParallel(start.Point, new Vector2(199f, d + 3f), start.Tangent, 8f, 8f, out var end));
             Road(w, start.Point, end, b);
-            w.City.Grid.Update();
-            float d = ParallelGuides.OptimalAxisDistance(a, b);
-            var cells = CellsBetween(w.City.Grid, d);
-            var rows = cells.Select(c => MathF.Round(c.cell.Center.Y, 1)).Distinct().Count();
-            Assert.Equal(2 * ZoneGrid.Depth, rows);
-            Assert.Equal(ParallelFit.Optimal, ParallelGuides.Evaluate(a, b, end.Y).Fit);
+            Assert.Equal(d, end.Y, 2);
+            Assert.Equal(ParallelFit.Optimal, ParallelGuides.Evaluate(a, b, end.Y, 24f).Fit);
+            var (_, rowB) = BackToBack(w, HouseCatalog.Medium, a, b, d);
+            Assert.True(rowB.ValidCount >= 3 && rowB.Items.All(i => i.Error != HouseBuildError.OverlapsBuilding),
+                string.Join(",", rowB.Items.Select(i => i.Error)));
         }
 
         [Fact]
@@ -228,17 +227,19 @@ namespace CityBuilder.Simulation.Tests
             // weite Kurve (Viertelkreis-ähnlich, Radius ~ 300 m)
             var s = Road(w, new Vector2(0, 0), new Vector2(300, 300), a, new Vector2(300, 0));
             float d = ParallelGuides.OptimalAxisDistance(a, a);
-
+            // Setzen statt Zonen: auf Bögen kommt der Kurvenzuschlag dazu (hintere Ecken der Sehnen-Gebäude + Puffer der Näherung)
             // Außen- und Innenseite: Punkte nahe der Offset-Kurve rasten exakt im Achsabstand ein
             foreach (float t in new[] { 0.2f, 0.5f, 0.8f })
             foreach (int side in new[] { -1, 1 })
             {
                 var near = s.Evaluate(t) + s.Right(t) * side * (d + 2.5f);
-                Assert.True(ParallelGuides.TrySnap(w.Roads, near, a, 4, 6f, out var hit));
+                Assert.True(ParallelGuides.TrySnap(w.Roads, near, a, 24f, 6f, out var hit));
                 Assert.Equal(side, hit.Side);
-                Assert.Equal(d, s.DistanceTo(hit.Point), 1);
+                Assert.True(hit.Allowance > ParallelGuides.CurveFitMargin && hit.Allowance < 3f, $"Kurvenzuschlag {hit.Allowance}");
+                Assert.Equal(d + hit.Allowance, s.DistanceTo(hit.Point), 1);
             }
 
+            d += ParallelGuides.CurveAllowance(24f, ParallelGuides.CurveRadius(s, 0.5f)); // Ziel inkl. Kurvenzuschlag (Mitte)
             // Parallele Kurve auf der Außenseite (weg vom Krümmungsmittelpunkt) von Linienanfang bis -ende
             var mid = s.Evaluate(0.5f);
             var center = new Vector2(0, 300);
@@ -256,21 +257,26 @@ namespace CityBuilder.Simulation.Tests
             }
             float worst = Worst(h0.Point, control, h1.Point);
             output.WriteLine($"Kurve 90°: größte Abweichung vom Achsabstand: Tangentenschnitt {Worst(h0.Point, tangentControl, h1.Point):0.00} m, Ausgleich {worst:0.00} m");
-            Assert.True(worst < 1.0f, $"Abweichung {worst} m"); // Zonenraster duldet 1,2 m
+            Assert.True(worst < 1.0f, $"Abweichung {worst} m");
             var plan = RoadBuilder.Plan(w.Roads, h0.Point, 0.5f, control, h1.Point, 0.5f, a);
             Assert.True(plan.IsValid, plan.Error.ToString());
+            var built = RoadBuilder.Build(w.Roads, plan);
+            var s2 = built[built.Count - 1];
 
-            RoadBuilder.Build(w.Roads, plan);
-            w.City.Grid.Update();
-            // Zwischen beiden Kurven: keine überlappenden Zellen und fast alles belegt
-            var between = new List<ZoneCell>();
-            foreach (var b in w.City.Grid.Blocks)
-            foreach (var c in b.Cells)
-                if (c.Valid && s.DistanceTo(c.Center) < d) between.Add(c);
-            for (int i = 0; i < between.Count; i++)
-            for (int j = i + 1; j < between.Count; j++)
-                Assert.True(Vector2.Distance(between[i].Center, between[j].Center) >= ZoneGrid.CellSpacing - 1e-3f);
-            output.WriteLine($"Kurve: {between.Count} Zellen zwischen den Straßen");
+            // Zwischen beiden Kurven zwei Reihen (24 m) Rücken an Rücken: alte Kurve außen, neue Kurve innen
+            var type = HouseCatalog.Medium;
+            Vector2 OnSide(RoadSegment seg, float t, Vector2 toward) =>
+                seg.Evaluate(t) + Vector2.Normalize(toward - seg.Evaluate(t)) * (seg.Type.HalfWidth + 3f);
+            var rowA = w.City.PlanHouseRow(type, OnSide(s, 0.25f, s2.Evaluate(0.25f)), OnSide(s, 0.75f, s2.Evaluate(0.75f)));
+            w.City.BuildHouseRow(rowA);
+            var probe = s2.Evaluate(s2.ClosestT(s.Evaluate(0.5f)));
+            var rowB = w.City.PlanHouseRow(type, OnSide(s2, s2.ClosestT(s.Evaluate(0.3f)), s.Evaluate(0.3f)),
+                OnSide(s2, s2.ClosestT(s.Evaluate(0.7f)), s.Evaluate(0.7f)));
+            int overlapping = rowB.Items.Count(i => i.Error == HouseBuildError.OverlapsBuilding);
+            output.WriteLine($"Kurve: Reihe außen {rowA.ValidCount}, Reihe innen {rowB.ValidCount} gültig, {overlapping} überlappen (Probe {probe})");
+            Assert.True(rowA.ValidCount >= 5);
+            Assert.True(rowB.ValidCount >= 3);
+            Assert.Equal(0, overlapping); // dank Kurvenzuschlag (ohne: alle 9 überlappten)
         }
 
         [Fact]

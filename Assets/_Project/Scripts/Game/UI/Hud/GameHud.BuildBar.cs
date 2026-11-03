@@ -21,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */, Houses /* Wohnhäuser setzen */ }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */, Houses /* Bauen (Setzen statt Zonen) */, Focus /* Produktion lenken */ }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -77,8 +77,13 @@ namespace CityBuilder.Game.UI.Hud
             cats.Add(select);
             CategoryButton(cats, Category.Roads, HudIconKind.Road, "Straßen", "Stadtstraßen: Gerade/Kurve (R), Kreisverkehr (K), Ausbauen (U), Richtung (I) · Tab Typ wechseln");
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
-            CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
-            CategoryButton(cats, Category.Houses, HudIconKind.LandValue, "Wohnhäuser", "Wohnhäuser einzeln setzen (6, Anno-Stil): bevölkern sich und steigen auf, wenn Laden, Schule, Polizei … in Reichweite sind"); // Wohnhäuser
+            // --- Setzen statt Zonen: „Bauen“ (6) mit Reitern Wohnen/Gewerbe/Industrie; „Lenken“ (Z) = Schwerpunkt-Pinsel;
+            // „Zonen“ nur, solange ein alter Spielstand Zonen hat
+            CategoryButton(cats, Category.Houses, HudIconKind.LandValue, "Bauen", "Bauen (6, Anno-Stil): Wohnhäuser, Läden, Büros und Hallen setzen – LMB halten und entlang der Straße ziehen setzt eine Reihe · Betriebe wählt die Simulation");
+            CategoryButton(cats, Category.Focus, HudIconKind.Resource, "Lenken", "Produktion lenken (Z): Schwerpunkt-Gebiete malen – welche Industrie in Hallen einzieht, entscheidet die Simulation, du lenkst sie");
+            var zonesButton = CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen (alter Spielstand): malen/entzonen · [ ] Pinselgröße · neue Städte setzen Gebäude (Bauen, 6)");
+            fastRefresh.Add(() => zonesButton.EnableInClassList("cb-hidden", !HasOldZones()));
+            // --- Ende Setzen statt Zonen
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Versorgung (J): Kraftwerke, Umspannwerke, Pumpen · Hochspannung, Ortsnetz (Freileitung/Erdkabel), Rohre, Kanäle selbst verlegen");
             CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll, Medien, Freizeit, Wahrzeichen, Lärmschutzwand · ⇧4 Abdeckungs-Ansicht");
             CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
@@ -107,7 +112,7 @@ namespace CityBuilder.Game.UI.Hud
             {
                 case RoadTool.Mode.Traffic: return Category.Traffic;
                 case RoadTool.Mode.Template: return Category.Highway;
-                case RoadTool.Mode.Zone: return Category.Zones;
+                case RoadTool.Mode.Zone: return tool.SelectedFocus.HasValue ? Category.Focus : Category.Zones; // Produktion lenken
                 case RoadTool.Mode.Terraform: return Category.Terrain;
                 case RoadTool.Mode.Utility:
                     return utilityTool != null && utilityTool.Current == UtilityTool.UtilityAction.Remove ? Category.Bulldoze : Category.Utilities;
@@ -151,7 +156,8 @@ namespace CityBuilder.Game.UI.Hud
                     else tool.SetMode(RoadTool.Mode.Terraform);
                     break;
                 case Category.Transit: SelectTransitCategory(); break; // ÖPNV
-                case Category.Houses: SelectHouseCategory(); break; // Wohnhäuser
+                case Category.Houses: SelectHouseCategory(); break; // Bauen
+                case Category.Focus: tool.OpenFocusBrush(); break;   // Produktion lenken
                 case Category.Traffic: if (mode != RoadTool.Mode.Traffic) tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Category.Bulldoze: if (mode != RoadTool.Mode.Bulldoze) tool.SetMode(RoadTool.Mode.Bulldoze); break;
             }
@@ -236,7 +242,8 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Traffic: BuildTrafficPanel(); break;
                 case Category.Bulldoze: BuildBulldozePanel(); break;
                 case Category.Transit: BuildTransitPanel(); break; // ÖPNV
-                case Category.Houses: BuildHousePanel(); break; // Wohnhäuser
+                case Category.Houses: BuildHousePanel(); break; // Bauen
+                case Category.Focus: BuildFocusPanel(); break;  // Produktion lenken
             }
             refreshNow = true;
         }
@@ -419,8 +426,7 @@ namespace CityBuilder.Game.UI.Hud
                 () => tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == ZoneType.None && !tool.SelectedFocus.HasValue,
                 "Zonen entfernen (auch RMB in jeder Zone)"));
             panelBody.Add(tiles);
-            panelBody.Add(Info(() => "Balken in den Kacheln = Nachfrage · Zonen entstehen 4 Reihen tief an ebenerdigen Stadtstraßen"));
-            BuildFocusSection(); // Produktion lenken: Pinsel-Art „Schwerpunkt“ (GameHud.Focus.cs)
+            panelBody.Add(Info(() => "Alter Spielstand: Zonen wachsen weiter · neue Gebäude besser setzen (Bauen, 6) · Schwerpunkte: Lenken (Z)"));
         }
 
         VisualElement Tile(string name, string sub, Color swatch, HudIconKind icon, Action onClick, Func<bool> isOn, Func<string> tip)
@@ -753,7 +759,7 @@ namespace CityBuilder.Game.UI.Hud
             AddTransitBulldozeTile(tiles); // ÖPNV
             AddHouseBulldozeTile(tiles); // Wohnhäuser
             panelBody.Add(tiles);
-            panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt; gesetzte Wohnhäuser nur per Abriss."));
+            panelBody.Add(Info(() => "Gesetzte Gebäude nur per Abriss (25 % zurück) · Zonengebäude alter Stände verschwinden über Entzonen oder wenn ihre Straße wegfällt."));
         }
     }
 }

@@ -12,12 +12,15 @@ using SimVector2 = System.Numerics.Vector2;
 namespace CityBuilder.Game.Zoning
 {
     /// <summary>
-    /// Wohnhäuser einzeln setzen (Anno-Stil, <b>Taste 6</b>, Modus <see cref="RoadTool.Mode.House"/>): Bauart wählen, Vorschau mit
+    /// Gebäude setzen (Anno-Stil, <b>Taste 6</b>, Modus <see cref="RoadTool.Mode.House"/>; seit „Setzen statt Zonen“ auch Laden, Mischgebiet,
+    /// Büro, Hallen): Bauart wählen, Vorschau mit
     /// dem echten Zonen-Modell (grün/rot) rastet mit der Vorderseite an der Straße ein, <c>,</c>/<c>.</c> drehen, Klick baut.
     /// Am Mauszeiger rechnet die Simulation aus, welche Anforderungen dort erfüllt wären
     /// (<see cref="LandValueSystem.PreviewHouse"/>) – ✓/✗ im Haus-Fenster und in der Beschriftung, dazu die Reichweite des
     /// gewählten bzw. ersten fehlenden Dienstes über die Abdeckungs-Ansicht (Laden: Ring der Fußweite).
-    /// Abriss: gesetzte Häuser anklicken (25 % zurück). Esc/Rechtsklick → Auswählen (wie alle Werkzeuge).
+    /// <b>Reihe ziehen:</b> LMB halten und entlang der Straße ziehen → Vorschau einer Reihe (gültig grün, ungültig rot und
+    /// ausgelassen, <see cref="CitySystem.PlanHouseRow"/>), Loslassen baut alle gültigen mit einer Buchung; RMB/Esc bricht ab.
+    /// Abriss: gesetzte Gebäude anklicken (25 % zurück). Esc/Rechtsklick → Auswählen (wie alle Werkzeuge).
     /// Taste 6: frei (Buchstaben sind belegt, 4 = Dienste, 5 = ÖPNV → 6 = Wohnhäuser in derselben Reihe).
     /// </summary>
     public sealed class HouseTool : MonoBehaviour
@@ -62,10 +65,33 @@ namespace CityBuilder.Game.Zoning
         /// <summary>Haus unter dem Mauszeiger im Abriss-Modus.</summary>
         public Building RemoveTarget { get; private set; }
 
+        // --- Setzen statt Zonen: Reihe ziehen (LMB halten). Einzelklick (ohne Ziehen) = ein Gebäude wie bisher.
+        bool dragging, dragMoved;
+        SimVector2 dragStart;
+        SimVector2 rowCachedEnd = new SimVector2(float.NaN);
+        int rowCachedRoads = -1, rowCachedCity = -1;
+        HouseType rowCachedType;
+        readonly List<PlacementGhost> rowGhosts = new List<PlacementGhost>();
+
+        /// <summary>Gezogene Reihe (null = keine; Vorschau während LMB gehalten wird).</summary>
+        public HouseRowPlan Row { get; private set; }
+        /// <summary>Wird gerade eine Reihe gezogen?</summary>
+        public bool DraggingRow => dragging && dragMoved;
+
+        void CancelRow()
+        {
+            dragging = dragMoved = false;
+            Row = null;
+            HideRow();
+        }
+        // --- Ende Setzen statt Zonen
+
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
-            if (tool.Runner != null) tool.Runner.WorldReplaced += () => { cachedRoads = cachedCity = -1; Plan = null; Preview = null; };
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => { cachedRoads = cachedCity = -1; Plan = null; Preview = null; CancelRow(); };
+            // Reihe ziehen: Esc/Rechtsklick brechen nur die Reihe ab (wie Leitungskette, Buslinie)
+            tool.RegisterOperation(() => dragging, CancelRow);
             okMaterial = new Material(transparent) { name = "HousePreviewOk", color = new Color(0.3f, 0.95f, 0.45f, 0.45f) };
             badMaterial = new Material(transparent) { name = "HousePreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
         }
@@ -104,6 +130,8 @@ namespace CityBuilder.Game.Zoning
         {
             if (type == null) return;
             SelectedType = type;
+            CancelRow();
+            tool.SetParallelDepth(type.Depth); // Straßen-Abstandshilfe rechnet mit der Tiefe der gewählten Bauart
             Select(HouseAction.Place);
         }
 
@@ -131,14 +159,22 @@ namespace CityBuilder.Game.Zoning
             if (!Active || tool.Runner == null || tool.Runner.World == null)
             {
                 Hide();
+                if (dragging) CancelRow();
                 ShownNeed = null;
                 return;
             }
-            if (!tool.HasCursor) { Hide(); if (overlay != null) overlay.ToolKind = ShownKind(); return; }
             var mouse = Mouse.current;
+            if (!tool.HasCursor)
+            {
+                Hide();
+                HideRow();
+                if (dragging && mouse != null && mouse.leftButton.wasReleasedThisFrame) CancelRow(); // über der Leiste losgelassen
+                if (overlay != null) overlay.ToolKind = ShownKind();
+                return;
+            }
             bool clicked = mouse != null && mouse.leftButton.wasPressedThisFrame;
-            if (Current == HouseAction.Place) UpdatePlace(tool.Cursor, clicked);
-            else UpdateRemove(tool.Cursor, clicked);
+            if (Current == HouseAction.Place) UpdatePlace(tool.Cursor, mouse);
+            else { if (dragging) CancelRow(); UpdateRemove(tool.Cursor, clicked); }
             if (overlay != null) overlay.ToolKind = Current == HouseAction.Place ? ShownKind() : null;
         }
 
@@ -151,9 +187,25 @@ namespace CityBuilder.Game.Zoning
             if (ring != null) ring.enabled = false;
         }
 
-        void UpdatePlace(SimVector2 p, bool clicked)
+        void UpdatePlace(SimVector2 p, Mouse mouse)
         {
             var w = tool.Runner.World;
+            bool pressed = mouse != null && mouse.leftButton.wasPressedThisFrame;
+            bool held = mouse != null && mouse.leftButton.isPressed;
+            bool released = mouse != null && mouse.leftButton.wasReleasedThisFrame;
+
+            // --- Setzen statt Zonen: LMB drücken merkt den Start; ziehen (> halbe Breite, mind. 4 m) = Reihe
+            if (pressed) { dragging = true; dragMoved = false; dragStart = p; Row = null; }
+            if (dragging && held && !dragMoved && SimVector2.Distance(p, dragStart) > Mathf.Max(4f, SelectedType.Width * 0.5f)) dragMoved = true;
+            if (dragging && dragMoved)
+            {
+                UpdateRow(w, p, released);
+                return;
+            }
+            HideRow();
+            bool clicked = dragging && released; // Einzelklick: beim Loslassen ohne Ziehen
+            if (released) dragging = false;
+            // --- Ende Setzen statt Zonen
             bool changed = SimVector2.DistanceSquared(p, cachedPos) > 0.25f || !Mathf.Approximately(Rotation, cachedRotation) ||
                            cachedType != SelectedType || cachedRoads != w.Roads.Version || cachedCity != w.City.Version ||
                            cachedServices != w.Services.StructureVersion || cachedCoverage != w.Services.CoverageVersion ||
@@ -180,13 +232,13 @@ namespace CityBuilder.Game.Zoning
             else ghost.Show(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, PlaceholderTall(t), plan.IsValid ? okMaterial : badMaterial, true);
             DrawShopRing(w, plan);
 
-            string reach = Preview != null ? $"erreichbare Stufe {Preview.ReachableLevel} von {HouseRules.MaxLevel}" : null;
+            string reach = Preview != null ? $"erreichbare Stufe {Preview.ReachableLevel} von {Preview.MaxLevel}" : null;
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°";
             if (plan.IsValid)
             {
                 string missing = Preview != null ? Preview.MissingText : "";
-                HintText = $"{t.DisplayName} · {t.HouseholdsAtLevel(1)}–{t.HouseholdsAtLevel(HouseRules.MaxLevel)} Wohnungen · Kosten {CityBuilder.Game.UI.Hud.BuildLabels.Money(t.Cost)} · {turn}" +
-                           (reach != null ? " · " + reach : "") + (missing.Length > 0 ? " · " + missing : "");
+                HintText = $"{t.DisplayName} · {Capacity(t)} · Kosten {CityBuilder.Game.UI.Hud.BuildLabels.Money(t.Cost)} · {turn}" +
+                           (reach != null ? " · " + reach : "") + (missing.Length > 0 ? " · " + missing : "") + " · ziehen = Reihe";
                 label = $"{t.DisplayName} · {t.Cost:0} € · {reach}\n{NeedLine()}";
             }
             else
@@ -205,6 +257,70 @@ namespace CityBuilder.Game.Zoning
             }
         }
 
+        /// <summary>„3–5 Wohnungen“ bzw. „12–22 Jobs“ bzw. beides (Mischgebiet).</summary>
+        static string Capacity(HouseType t)
+        {
+            int max = HouseRules.MaxLevelFor(t.Zone);
+            string homes = t.HasHomes ? $"{t.HouseholdsAtLevel(1)}–{t.HouseholdsAtLevel(max)} Wohnungen" : null;
+            string jobs = t.JobsAtLevel(1) > 0 ? $"{t.JobsAtLevel(1)}–{t.JobsAtLevel(max)} Jobs" : null;
+            return homes != null && jobs != null ? homes + ", " + jobs : homes ?? jobs ?? "";
+        }
+
+        // ------------------------------------------------------------ Reihe ziehen (Setzen statt Zonen)
+
+        void UpdateRow(CityBuilder.Simulation.Core.SimulationWorld w, SimVector2 p, bool released)
+        {
+            Hide(); // Einzel-Vorschau aus
+            var t = SelectedType;
+            if (Row == null || SimVector2.DistanceSquared(p, rowCachedEnd) > 0.25f || rowCachedType != t ||
+                rowCachedRoads != w.Roads.Version || rowCachedCity != w.City.Version)
+            {
+                rowCachedEnd = p;
+                rowCachedType = t;
+                rowCachedRoads = w.Roads.Version;
+                rowCachedCity = w.City.Version;
+                Row = w.City.PlanHouseRow(t, dragStart, p);
+            }
+            var row = Row;
+            var model = ModelFor(t);
+            for (int i = 0; i < row.Items.Count; i++)
+            {
+                while (rowGhosts.Count <= i) rowGhosts.Add(new PlacementGhost(transform, $"House Row Preview {rowGhosts.Count}"));
+                var it = row.Items[i];
+                var mat = it.IsValid ? okMaterial : badMaterial;
+                if (model != null) rowGhosts[i].ShowModel(model, it.Position, it.Front, t.Width, t.Depth, it.Height, 8f, mat, i == 0);
+                else rowGhosts[i].Show(it.Position, it.Front, t.Width, t.Depth, it.Height, PlaceholderTall(t), mat, i == 0);
+            }
+            for (int i = row.Items.Count; i < rowGhosts.Count; i++) rowGhosts[i].Hide();
+
+            int bad = row.Items.Count - row.ValidCount;
+            string firstError = null;
+            foreach (var it in row.Items) if (!it.IsValid) { firstError = ErrorText(it); break; }
+            HintText = row.ValidCount > 0
+                ? $"Reihe: {row.ValidCount} × {t.DisplayName} · Kosten {CityBuilder.Game.UI.Hud.BuildLabels.Money(row.TotalCost)}" +
+                  (bad > 0 ? $" · {bad} ausgelassen (rot: {firstError})" : "") + " · loslassen baut · RMB/Esc bricht ab"
+                : $"Reihe: kein Platz frei · {firstError ?? "an eine Stadtstraße ziehen"}";
+            HintError = row.ValidCount == 0;
+            var last = row.Items[row.Items.Count - 1];
+            label = row.ValidCount > 0 ? $"{row.ValidCount} × {t.DisplayName} · {row.TotalCost:0} €" : firstError;
+            labelError = row.ValidCount == 0;
+            labelWorld = SimConvert.ToWorld(last.Position, last.Height + PlaceholderTall(t) + 6f);
+            ShownNeed = null;
+            if (ring != null) ring.enabled = false;
+
+            if (released)
+            {
+                if (row.ValidCount > 0) w.City.BuildHouseRow(row);
+                CancelRow();
+                Plan = null;
+            }
+        }
+
+        void HideRow()
+        {
+            foreach (var g in rowGhosts) g.Hide();
+        }
+
         /// <summary>Kurzzeile ✓/✗ je Anforderung für die Welt-Beschriftung.</summary>
         string NeedLine()
         {
@@ -218,17 +334,19 @@ namespace CityBuilder.Game.Zoning
         {
             if (Preview == null) return null;
             foreach (var s in Preview.Needs)
-                if (!s.Met && (s.Need.Kind == HouseNeedKind.Service || s.Need.Kind == HouseNeedKind.Shop)) return s.Need;
+                if (!s.Met && (s.Need.Kind == HouseNeedKind.Service || s.Need.Kind == HouseNeedKind.Shop || s.Need.Kind == HouseNeedKind.Customers)) return s.Need;
             return null;
         }
 
         void DrawShopRing(CityBuilder.Simulation.Core.SimulationWorld w, HousePlan plan)
         {
             if (ring == null) return;
-            if (ShownNeed != HouseRules.Shop) { ring.enabled = false; return; }
+            bool customers = ShownNeed != null && ShownNeed.Kind == HouseNeedKind.Customers; // Setzen statt Zonen: Einzugsgebiet
+            if (ShownNeed == null || (ShownNeed.Kind != HouseNeedKind.Shop && !customers)) { ring.enabled = false; return; }
+            float radius = customers ? HouseRules.CustomerRadius : HouseRules.ShopWalkRadius;
             ring.enabled = true;
             bool met = false;
-            if (Preview != null) foreach (var s in Preview.Needs) if (s.Need == HouseRules.Shop) met = s.Met;
+            if (Preview != null) foreach (var s in Preview.Needs) if (s.Need == ShownNeed) met = s.Met;
             ring.sharedMaterial = met ? okMaterial : badMaterial;
             const int n = 96;
             ring.positionCount = n;
@@ -236,7 +354,7 @@ namespace CityBuilder.Game.Zoning
             for (int i = 0; i < n; i++)
             {
                 float a = i * Mathf.PI * 2f / n;
-                var q = c + new SimVector2(Mathf.Cos(a), Mathf.Sin(a)) * HouseRules.ShopWalkRadius;
+                var q = c + new SimVector2(Mathf.Cos(a), Mathf.Sin(a)) * radius;
                 ring.SetPosition(i, SimConvert.ToWorld(q, w.Terrain.HeightAt(q) + 1.5f));
             }
         }
@@ -251,14 +369,14 @@ namespace CityBuilder.Game.Zoning
             if (type == null)
             {
                 ghost.Hide();
-                HintText = b != null ? "Nur vom Spieler gesetzte Wohnhäuser – Zonengebäude verschwinden über Entzonen" : "Gesetztes Wohnhaus anklicken";
+                HintText = b != null ? "Nur vom Spieler gesetzte Gebäude – Zonengebäude alter Stände verschwinden über Entzonen" : "Gesetztes Gebäude anklicken";
                 HintError = b != null;
                 return;
             }
             RemoveTarget = b;
             ghost.Show(b.Position, b.Front, b.Width + 1f, b.Depth + 1f, b.Height, PlaceholderTall(type) + 2f, badMaterial, false);
             float refund = (float)(type.Cost * CityBuilder.Simulation.Economy.EconomyRules.DemolitionRefundShare);
-            HintText = $"{type.DisplayName} abreißen (+{CityBuilder.Game.UI.Hud.BuildLabels.Money(refund)}) · {b.Residents} Bewohner ziehen um oder weg";
+            HintText = $"{type.DisplayName} abreißen (+{CityBuilder.Game.UI.Hud.BuildLabels.Money(refund)})" + (b.Residents > 0 ? $" · {b.Residents} Bewohner ziehen um oder weg" : b.Workers > 0 ? $" · {b.Workers} Beschäftigte verlieren den Job" : "");
             label = $"{type.DisplayName} abreißen (+{refund:0} €)";
             labelError = true;
             labelWorld = SimConvert.ToWorld(b.Position, b.Height + PlaceholderTall(type) + 6f);
@@ -285,8 +403,18 @@ namespace CityBuilder.Game.Zoning
 
         // ------------------------------------------------------------ Modell
 
-        static float PlaceholderTall(HouseType t) =>
-            t.Zone == ZoneType.ResidentialHigh ? 40f : t.Zone == ZoneType.ResidentialMedium ? 14f : 6f;
+        static float PlaceholderTall(HouseType t)
+        {
+            switch (t.Zone)
+            {
+                case ZoneType.ResidentialHigh: return 40f;
+                case ZoneType.ResidentialMedium: return 14f;
+                case ZoneType.Mixed: return 16f;
+                case ZoneType.Office: return 28f;
+                case ZoneType.Industry: return 10f;
+                default: return 6f;
+            }
+        }
 
         /// <summary>Stufe-1-Modell der Zone (wie <see cref="BuildingView"/> es wählt), aufs Grundstück skaliert – null = Quader.</summary>
         GameObject ModelFor(HouseType t)

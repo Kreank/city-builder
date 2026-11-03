@@ -1906,3 +1906,38 @@
 .cb-choice--rare .cb-choice__badge {
     color: var(--cb-accent);
 }
+
+/* --- Setzen statt Zonen: Nachfrage-Anzeige in der oberen Leiste (W L B I, senkrechte Balken) --- */
+.cb-demand {
+    flex-direction: row;
+    align-items: flex-end;
+    margin-left: 6px;
+}
+
+.cb-demand__item {
+    flex-direction: column;
+    align-items: center;
+    width: 16px;
+    margin-left: 2px;
+    margin-right: 2px;
+}
+
+.cb-demand__bar {
+    width: 8px;
+    height: 22px;
+    border-radius: 3px;
+    background-color: var(--cb-border-soft);
+    justify-content: flex-end;
+}
+
+.cb-demand__fill {
+    width: 8px;
+    border-radius: 3px;
+    background-color: var(--cb-accent);
+}
+
+.cb-demand__label {
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+    margin-top: 1px;
+}

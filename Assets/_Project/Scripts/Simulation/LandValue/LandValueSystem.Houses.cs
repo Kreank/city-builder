@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
 
@@ -13,6 +14,8 @@ namespace CityBuilder.Simulation.LandValue
         public readonly List<HouseNeedStatus> Needs = new List<HouseNeedStatus>();
         /// <summary>Höchste Stufe, deren Anforderungen hier erfüllt wären (weiche Bedingungen nicht eingerechnet).</summary>
         public int ReachableLevel = 1;
+        /// <summary>Höchste Stufe der Gebäudeart (Setzen statt Zonen: je Art eigene Regeln).</summary>
+        public int MaxLevel = HouseRules.MaxLevel;
         public string MissingText => HouseRules.MissingText(Needs);
     }
 
@@ -35,7 +38,7 @@ namespace CityBuilder.Simulation.LandValue
         public List<HouseNeedStatus> EvaluateNeeds(Building b, int level)
         {
             var list = new List<HouseNeedStatus>();
-            foreach (var n in HouseRules.NeedsFor(level)) list.Add(Evaluate(b, n, false));
+            foreach (var n in HouseRules.NeedsFor(b.Zone, level)) list.Add(Evaluate(b, n, false));
             return list;
         }
 
@@ -51,8 +54,9 @@ namespace CityBuilder.Simulation.LandValue
                 Position = plan.Position, Front = plan.Front, Height = plan.Height,
                 FrontSegmentId = plan.AccessSegmentId, FrontT = plan.AccessT, Construction = 1f,
             };
-            foreach (var n in HouseRules.AllNeeds()) p.Needs.Add(Evaluate(temp, n, true));
-            p.ReachableLevel = HouseRules.ReachableLevel(p.Needs);
+            foreach (var n in HouseRules.AllNeeds(plan.Type.Zone)) p.Needs.Add(Evaluate(temp, n, true));
+            p.ReachableLevel = HouseRules.ReachableLevel(plan.Type.Zone, p.Needs);
+            p.MaxLevel = HouseRules.MaxLevelFor(plan.Type.Zone);
             return p;
         }
 
@@ -82,9 +86,81 @@ namespace CityBuilder.Simulation.LandValue
                 case HouseNeedKind.Water: return Supply(b, UtilityKind.Water, s, preview);
                 case HouseNeedKind.Sewage: return Supply(b, UtilityKind.Sewage, s, preview);
                 case HouseNeedKind.Shop: return ShopNear(b, s);
+                case HouseNeedKind.Customers: return CustomersNear(b, need, s); // Setzen statt Zonen
+                case HouseNeedKind.Skilled: return SkilledStaff(b, need, s, preview);
+                case HouseNeedKind.Freight: return FreightNear(b, need, s);
                 default: return ServiceNear(b, need, s, preview);
             }
         }
+
+        // --- Setzen statt Zonen: Anforderungen der Läden, Büros und Hallen
+
+        /// <summary>Einwohner im Umkreis <see cref="HouseRules.CustomerRadius"/> (Luftlinie zwischen den Zufahrten).</summary>
+        public int ResidentsNear(Vector2 p, float radius, int excludeId = 0)
+        {
+            int n = 0;
+            float r2 = radius * radius;
+            foreach (var o in world.City.Buildings)
+            {
+                if (o.Id == excludeId || o.Residents <= 0) continue;
+                if (Vector2.DistanceSquared(p, o.Entrance) <= r2) n += o.Residents;
+            }
+            return n;
+        }
+
+        HouseNeedStatus CustomersNear(Building b, HouseNeed need, HouseNeedStatus s)
+        {
+            int n = ResidentsNear(b.Entrance, HouseRules.CustomerRadius, b.Id);
+            s.Value = n;
+            s.Met = n >= need.Threshold;
+            s.Detail = $"{n} Einwohner in {HouseRules.CustomerRadius:0} m (nötig {need.Threshold:0})";
+            return s;
+        }
+
+        /// <summary>Mindestabschluss für „Fachkräfte“ (Büro: Studium, sonst mittlerer Abschluss) – wie <see cref="FactsOf"/>.</summary>
+        static Education SkillFor(ZoneType zone) => zone == ZoneType.Office ? Education.Higher : Education.Secondary;
+
+        HouseNeedStatus SkilledStaff(Building b, HouseNeed need, HouseNeedStatus s, bool preview)
+        {
+            float share;
+            string where;
+            if (preview)
+            {
+                // Bauplatz: noch keine Belegschaft → Anteil der Erwachsenen der Stadt mit dem Abschluss (Bewerberpool)
+                var st = world.Citizens?.Stats;
+                int adults = 0, skilled = 0;
+                if (st != null)
+                    for (int e = 0; e < st.ByEducation.Length; e++)
+                    {
+                        adults += st.ByEducation[e];
+                        if (e >= (int)SkillFor(b.Zone)) skilled += st.ByEducation[e];
+                    }
+                share = adults > 0 ? skilled / (float)adults : 0f;
+                where = "der Erwachsenen in der Stadt";
+            }
+            else
+            {
+                share = FactsOf(b).Skill;
+                where = "der Beschäftigten";
+            }
+            s.Value = share;
+            s.Met = share >= need.Threshold;
+            string what = SkillFor(b.Zone) == Education.Higher ? "Studium" : "mittlerem Abschluss";
+            s.Detail = $"{share * 100f:0} % {where} mit {what} (nötig {need.Threshold * 100f:0} %)";
+            return s;
+        }
+
+        HouseNeedStatus FreightNear(Building b, HouseNeed need, HouseNeedStatus s)
+        {
+            float a = HighwayAccessAt(b.Entrance);
+            s.Value = a;
+            s.Met = a >= need.Threshold;
+            float meters = (1f - Math.Clamp(a, 0f, 1f)) * LandValueRules.HighwayZeroDistance;
+            s.Detail = a <= 0f ? $"keine Autobahn in {LandValueRules.HighwayZeroDistance:0} m"
+                : $"Autobahn ≈ {meters:0} m entfernt (höchstens {(1f - need.Threshold) * LandValueRules.HighwayZeroDistance:0} m)";
+            return s;
+        }
+        // --- Ende Setzen statt Zonen
 
         HouseNeedStatus Supply(Building b, UtilityKind kind, HouseNeedStatus s, bool preview)
         {
@@ -142,10 +218,10 @@ namespace CityBuilder.Simulation.LandValue
         /// <summary>Tagesauswertung eines gesetzten Hauses: Aufstieg nach Anforderungen, Abstieg, wenn die eigene Stufe nicht mehr versorgt ist.</summary>
         void EvaluateHouse(Building b, LevelState st, in BuildingFacts f)
         {
-            int max = HouseRules.MaxLevel;
+            int max = HouseRules.MaxLevelFor(b.Zone);
             if (b.Level < max)
             {
-                var rule = HouseRules.RuleFor(b.Level + 1);
+                var rule = HouseRules.RuleFor(b.Zone, b.Level + 1);
                 bool hard = AllMet(EvaluateNeeds(b, b.Level + 1));
                 st.Progress = HouseRules.NextProgress(st.Progress, hard, SoftMet(rule, f));
                 if (st.Progress >= rule.Days)
@@ -174,7 +250,7 @@ namespace CityBuilder.Simulation.LandValue
 
         BuildingLevelInfo HouseLevelInfo(Building b, BuildingLevelInfo info)
         {
-            int max = HouseRules.MaxLevel;
+            int max = HouseRules.MaxLevelFor(b.Zone);
             info.PlayerHouse = true;
             info.MaxLevel = max;
             info.DeclineDaysLimit = HouseRules.DeclineDays;
@@ -189,7 +265,7 @@ namespace CityBuilder.Simulation.LandValue
             info.Declining = info.DeclineDays > 0;
             bool top = b.Level >= max;
             int target = top ? b.Level : b.Level + 1;
-            var rule = HouseRules.RuleFor(target);
+            var rule = HouseRules.RuleFor(b.Zone, target);
             info.Needs = EvaluateNeeds(b, target);
             info.OwnNeedsMissing = b.Level > 1 && !AllMet(EvaluateNeeds(b, b.Level));
             info.NeedSatisfaction = rule?.Satisfaction ?? 0f;
@@ -209,7 +285,8 @@ namespace CityBuilder.Simulation.LandValue
                 if (f.Satisfaction < rule.Satisfaction)
                 {
                     gap |= LevelGap.Satisfaction;
-                    parts.Add(f.Satisfaction < 0f ? "Bewohner" : $"Zufriedenheit der Bewohner ({f.Satisfaction * 100f:0} % von {rule.Satisfaction * 100f:0} %)");
+                    bool homes = b.Households > 0;
+                    parts.Add(f.Satisfaction < 0f ? (homes ? "Bewohner" : "Beschäftigte") : $"Zufriedenheit der {(homes ? "Bewohner" : "Beschäftigten")} ({f.Satisfaction * 100f:0} % von {rule.Satisfaction * 100f:0} %)");
                 }
                 if (f.Occupancy < rule.Occupancy)
                 {

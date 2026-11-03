@@ -6,14 +6,14 @@ using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Roads
 {
-    /// <summary>Wie gut passt ein Parallelabstand zum Zonenraster?</summary>
+    /// <summary>Wie gut passt ein Parallelabstand zu zwei Gebäudereihen Rücken an Rücken?</summary>
     public enum ParallelFit
     {
-        /// <summary>Zonenstreifen treffen sich lückenlos und ohne Überlappung (± <see cref="ParallelGuides.Tolerance"/>).</summary>
+        /// <summary>Beide Reihen stehen Rücken an Rücken, ohne Lücke und ohne Überlappung (± <see cref="ParallelGuides.Tolerance"/>).</summary>
         Optimal,
-        /// <summary>Weiter als nötig: ein Streifen bleibt ungenutzt.</summary>
+        /// <summary>Weiter als nötig: zwischen den Rückseiten bleibt ein Streifen ungenutzt.</summary>
         Gap,
-        /// <summary>Zu eng: Zellen überlappen bzw. die neue Straße verliert Reihen.</summary>
+        /// <summary>Zu eng: die Gebäude der beiden Reihen würden sich überlappen (eine Reihe muss flacher bauen oder entfällt).</summary>
         Overlap,
     }
 
@@ -22,20 +22,18 @@ namespace CityBuilder.Simulation.Roads
     {
         /// <summary>Abstand der Straßenachsen (m).</summary>
         public float AxisDistance;
-        /// <summary>Abstand der Gehweg-Außenkanten (m) – dort beginnt das Zonenraster.</summary>
+        /// <summary>Abstand der Gehweg-Außenkanten (m).</summary>
         public float EdgeGap;
-        /// <summary>Reihen, die das Zonenraster der bestehenden (älteren) Straße auf dieser Seite gibt.</summary>
-        public int ExistingRows;
-        /// <summary>Reihen, die für die neue Straße übrig bleiben.</summary>
-        public int PlannedRows;
-        /// <summary>Ungenutzter Streifen zwischen den Zonen (m).</summary>
+        /// <summary>Gebäudetiefe der gewählten Bauart (m), für die bewertet wird.</summary>
+        public float Depth;
+        /// <summary>Wie viele Reihen dieser Tiefe zwischen die Straßen passen (0–2).</summary>
+        public int Rows;
+        /// <summary>Ungenutzter Streifen zwischen den Rückseiten (m).</summary>
         public float Unused;
-        /// <summary>Überlappung der Zellen (m; das Raster duldet bis 1,2 m, darüber fällt eine Reihe weg).</summary>
+        /// <summary>Überlappung der Rückseiten (m).</summary>
         public float Overlap;
-        /// <summary>Randabstand minus Zielabstand der gewählten Stufe (positiv = zu weit).</summary>
+        /// <summary>Randabstand minus optimaler Randabstand (positiv = zu weit).</summary>
         public float Delta;
-        /// <summary>Gewünschte Reihen der neuen Straße (Stufe).</summary>
-        public int TargetRows;
         public ParallelFit Fit;
     }
 
@@ -58,101 +56,102 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Tatsächlicher Achsabstand des abgefragten Punkts.</summary>
         public float Distance;
         public bool Straight;
+        /// <summary>Kurvenzuschlag im <see cref="Offset"/> (m, 0 bei geraden Straßen), s. <see cref="ParallelGuides.CurveAllowance"/>.</summary>
+        public float Allowance;
     }
 
     /// <summary>
-    /// Bauhilfe „optimaler Straßenabstand“: wie weit zwei parallele Stadtstraßen auseinander liegen müssen, damit
-    /// sich ihre Zonenstreifen (<see cref="ZoneGrid"/>) lückenlos und ohne Überlappung treffen, dazu Hilfslinien
-    /// und Einrasten. Reine Geometrie, liest nur das Netz.
+    /// Bauhilfe „optimaler Straßenabstand“ (seit „Setzen statt Zonen“ nach <b>Gebäudetiefen</b>): wie weit zwei parallele
+    /// Stadtstraßen auseinander liegen müssen, damit zwei Reihen gesetzter Gebäude der gewählten Bauart Rücken an Rücken
+    /// passen, dazu Hilfslinien und Einrasten. Reine Geometrie, liest nur das Netz.
     ///
-    /// Zonenraster: beginnt an der Gehweg-Außenkante (<see cref="RoadType.HalfWidth"/>, volle Breite inkl. Gehweg),
-    /// je Reihe <see cref="ZoneGrid.CellSize"/> tief. Liegen zwei Straßen nah beieinander, gewinnt die ältere
-    /// (kleinere Segment-Id) – sie bekommt ihre Reihen zuerst, die neuere nur, was dahinter frei bleibt
-    /// (Zellmitten ≥ <see cref="ZoneGrid.CellSpacing"/> auseinander, ≥ <see cref="ZoneGrid.RoadClearance"/> vom Straßenrand).
-    /// Optimaler Randabstand = (Reihen der bestehenden + Reihen der neuen Straße) × 8 m; Standard 4 + 4 = 64 m
-    /// („Rücken an Rücken“), Achsabstand = halbe Breite A + halbe Breite B + 64 m.
+    /// Gesetzte Gebäude rasten mit der Vorderkante <see cref="RoadFront.SnapGap"/> vor der Gehweg-Außenkante
+    /// (<see cref="RoadType.HalfWidth"/>) ein und sind <i>Tiefe</i> m tief. Optimaler Randabstand = 2 × (SnapGap + Tiefe),
+    /// Achsabstand = halbe Breite A + halbe Breite B + 2 × (0,5 m + Tiefe); z. B. Einfamilienhaus (16 m) zwischen zwei
+    /// city_2: 6,5 + 6,5 + 33 = 46 m, Mehrfamilienhaus/Bürohaus (24 m) 62 m, Wohnblock/Industriehalle (32 m) 78 m.
+    /// (Früher: Zonenraster mit 4 + 4 Reihen à 8 m = 64 m Randabstand.)
     /// </summary>
     public static class ParallelGuides
     {
-        /// <summary>Bis zu dieser Abweichung gilt ein Abstand als optimal (m).</summary>
+        /// <summary>Bis zu dieser Lücke gilt ein Abstand als optimal (m). Enger als <see cref="OverlapTolerance"/> ist schon „zu eng“ – Gebäude überlappen sonst.</summary>
         public const float Tolerance = 0.25f;
+        /// <summary>So viel enger als optimal wird noch geduldet (Rundung; die Rechteckprüfung der Gebäude duldet 0,01 m).</summary>
+        public const float OverlapTolerance = 0.01f;
         /// <summary>Gerade Hilfslinien reichen so weit über die Straßenenden hinaus (m).</summary>
         public const float Extension = 80f;
-        /// <summary>Kleinste sinnvolle Stufe: die neue Straße bekommt mindestens eine Reihe.</summary>
-        public const int MinRows = 1;
+        /// <summary>Standard-Tiefe (Mehrfamilienhaus, Wohn- und Geschäftshaus, Bürohaus, Gewerbehalle).</summary>
+        public const float DefaultDepth = 24f;
 
-        /// <summary>Tiefe des Zonenstreifens bei <paramref name="rows"/> Reihen (m).</summary>
-        public static float ZoneDepth(int rows = ZoneGrid.Depth) => Math.Clamp(rows, 0, ZoneGrid.Depth) * ZoneGrid.CellSize;
+        /// <summary>Von der Gehweg-Außenkante bis zur Rückseite eines gesetzten Gebäudes der Tiefe <paramref name="depth"/>.</summary>
+        public static float RowDepth(float depth) => RoadFront.SnapGap + MathF.Max(0f, depth);
 
-        /// <summary>Randabstand (Gehwegkante zu Gehwegkante), bei dem die bestehende Straße volle Tiefe und die neue
-        /// genau <paramref name="plannedRows"/> Reihen bekommt.</summary>
-        public static float OptimalEdgeGap(int plannedRows = ZoneGrid.Depth) => ZoneDepth(ZoneGrid.Depth) + ZoneDepth(plannedRows);
+        /// <summary>Randabstand (Gehwegkante zu Gehwegkante) für zwei Reihen Rücken an Rücken.</summary>
+        public static float OptimalEdgeGap(float depth = DefaultDepth) => 2f * RowDepth(depth);
 
         /// <summary>Optimaler Achsabstand zweier paralleler Straßen.</summary>
-        public static float OptimalAxisDistance(RoadType existing, RoadType planned, int plannedRows = ZoneGrid.Depth) =>
-            existing.HalfWidth + planned.HalfWidth + OptimalEdgeGap(plannedRows);
+        public static float OptimalAxisDistance(RoadType existing, RoadType planned, float depth = DefaultDepth) =>
+            existing.HalfWidth + planned.HalfWidth + OptimalEdgeGap(depth);
 
-        /// <summary>
-        /// Wie verteilt das Zonenraster einen Randabstand auf zwei parallele Straßen (Spalten fluchtend = ungünstigster
-        /// Fall)? Bildet die Regeln aus <see cref="ZoneGrid"/> nach: ältere Straße zuerst, Abstand zum Straßenrand,
-        /// Mindestabstand der Zellmitten.
-        /// </summary>
-        public static void RowsBetween(float edgeGap, out int existingRows, out int plannedRows)
-        {
-            const float cell = ZoneGrid.CellSize, half = cell * 0.5f;
-            existingRows = 0;
-            for (int j = 0; j < ZoneGrid.Depth; j++)
-            {
-                if (edgeGap - (half + j * cell) <= ZoneGrid.RoadClearance) break;
-                existingRows++;
-            }
-            plannedRows = 0;
-            for (int k = 0; k < ZoneGrid.Depth; k++)
-            {
-                float x = edgeGap - half - k * cell; // Zellmitte, gemessen vom Rand der bestehenden Straße
-                if (x <= ZoneGrid.RoadClearance) break;
-                bool free = true;
-                for (int j = 0; j < existingRows && free; j++)
-                    if (MathF.Abs(x - (half + j * cell)) < ZoneGrid.CellSpacing) free = false;
-                if (!free) break;
-                plannedRows++;
-            }
-        }
-
-        /// <summary>Bewertet einen Achsabstand für die Stufe <paramref name="targetRows"/>.</summary>
-        public static ParallelGapInfo Evaluate(RoadType existing, RoadType planned, float axisDistance, int targetRows = ZoneGrid.Depth)
+        /// <summary>Bewertet einen Achsabstand für Gebäude der Tiefe <paramref name="depth"/>.</summary>
+        public static ParallelGapInfo Evaluate(RoadType existing, RoadType planned, float axisDistance, float depth = DefaultDepth)
         {
             var info = new ParallelGapInfo
             {
                 AxisDistance = axisDistance,
                 EdgeGap = axisDistance - existing.HalfWidth - planned.HalfWidth,
-                TargetRows = Math.Clamp(targetRows, MinRows, ZoneGrid.Depth),
+                Depth = depth,
             };
-            RowsBetween(info.EdgeGap, out info.ExistingRows, out info.PlannedRows);
-            float used = (info.ExistingRows + info.PlannedRows) * ZoneGrid.CellSize;
-            info.Unused = MathF.Max(0f, info.EdgeGap - used);
-            info.Overlap = MathF.Max(0f, used - info.EdgeGap);
-            info.Delta = info.EdgeGap - OptimalEdgeGap(info.TargetRows);
-            info.Fit = MathF.Abs(info.Delta) <= Tolerance ? ParallelFit.Optimal
+            float row = RowDepth(depth);
+            info.Rows = row <= 0f ? 0 : Math.Clamp((int)MathF.Floor((info.EdgeGap + OverlapTolerance) / row), 0, 2);
+            info.Delta = info.EdgeGap - OptimalEdgeGap(depth);
+            info.Unused = MathF.Max(0f, info.Delta);
+            info.Overlap = MathF.Max(0f, -info.Delta);
+            info.Fit = info.Delta >= -OverlapTolerance && info.Delta <= Tolerance ? ParallelFit.Optimal
                 : info.Delta > 0f ? ParallelFit.Gap : ParallelFit.Overlap;
             return info;
         }
 
-        /// <summary>Beschriftung, z. B. „Abstand 77,0 m · optimal (4 + 4 Reihen)“.</summary>
+        /// <summary>Beschriftung, z. B. „Abstand 62,0 m · optimal (Rücken an Rücken, 2 × 24 m tief)“.</summary>
         public static string Describe(ParallelGapInfo info)
         {
-            string rows = $"{info.ExistingRows} + {info.PlannedRows} Reihen";
-            string unused = info.Unused > Tolerance ? $", {FormatMeters(info.Unused)} ungenutzt" : "";
+            string depth = $"{info.Depth:0} m tief";
             switch (info.Fit)
             {
                 case ParallelFit.Optimal:
-                    return $"Abstand {FormatMeters(info.AxisDistance)} · optimal ({rows})";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · optimal (Rücken an Rücken, 2 × {depth})";
                 case ParallelFit.Gap:
-                    return $"Abstand {FormatMeters(info.AxisDistance)} · {FormatMeters(info.Delta)} Lücke ({rows}{unused})";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · {FormatMeters(info.Delta)} Lücke zwischen den Rückseiten (2 × {depth})";
                 default:
-                    string what = info.Overlap > Tolerance ? $"{FormatMeters(-info.Delta)} Überlappung" : $"{FormatMeters(-info.Delta)} zu nah";
-                    return $"Abstand {FormatMeters(info.AxisDistance)} · zu eng: {what} ({rows}{unused})";
+                    string rows = info.Rows >= 2 ? "" : info.Rows == 1 ? ", nur eine Reihe passt" : ", keine Reihe passt";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · zu eng: {FormatMeters(info.Overlap)} Überlappung (2 × {depth}{rows})";
             }
+        }
+
+        /// <summary>Genauigkeit der Kurven-Parallele (<see cref="FitParallelControl"/>: 90°-Bogen &lt; 1 m Abweichung) als Puffer.</summary>
+        public const float CurveFitMargin = 0.75f;
+
+        /// <summary>
+        /// Kurvenzuschlag (m): Auf Bögen stehen die Gebäude als Sehnen, ihre hinteren Ecken ragen je Reihe um ≈ b²/(8R) über
+        /// die Linie der Rückseiten (b = Breite = Tiefe der quadratischen Bauarten) – beide Reihen zusammen b²/(4R) – dazu
+        /// der Puffer für die Bézier-Näherung der Parallele. Gerade/fast gerade (R &gt; 3 km): 0.
+        /// </summary>
+        public static float CurveAllowance(float depth, float radius)
+        {
+            if (float.IsInfinity(radius) || radius > 3000f || depth <= 0f) return 0f;
+            return depth * depth / (4f * MathF.Max(radius, depth)) + CurveFitMargin;
+        }
+
+        /// <summary>Krümmungsradius des Segments bei <paramref name="t"/> (∞ bei gerader Straße).</summary>
+        public static float CurveRadius(RoadSegment s, float t)
+        {
+            t = Math.Clamp(t, 0f, 1f);
+            var p0 = s.Start.Position; var c = s.Control; var p2 = s.End.Position;
+            var d1 = 2f * (1f - t) * (c - p0) + 2f * t * (p2 - c);
+            var d2 = 2f * (p2 - 2f * c + p0);
+            float cross = MathF.Abs(d1.X * d2.Y - d1.Y * d2.X);
+            float len = d1.Length();
+            if (cross < 1e-6f || len < 1e-4f) return float.PositiveInfinity;
+            return len * len * len / cross;
         }
 
         /// <summary>Meterangabe mit einer Nachkommastelle und deutschem Komma.</summary>
@@ -171,8 +170,8 @@ namespace CityBuilder.Simulation.Roads
             return MathF.Abs(d.X * c.Y - d.Y * c.X) / len < 0.05f;
         }
 
-        /// <summary>Hat diese Straße ein Zonenraster (ebenerdige Stadtstraße)?</summary>
-        public static bool HasZones(RoadSegment s) =>
+        /// <summary>Können an dieser Straße Gebäude stehen (ebenerdige Stadtstraße)?</summary>
+        public static bool HasFrontage(RoadSegment s) =>
             s.Type.Category == RoadCategory.City && MathF.Abs(s.ElevationAt(0.5f)) < 1.5f;
 
         /// <summary>
@@ -242,7 +241,7 @@ namespace CityBuilder.Simulation.Roads
         /// Alle Hilfslinien bestehender Stadtstraßen, deren Linie höchstens <paramref name="radius"/> vom Punkt entfernt
         /// liegt, nach Abstand sortiert (je Segment die nähere Seite).
         /// </summary>
-        public static List<GuideHit> FindGuides(RoadNetwork network, Vector2 p, RoadType planned, int plannedRows, float radius,
+        public static List<GuideHit> FindGuides(RoadNetwork network, Vector2 p, RoadType planned, float depth, float radius,
             List<GuideHit> result = null)
         {
             result ??= new List<GuideHit>();
@@ -250,21 +249,28 @@ namespace CityBuilder.Simulation.Roads
             if (planned == null || planned.Category != RoadCategory.City) return result;
             foreach (var s in network.Segments)
             {
-                if (!HasZones(s)) continue;
-                float offset = OptimalAxisDistance(s.Type, planned, plannedRows);
+                if (!HasFrontage(s)) continue;
+                float offset = OptimalAxisDistance(s.Type, planned, depth);
                 float reach = offset + radius + Extension;
                 Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var min, out var max);
                 if (p.X < min.X - reach || p.Y < min.Y - reach || p.X > max.X + reach || p.Y > max.Y + reach) continue;
-                if (TryEvaluate(s, p, offset, out var hit) && hit.Miss <= radius) result.Add(hit);
+                if (!TryEvaluate(s, p, offset, out var hit)) continue;
+                // Kurve: hintere Ecken beider Reihen ragen über die Bogenlinie → Zuschlag an dieser Stelle
+                if (!hit.Straight)
+                {
+                    float extra = CurveAllowance(depth, CurveRadius(s, hit.T));
+                    if (extra > 0f && TryEvaluate(s, p, offset + extra, out var curved)) { hit = curved; hit.Allowance = extra; }
+                }
+                if (hit.Miss <= radius) result.Add(hit);
             }
             result.Sort((a, b) => a.Miss.CompareTo(b.Miss));
             return result;
         }
 
         /// <summary>Rastet auf die nächste Hilfslinie im Umkreis <paramref name="snapRadius"/> ein.</summary>
-        public static bool TrySnap(RoadNetwork network, Vector2 p, RoadType planned, int plannedRows, float snapRadius, out GuideHit hit)
+        public static bool TrySnap(RoadNetwork network, Vector2 p, RoadType planned, float depth, float snapRadius, out GuideHit hit)
         {
-            var list = FindGuides(network, p, planned, plannedRows, snapRadius);
+            var list = FindGuides(network, p, planned, depth, snapRadius);
             hit = list.Count > 0 ? list[0] : default;
             return list.Count > 0;
         }

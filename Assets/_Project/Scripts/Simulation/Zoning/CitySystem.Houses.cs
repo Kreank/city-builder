@@ -219,6 +219,12 @@ namespace CityBuilder.Simulation.Zoning
             if (plan == null || !plan.IsValid || plan.MovingId > 0) return null;
             if (Budget != null && !Budget.CanAfford(plan.Cost)) return null; // Kasse kann sich seit der Vorschau geändert haben
             Budget?.Spend(Economy.BudgetCategory.HouseConstruction, plan.Cost);
+            return PlaceBuilding(plan);
+        }
+
+        /// <summary>Gebäude aus einem geprüften Plan anlegen (ohne Buchung) – Einzelbau und Reihe.</summary>
+        Building PlaceBuilding(HousePlan plan)
+        {
             var t = plan.Type;
             var b = new Building
             {
@@ -233,8 +239,8 @@ namespace CityBuilder.Simulation.Zoning
                 FrontSegmentId = plan.AccessSegmentId,
                 FrontT = plan.AccessT,
                 Variant = rng.Next(1 << 20),
-                Households = t.HouseholdsAtLevel(1),
-                Jobs = 0,
+                Households = t.HasHomes ? t.HouseholdsAtLevel(1) : 0,
+                Jobs = t.JobsAtLevel(1), // Setzen statt Zonen: Läden/Büros/Hallen (Wohnhäuser: 0)
             };
             terrain.FlattenArea(b.Position, b.Front, b.Width, b.Depth, b.Height);
             AddBuilding(b);

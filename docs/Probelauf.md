@@ -15,12 +15,27 @@ Store-Pakete …“ → „Importieren und einsortieren“. Console offen lassen
 
 ## 2. Straßen
 - [ ] Gerade/Kurve bauen, Kreuzung, 90°-Knick, enge Kurve: Bürgersteige ohne Überlappung, gerundete Bordsteine.
-- [ ] Nahe einer Straße: gestrichelte Parallel-Hilfslinien, Beschriftung „Abstand 77,0 m · optimal“, Einrasten mit G.
-- [ ] F9 (Reihen), F10 (Blockraster) ausprobieren. Esc/Rechtsklick → zurück zum Auswählen.
+- [ ] Nahe einer Straße: gestrichelte Parallel-Hilfslinien, Beschriftung „Abstand 62,0 m · optimal (Rücken an Rücken …)“, Einrasten mit G.
+- [ ] F9 (Gebäudetiefe 16/24/32 m/aus), F10 (Blockraster) ausprobieren. Esc/Rechtsklick → zurück zum Auswählen.
 
-## 3. Zonen & Gebäude
-- [ ] Z: Zonen malen → Häuser wachsen (Store- bzw. eigene Blender-Modelle, nicht nur Quader), Zone als farbige Platte.
-- [ ] Straße durch eine Zone: Zone und Haus verschwinden dort (gewollt).
+## 3. Bauen (6) – Setzen statt Zonen
+- [ ] Taste 6 / Kategorie „Bauen“: Reiter Wohnen / Gewerbe / Industrie, je Bauart eine Kachel mit Nachfrage-Balken; Klick auf
+      eine Kachel wechselt die Bauart, Reiter zeigen nur ihre Kacheln.
+- [ ] Einzelklick an einer Stadtstraße setzt ein Gebäude (echtes Modell als Geist, grün/rot, Pfeil zur Straße), `,`/`.` drehen.
+- [ ] **LMB halten und entlang der Straße ziehen:** Reihe gleicher Gebäude erscheint (gültige grün, ungültige rot), lückenlos,
+      Vorderseite zur Straße, auch in Kurven und über einen Knick; Hinweiszeile „Reihe: 7 × Einfamilienhaus · Kosten …“.
+      Loslassen baut alle grünen auf einmal (Stadtkasse M: **eine** Buchung „Bau Gebäude (gesetzt)“). RMB/Esc während des
+      Ziehens bricht nur die Reihe ab.
+- [ ] Laden/Büro/Halle setzen → im Inspektor Reiter „Firma“: Händler/Büro/Industriebetrieb (Betrieb wählt die Simulation).
+      Mit Schwerpunkt (Z) über einem Vorkommen ziehen dort passende Betriebe ein.
+- [ ] Gesetzte Gebäude stehen **ohne** farbige Grundstücksplatte; neues Spiel ohne Kategorie „Zonen“ und ohne Zonenraster.
+- [ ] Obere Leiste: „Nachfrage“ mit 4 Balken W L B I, Tooltip je Balken mit Gründen (Arbeitslose, freie Jobs, Grundbedarf
+      gedeckt, Importanteil …); Klick öffnet Bauen mit passendem Reiter.
+- [ ] Z öffnet „Lenken“ (Schwerpunkt-Pinsel), ohne Zonenraster; erneut Z → Auswählen.
+- [ ] Straßenbau neben einer Straße: Hilfslinie „Abstand 62,0 m · optimal (Rücken an Rücken, 2 × 24 m tief)“, nach Wahl der
+      Bauart (z. B. Einfamilienhaus) 46 m; F9 schaltet 16 → 24 → 32 m → aus. Statt Zonenflächen nur eine zarte Linie an der Rückseite.
+- [ ] Alter Spielstand mit Zonen: Kategorie „Zonen“ erscheint, Zonen wachsen weiter, Platten nur an Zonengebäuden.
+- [ ] Straße durch eine Zone (alter Stand): Zone und Haus verschwinden dort (gewollt); gesetzte Gebäude sperren die Straße.
 
 ## 4. Versorgung (J) – selbst verlegen
 - [ ] Kraftwerk → Hochspannung → Umspannwerk → Ortsnetz (Erdkabel oder Freileitung) → Häuser werden grün (O).
