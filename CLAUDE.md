@@ -77,6 +77,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Freie Straßen bleiben** (kein Anno-Raster).
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
+- **Nachtrag (2026-11-03, Spieler): Setzen statt Zonen.** Alle Gebäude (Wohnen, Laden, Büro, Industriehalle) werden gesetzt,
+  per gehaltener linker Maustaste als **Reihe entlang der Straße** (wie Anno). Welcher Betrieb in Laden/Büro/Halle einzieht,
+  entscheidet die Simulation (Vorkommen, Nachfrage, Schwerpunkt). Zonen verschwinden aus der Bauleiste (Code bleibt für alte
+  Stände), Zonenraster/Grundstücksplatten entfallen; Nachfrage als eigene Anzeige; Straßen-Abstandshilfe nach Haustiefen.
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
@@ -108,9 +112,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Ziel-Halt (`CitizenSystem.EgressTicks`), Parkwege (`TimeModel.WalkTicks`, gleiche Formel in `PedestrianPlanner.ParkWalkTicks`),
   statistische Busfahrten, Lkw-Platzhalter (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s). ÖPNV-Fahrgast geht erst zur
   Haltestelle (`Passenger.ReadyTime` = Start + Zugangsweg) und kann erst dann einsteigen.
-- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,111) × `SpeedMultipliers` 1/3/6 →
-  1 Spieltag = 36 / 12 / 6 Minuten, Verkehr sichtbar 5× / 15× / 30× Echtzeit (20 / 60 / 120 Verkehrsschritte je Sekunde;
-  Entscheidung des Spielers 2026-11-03 „viel langsamer“, vorher 6 / 3 / 1,5 min). `ticksPerSecond` ist **nicht** mehr
+- **Echtzeit** (nur Unity, `SimulationRunner`): 4 Tempostufen = `TicksPerRealSecond` (0,022) × `SpeedMultipliers` 1/5/30/90 →
+  1 Spieltag = **Echtzeit 3 h** / 36 / 6 / 2 Minuten, Verkehr sichtbar 1× / 5× / 30× / 90× (4 / 20 / 120 / 360 Verkehrsschritte je
+  Sekunde; Entscheidung des Spielers 2026-11-03). Tasten 1/2/3, erneut 3 = Stufe 4 (Taste 4 ist Dienste); HUD hat 4 Knöpfe. `ticksPerSecond` ist **nicht** mehr
   serialisiert (die Szene hatte einen alten Wert 10 gespeichert, der das Zeitmodell überschrieb). Der Runner verteilt die Verkehrsschritte über
   die Frames (`Substep`), Budget `maxSimMillisecondsPerFrame` 8 ms: Rückstand wird verworfen (Simulation langsamer, Frame
   friert nicht ein; `DroppedStepsLastFrame`, `LastFrameSimMilliseconds` in Debug-HUD/Hilfe). `TickAlpha` = Bruchteil zum nächsten

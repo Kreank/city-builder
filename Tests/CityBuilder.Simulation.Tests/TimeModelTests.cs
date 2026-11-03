@@ -51,10 +51,11 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(1, TimeModel.TicksFor(45));
             Assert.Equal(2, TimeModel.TicksFor(45.5));
             Assert.Equal(24.0, TimeModel.GameMinutes(180), 6); // 3 min Verkehrszeit = 24 Spielminuten
-            // Tempo 1/2/3: 36 / 12 / 6 Minuten je Spieltag (Verkehr 5× / 15× / 30× Echtzeit)
-            Assert.Equal(2160f, TimeModel.RealSecondsPerDay(1), 2);
-            Assert.Equal(720f, TimeModel.RealSecondsPerDay(2), 2);
-            Assert.Equal(360f, TimeModel.RealSecondsPerDay(3), 2);
+            // Tempo 1–4: Echtzeit (3 h) / 36 / 6 / 2 Minuten je Spieltag (Verkehr 1× / 5× / 30× / 90× Echtzeit)
+            Assert.Equal(10800f, TimeModel.RealSecondsPerDay(1), 1);
+            Assert.Equal(2160f, TimeModel.RealSecondsPerDay(2), 1);
+            Assert.Equal(360f, TimeModel.RealSecondsPerDay(3), 1);
+            Assert.Equal(120f, TimeModel.RealSecondsPerDay(4), 1);
         }
 
         [Fact]
@@ -271,7 +272,7 @@ namespace CityBuilder.Simulation.Tests
                              $"{t.Buses.Count} Busse, Fahrzeuge jetzt {w.Traffic.Vehicles.Count}");
             output.WriteLine($"Leistung: Verkehrsschritt Ø {perSub:0.000} ms (max {worstSubstep:0.00}), Schritt mit Kalender-Tick Ø {tickMs / SimulationClock.TicksPerDay:0.00} ms " +
                              $"(max {worstTick:0.0}); je Kalender-Tick gesamt {perTickAll:0.00} ms; Spieltag {(substepMs + tickMs) / 1000.0:0.00} s Rechenzeit");
-            for (int speed = 1; speed <= 3; speed++)
+            for (int speed = 1; speed < TimeModel.SpeedMultipliers.Length; speed++)
             {
                 double ticksPerSecond = TimeModel.TicksPerRealSecond * TimeModel.SpeedMultipliers[speed];
                 double msPerSecond = ticksPerSecond * perTickAll;
