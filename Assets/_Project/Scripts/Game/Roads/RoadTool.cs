@@ -536,7 +536,7 @@ namespace CityBuilder.Game.Roads
             }
             if (kb.tabKey.wasPressedThisFrame) CycleType(kb.shiftKey.isPressed ? -1 : 1);
             if (kb.gKey.wasPressedThisFrame) ToggleSnap();
-            if (kb.f9Key.wasPressedThisFrame) CycleParallelRows();    // Bauhilfe Parallelabstand: Reihen 4 → 3 → 2 → 1 → aus
+            if (kb.f9Key.wasPressedThisFrame) CycleParallelDepth();   // Bauhilfe Parallelabstand: Gebäudetiefe 16 → 24 → 32 m → aus
             if (kb.f10Key.wasPressedThisFrame) ToggleBlockGrid();      // Bauhilfe: Blockraster (Querstraßen-Abstände)
             if (kb.pageUpKey.wasPressedThisFrame) ChangeHeight(HeightStep);
             if (kb.pageDownKey.wasPressedThisFrame) ChangeHeight(-HeightStep);
@@ -578,7 +578,7 @@ namespace CityBuilder.Game.Roads
                 bool onGuide = false;
                 GuideHit startHit = default;
                 if (a.Kind == AnchorKind.Free && SnapActive && ShowParallelGuides &&
-                    ParallelGuides.TrySnap(roads, raw, SelectedType, ParallelRows, ParallelSnapRadius, out startHit))
+                    ParallelGuides.TrySnap(roads, raw, SelectedType, ParallelDepth, ParallelSnapRadius, out startHit))
                 {
                     a = RoadAnchor.Free(startHit.Point, AbsHeight(startHit.Point));
                     onGuide = true;
@@ -800,18 +800,36 @@ namespace CityBuilder.Game.Roads
         GuideHit? startGuide;
         GuideHit? lastGuideHit;
 
-        /// <summary>Reihen, die die neue Straße neben einer bestehenden bekommen soll (1–4); 0 = Hilfslinien aus (F9).</summary>
-        public int ParallelRows { get; private set; } = ZoneGrid.Depth;
+        /// <summary>
+        /// Setzen statt Zonen: Gebäudetiefe (m), für die der Abstand „Rücken an Rücken“ gilt (16/24/32 m wie die setzbaren
+        /// Bauarten); 0 = Hilfslinien aus (F9). Folgt der im Bau-Werkzeug gewählten Bauart (<see cref="SetParallelDepth"/>).
+        /// </summary>
+        public float ParallelDepth { get; private set; } = ParallelGuides.DefaultDepth;
+        /// <summary>Stufen von F9 (danach „aus“).</summary>
+        public static readonly float[] ParallelDepthPresets = { 16f, 24f, 32f };
         /// <summary>Blockraster (F10): Länge gerader Straßen rastet auf Querstraßen-Abstände ohne Rest ein.</summary>
         public bool BlockGrid { get; private set; }
-        public bool ShowParallelGuides => ParallelRows > 0 && (CurrentMode == Mode.Straight || CurrentMode == Mode.Curve)
+        public bool ShowParallelGuides => ParallelDepth > 0f && (CurrentMode == Mode.Straight || CurrentMode == Mode.Curve)
             && SelectedType.Category == RoadCategory.City && !UsesDualCarriageway;
         /// <summary>Hilfslinie, auf der der Start der gerade gezogenen Straße liegt.</summary>
         public GuideHit? StartGuide => step == Step.Start ? null : startGuide;
         /// <summary>In diesem Frame eingerastete Hilfslinie (Start, Kontrollpunkt oder Ende).</summary>
         public GuideHit? SnappedGuide { get; private set; }
 
-        public void CycleParallelRows() => ParallelRows = ParallelRows == 0 ? ZoneGrid.Depth : ParallelRows - 1;
+        /// <summary>F9: 16 → 24 → 32 m → aus → 16 m.</summary>
+        public void CycleParallelDepth()
+        {
+            if (ParallelDepth <= 0f) { ParallelDepth = ParallelDepthPresets[0]; return; }
+            for (int i = 0; i < ParallelDepthPresets.Length; i++)
+                if (ParallelDepth < ParallelDepthPresets[i] - 0.01f) { ParallelDepth = ParallelDepthPresets[i]; return; }
+            ParallelDepth = 0f;
+        }
+
+        /// <summary>Tiefe der gewählten Bauart übernehmen (Bau-Werkzeug); lässt „aus“ in Ruhe.</summary>
+        public void SetParallelDepth(float depth)
+        {
+            if (ParallelDepth > 0f && depth > 0f) ParallelDepth = depth;
+        }
         public void ToggleBlockGrid() => BlockGrid = !BlockGrid;
 
         /// <summary>Nächste Länge, bei der Querstraßen gleichen Typs an beiden Enden den Block ohne Rest füllen.</summary>
@@ -844,7 +862,7 @@ namespace CityBuilder.Game.Roads
                 SnappedGuide = lastGuideHit ?? startGuide;
                 return p;
             }
-            if (ParallelGuides.TrySnap(roads, raw, SelectedType, ParallelRows, ParallelSnapRadius, out var hit))
+            if (ParallelGuides.TrySnap(roads, raw, SelectedType, ParallelDepth, ParallelSnapRadius, out var hit))
             {
                 lastGuideHit = hit;
                 SnappedGuide = hit;
@@ -861,10 +879,10 @@ namespace CityBuilder.Game.Roads
         void ShowParallelLabel(RoadNetwork roads, SimVector2 p)
         {
             if (!ShowParallelGuides) return;
-            var hits = ParallelGuides.FindGuides(roads, p, SelectedType, ParallelRows, ParallelInfoRadius);
+            var hits = ParallelGuides.FindGuides(roads, p, SelectedType, ParallelDepth, ParallelInfoRadius);
             if (hits.Count == 0) return;
             var h = hits[0];
-            var info = ParallelGuides.Evaluate(h.Segment.Type, SelectedType, h.Distance, ParallelRows);
+            var info = ParallelGuides.Evaluate(h.Segment.Type, SelectedType, h.Distance - h.Allowance, ParallelDepth);
             float height = AbsHeight(p);
             string block = BlockGrid ? " · F10 Blöcke an" : "";
             Guide = new GuideState
@@ -878,7 +896,7 @@ namespace CityBuilder.Game.Roads
                 Type = SelectedType,
                 Valid = true,
                 Info = $"Parallele: {ParallelGuides.Describe(info)} · Ziel {ParallelGuides.FormatMeters(h.Offset)} · " +
-                       $"F9 Reihen ({ParallelRows}) · G Einrasten" + block,
+                       $"F9 Tiefe ({ParallelDepth:0} m) · G Einrasten" + block,
             };
         }
 
@@ -890,12 +908,12 @@ namespace CityBuilder.Game.Roads
             GuideHit? best = null;
             foreach (var p in new[] { plan.End, plan.Start })
             {
-                var hits = ParallelGuides.FindGuides(roads, p, plan.Type, ParallelRows, ParallelInfoRadius);
+                var hits = ParallelGuides.FindGuides(roads, p, plan.Type, ParallelDepth, ParallelInfoRadius);
                 if (hits.Count > 0) { best = hits[0]; break; }
             }
             if (best == null) return block;
             var h = best.Value;
-            var info = ParallelGuides.Evaluate(h.Segment.Type, plan.Type, h.Distance, ParallelRows);
+            var info = ParallelGuides.Evaluate(h.Segment.Type, plan.Type, h.Distance - h.Allowance, ParallelDepth);
             string text = "Parallele: " + ParallelGuides.Describe(info);
             if (ParallelGuides.TryEvaluate(h.Segment, plan.Start, h.Offset, out var hs) && hs.Side == h.Side &&
                 Mathf.Abs(hs.Distance - h.Distance) > 0.5f && hs.Distance < h.Offset * 1.5f)

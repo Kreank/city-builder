@@ -80,6 +80,9 @@ namespace CityBuilder.Simulation.Tests
             w.Traffic.Rules.SetBanned(side.Id, VehicleClass.Bus);
 
             Run(w, SimulationClock.TicksPerDay); // erste Gebäude
+            // Setzen statt Zonen: gesetzte Reihen (Läden, Hallen) neben den Zonen im Determinismus-Test
+            w.City.BuildHouseRow(w.City.PlanHouseRow(HouseCatalog.Shop, new Vector2(100, 175), new Vector2(180, 175)));
+            w.City.BuildHouseRow(w.City.PlanHouseRow(HouseCatalog.SmallHall, new Vector2(260, 180), new Vector2(380, 180)));
             w.Utilities.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(700, -120));
             w.Utilities.TryBuildFacility(UtilityCatalog.WaterTower, new Vector2(-600, 60));
             w.Utilities.TryBuildFacility(UtilityCatalog.WindTurbine, new Vector2(-600, -80));

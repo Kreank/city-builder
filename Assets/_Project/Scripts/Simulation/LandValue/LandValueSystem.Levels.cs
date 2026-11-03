@@ -127,7 +127,7 @@ namespace CityBuilder.Simulation.LandValue
         void SetLevel(Building b, int level)
         {
             int old = b.Level;
-            level = Math.Clamp(level, 1, b.IsPlayerPlaced ? HouseRules.MaxLevel : LandValueRules.MaxLevel);
+            level = Math.Clamp(level, 1, b.IsPlayerPlaced ? HouseRules.MaxLevelFor(b.Zone) : LandValueRules.MaxLevel);
             if (level == old) return;
             b.Level = level;
             int cells = b.WidthCells * b.DepthCells;

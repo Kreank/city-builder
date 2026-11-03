@@ -70,7 +70,7 @@ namespace CityBuilder.Game.Roads
                 if (tool.ShowParallelGuides)
                 {
                     DrawParallelGuides(width);
-                    if (g.Active && !g.LabelOnly && !g.IsRoundabout && g.Type != null) DrawOwnZones(g, width);
+                    if (g.Active && !g.LabelOnly && !g.IsRoundabout && g.Type != null) DrawOwnBackLines(g, width);
                 }
                 if (tool.BlockGrid && tool.CurrentMode == RoadTool.Mode.Straight && g.Active && !g.LabelOnly && !g.IsRoundabout && g.Type != null)
                     DrawBlockTicks(g, width);
@@ -191,9 +191,7 @@ namespace CityBuilder.Game.Roads
         const float GuideRange = 150f;
         static readonly Color ParallelColor = new Color(0.45f, 0.85f, 1f, 0.75f);
         static readonly Color ParallelActiveColor = new Color(0.3f, 1f, 0.5f, 1f);
-        static readonly Color ZoneBandColor = new Color(1f, 1f, 1f, 0.07f);
         static readonly Color ZoneRowColor = new Color(1f, 1f, 1f, 0.18f);
-        static readonly Color OwnZoneColor = new Color(0.35f, 1f, 0.55f, 0.16f);
         static readonly Color OwnZoneEdgeColor = new Color(0.35f, 1f, 0.55f, 0.55f);
         static readonly Color BlockTickColor = new Color(1f, 0.85f, 0.3f, 0.6f);
 
@@ -201,11 +199,11 @@ namespace CityBuilder.Game.Roads
         readonly List<int> guideSeen = new List<int>();
 
         /// <summary>Gestrichelte Parallelen (optimaler Abstand für den gewählten Typ) neben den nächsten Stadtstraßen,
-        /// dazu deren Zonentiefe als zarte Fläche mit Reihenlinien.</summary>
+        /// dazu die Rückseite einer Gebäudereihe der gewählten Tiefe als zarte Linie.</summary>
         void DrawParallelGuides(float width)
         {
             var roads = tool.Runner.World.Roads;
-            ParallelGuides.FindGuides(roads, tool.Cursor, tool.SelectedType, tool.ParallelRows, GuideSearchRadius, guideHits);
+            ParallelGuides.FindGuides(roads, tool.Cursor, tool.SelectedType, tool.ParallelDepth, GuideSearchRadius, guideHits);
             var snapped = tool.SnappedGuide;
             guideSeen.Clear();
             foreach (var h in guideHits)
@@ -217,7 +215,7 @@ namespace CityBuilder.Game.Roads
 
                 for (int side = -1; side <= 1; side += 2)
                 {
-                    ZoneBand(s, side, ZoneGrid.Depth, ZoneBandColor, ZoneRowColor, width);
+                    BackLine(s, side, ZoneRowColor, width);
                     bool active = snapped.HasValue && snapped.Value.Segment == s && snapped.Value.Side == side;
                     GuideRangeOf(s, h, out float t0, out float t1);
                     DashedOffset(s, t0, t1, side * h.Offset, active ? ParallelActiveColor : ParallelColor, width * (active ? 1.8f : 1.1f));
@@ -252,34 +250,28 @@ namespace CityBuilder.Game.Roads
             }
         }
 
-        /// <summary>Zonenstreifen einer Straßenseite: flache Fläche + Linien an den Reihengrenzen.</summary>
-        void ZoneBand(RoadSegment s, int side, int rows, Color fill, Color rowLine, float width)
+        /// <summary>
+        /// Setzen statt Zonen: statt der früheren Zonentiefen-Fläche nur eine zarte Linie dort, wo die Rückseite einer
+        /// Gebäudereihe der gewählten Tiefe liegt (Gehweg + 0,5 m + Tiefe).
+        /// </summary>
+        void BackLine(RoadSegment s, int side, Color color, float width)
         {
-            float depth = ParallelGuides.ZoneDepth(rows);
+            float back = s.Type.HalfWidth + ParallelGuides.RowDepth(tool.ParallelDepth);
             const int n = 24;
-            var band = NextFlat(fill, depth);
-            band.positionCount = n + 1;
+            var lr = Next(color, width * 0.7f);
+            lr.positionCount = n + 1;
             for (int i = 0; i <= n; i++)
-                band.SetPosition(i, OnGround(ParallelGuides.OffsetPoint(s, i / (float)n, side * (s.Type.HalfWidth + depth * 0.5f)), 0.05f));
-            for (int r = 1; r <= rows; r++)
-            {
-                var lr = Next(rowLine, width * 0.7f);
-                lr.positionCount = n + 1;
-                for (int i = 0; i <= n; i++)
-                    lr.SetPosition(i, OnGround(ParallelGuides.OffsetPoint(s, i / (float)n, side * (s.Type.HalfWidth + r * ZoneGrid.CellSize))));
-            }
+                lr.SetPosition(i, OnGround(ParallelGuides.OffsetPoint(s, i / (float)n, side * back)));
         }
 
-        /// <summary>Vorschau: eigene Zonentiefe der gerade gezogenen Straße beidseitig (halbtransparent).</summary>
-        void DrawOwnZones(RoadTool.GuideState g, float width)
+        /// <summary>Vorschau: Rückseite einer Gebäudereihe der gewählten Tiefe beidseits der gezogenen Straße (nur Linie, keine Fläche).</summary>
+        void DrawOwnBackLines(RoadTool.GuideState g, float width)
         {
             if (g.Length < 1f) return;
-            float depth = ParallelGuides.ZoneDepth(ZoneGrid.Depth);
+            float back = g.Type.HalfWidth + ParallelGuides.RowDepth(tool.ParallelDepth);
             const int n = 24;
             for (int side = -1; side <= 1; side += 2)
             {
-                var band = NextFlat(OwnZoneColor, depth);
-                band.positionCount = n + 1;
                 var edge = Next(OwnZoneEdgeColor, width);
                 edge.positionCount = n + 1;
                 for (int i = 0; i <= n; i++)
@@ -288,8 +280,7 @@ namespace CityBuilder.Game.Roads
                     var p = Bezier.Evaluate(g.Start, g.Control, g.End, t);
                     var d = SafeDir(Bezier.Derivative(g.Start, g.Control, g.End, t));
                     var right = new SimVector2(d.Y, -d.X) * side;
-                    band.SetPosition(i, OnGround(p + right * (g.Type.HalfWidth + depth * 0.5f), 0.08f));
-                    edge.SetPosition(i, OnGround(p + right * (g.Type.HalfWidth + depth)));
+                    edge.SetPosition(i, OnGround(p + right * back));
                 }
             }
         }
@@ -304,7 +295,7 @@ namespace CityBuilder.Game.Roads
             for (int i = 1; i <= n; i++)
                 cumulative[i] = cumulative[i - 1] + SimVector2.Distance(Bezier.Evaluate(g.Start, g.Control, g.End, (i - 1) / (float)n),
                                                                         Bezier.Evaluate(g.Start, g.Control, g.End, i / (float)n));
-            float reach = g.Type.HalfWidth + ParallelGuides.ZoneDepth(ZoneGrid.Depth);
+            float reach = g.Type.HalfWidth + ParallelGuides.RowDepth(tool.ParallelDepth > 0f ? tool.ParallelDepth : ParallelGuides.DefaultDepth);
             int drawn = 0;
             for (int k = 1; drawn < 60; k++)
             {

@@ -293,6 +293,18 @@ namespace CityBuilder.Simulation.Goods
         readonly Dictionary<int, int> sizedJobs = new Dictionary<int, int>();
 
         /// <summary>
+        /// Setzen statt Zonen: Pleite in einem vom Spieler gesetzten Gebäude → neuer Betreiber statt Abriss. Industrie wählt
+        /// den Betrieb neu (Standortwahl inkl. Schwerpunkt, der alte Betrieb nur, wenn sonst nichts geht), Läden/Büros
+        /// fangen mit derselben Rolle neu an (Lager leer, Startkapital).
+        /// </summary>
+        void NewTenant(Firm f)
+        {
+            var r = f.Recipe.IsIndustry ? ChooseIndustry(f.Building, f.Recipe) : f.Recipe;
+            Restructure(f, r ?? f.Recipe);
+            f.AgeDays = 0;
+        }
+
+        /// <summary>
         /// Firma auf ein anderes Rezept umstellen („neuer Betreiber“: Lager geleert, Startkapital neu) – für Tests und
         /// später als Spieleraktion (Spezialisierung). Industrie nur auf Industrie-Rezepte, sonst nur das eigene.
         /// </summary>
@@ -556,6 +568,8 @@ namespace CityBuilder.Simulation.Goods
             foreach (var f in bankrupt)
             {
                 s.Bankruptcies++;
+                // Setzen statt Zonen: gesetzte Hülle bleibt stehen, ein neuer Betreiber zieht ein (Industrie: neue Standortwahl)
+                if (f.Building.IsPlayerPlaced) { NewTenant(f); continue; }
                 if (AbandonBankruptBuildings) city.RemoveBuilding(f.Building);
             }
             Version++;
@@ -639,6 +653,34 @@ namespace CityBuilder.Simulation.Goods
             if (weight <= 0) return 0f;
             return GoodsRules.ProfitDemandRange * MathF.Tanh((float)(margin / weight) / GoodsRules.ProfitDemandMargin);
         }
+
+        // --- Setzen statt Zonen: Erklärung der Nachfrage-Anzeige (nur lesend)
+        /// <summary>Anteil des Imports am Wert der örtlich herstellbaren Güter gestern (0..1).</summary>
+        public float ImportShareYesterday()
+        {
+            double imports = 0, local = 0;
+            foreach (var m in markets)
+            {
+                if (!ProducibleLocally(m.Good)) continue;
+                imports += m.Yesterday.ImportValue;
+                local += m.Yesterday.Produced * m.LocalPrice;
+            }
+            return imports > 0 ? (float)(imports / (imports + local)) : 0f;
+        }
+
+        /// <summary>Anteil des Grundbedarfs, den die Haushalte gestern kaufen konnten (1 = alles, −1 = keine Daten).</summary>
+        public float BasicShoppingMetYesterday()
+        {
+            float wanted = Stats.TierWantedYesterday[(int)ConsumerTier.Basic];
+            return wanted > 0f ? Math.Clamp(Stats.TierBoughtYesterday[(int)ConsumerTier.Basic] / wanted, 0f, 1f) : -1f;
+        }
+
+        /// <summary>Zu-/Abschlag aus der Marge der etablierten Firmen je Zonenart (Teil von <see cref="DemandOffset"/>).</summary>
+        public float MarginDemand(ZoneType zone) =>
+            zone == ZoneType.Industry ? MarginOffset(f => f.Recipe.IsIndustry)
+            : zone == ZoneType.Office ? MarginOffset(f => f.Role == FirmRole.Office)
+            : zone == ZoneType.Retail || zone == ZoneType.Mixed ? MarginOffset(f => f.Role == FirmRole.Retail) : 0f;
+        // --- Ende Setzen statt Zonen
 
         static bool ProducibleLocally(GoodType g)
         {
