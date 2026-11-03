@@ -10,6 +10,10 @@ namespace CityBuilder.Game.Environment
     /// Gelände aus der Höhenkarte der Simulation, in Kacheln (Chunks) aufgeteilt. Ersetzt die flache
     /// Platzhalter-Plane. Schneidet Löcher für Tröge/Tunneleinfahrten, zeigt Wasser und hat eine
     /// Unterirdisch-Ansicht (Gelände durchsichtig).
+    /// Gelände-„Texturen“ ohne Texturdateien: Vertex-Farben nach Höhe, Steigung, Wassernähe und bearbeitetem
+    /// Boden (<see cref="GroundColor"/>), gezeichnet mit dem eigenen URP-Shader <c>Resources/Shaders/GroundVertexColor</c>
+    /// (URP/Lit zeigt keine Vertex-Farben). Fehlt der Shader, bleibt das ursprüngliche einfarbige Material.
+    /// Neu gebaut werden nur die Chunks im geänderten Rechteck (<see cref="TerrainMap.Changed"/>).
     /// </summary>
     public sealed class GroundView : MonoBehaviour
     {
@@ -20,6 +24,7 @@ namespace CityBuilder.Game.Environment
         Material groundMaterial;
         Material transparentMaterial;
         Material waterMaterial;
+        Material vertexColorMaterial;
 
         TerrainMap terrain;
         RoadNetwork roads;
@@ -44,6 +49,13 @@ namespace CityBuilder.Game.Environment
             original = originalGround;
             groundMaterial = originalGround.sharedMaterial;
             Color c = groundMaterial.HasProperty("_BaseColor") ? groundMaterial.GetColor("_BaseColor") : groundMaterial.color;
+            var shader = Resources.Load<Shader>("Shaders/GroundVertexColor");
+            if (shader != null && shader.isSupported)
+            {
+                vertexColorMaterial = new Material(shader) { name = "GroundVertexColor" };
+                groundMaterial = vertexColorMaterial;
+                c = Color.white; // Sprites/Default multipliziert die Vertex-Farben ebenfalls
+            }
             c.a = 0.22f;
             transparentMaterial = new Material(transparentBase) { color = c, name = "GroundUnderground" };
             waterMaterial = new Material(transparentBase) { color = new Color(0.16f, 0.38f, 0.62f, 0.78f), name = "Water" };
@@ -98,7 +110,7 @@ namespace CityBuilder.Game.Environment
         void OnDestroy()
         {
             if (terrain != null) terrain.Changed -= OnTerrainChanged;
-            foreach (var m in new[] { transparentMaterial, waterMaterial }) if (m != null) Destroy(m);
+            foreach (var m in new[] { transparentMaterial, waterMaterial, vertexColorMaterial }) if (m != null) Destroy(m);
             if (chunkFilters == null) return;
             foreach (var f in chunkFilters) if (f != null && f.sharedMesh != null) Destroy(f.sharedMesh);
         }
@@ -212,12 +224,14 @@ namespace CityBuilder.Game.Environment
 
             var verts = new Vector3[w * h];
             var uvs = new Vector2[w * h];
+            var colors = new Color32[w * h];
             for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
                 var p = terrain.PointAt(gx0 + x, gy0 + y);
                 verts[y * w + x] = new Vector3(p.X, terrain[gx0 + x, gy0 + y], p.Y);
                 uvs[y * w + x] = new Vector2((gx0 + x) * 0.25f, (gy0 + y) * 0.25f);
+                colors[y * w + x] = GroundColor(gx0 + x, gy0 + y);
             }
 
             var tris = new List<int>((w - 1) * (h - 1) * 6);
@@ -235,9 +249,64 @@ namespace CityBuilder.Game.Environment
             mesh.Clear();
             mesh.SetVertices(verts);
             mesh.SetUVs(0, uvs);
+            mesh.SetColors(colors);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+        }
+
+        // ------------------------------------------------------------ Gelände-Farben
+
+        static readonly Color Grass = new Color(0.36f, 0.52f, 0.28f);
+        static readonly Color Meadow = new Color(0.27f, 0.42f, 0.21f);
+        static readonly Color DryGrass = new Color(0.47f, 0.55f, 0.30f);
+        static readonly Color Sand = new Color(0.78f, 0.72f, 0.53f);
+        static readonly Color WetSand = new Color(0.47f, 0.43f, 0.33f);
+        static readonly Color Rock = new Color(0.48f, 0.46f, 0.43f);
+        static readonly Color Earth = new Color(0.45f, 0.35f, 0.25f);
+        static readonly Color Gravel = new Color(0.55f, 0.52f, 0.47f);
+
+        /// <summary>
+        /// Farbe eines Gitterpunkts: Gras mit dunkleren Wiesenflecken und trockenen Stellen (Rauschen),
+        /// Sand am Ufer bzw. nasser Sand unter Wasser, Fels an steilen Hängen (ab ~30°), Erde/Kies auf
+        /// bearbeitetem Boden (Straßenböschungen, Terraforming – <see cref="TerrainMap.WorkedAt"/>).
+        /// </summary>
+        Color32 GroundColor(int gx, int gy)
+        {
+            float h = terrain[gx, gy];
+            int res = terrain.Resolution;
+            float cell = terrain.CellSize;
+            float dx = (terrain[Mathf.Min(gx + 1, res - 1), gy] - terrain[Mathf.Max(gx - 1, 0), gy]) / (2f * cell);
+            float dy = (terrain[gx, Mathf.Min(gy + 1, res - 1)] - terrain[gx, Mathf.Max(gy - 1, 0)]) / (2f * cell);
+            float slope = Mathf.Sqrt(dx * dx + dy * dy); // tan(Neigung)
+
+            var p = terrain.PointAt(gx, gy);
+            float patches = Mathf.PerlinNoise(p.X * 0.011f + 31.7f, p.Y * 0.011f + 11.3f);
+            float detail = Mathf.PerlinNoise(p.X * 0.07f + 5.1f, p.Y * 0.07f + 17.9f);
+
+            var c = Color.Lerp(Grass, Meadow, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.45f, 0.7f, patches)));
+            c = Color.Lerp(c, DryGrass, Mathf.InverseLerp(0.62f, 0.9f, detail) * 0.6f);
+            // Höhenlagen etwas karger
+            c = Color.Lerp(c, Rock, Mathf.InverseLerp(55f, 95f, h) * 0.35f);
+
+            if (terrain.WaterLevel > -100f)
+            {
+                float above = h - terrain.WaterLevel;
+                float shore = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.8f, 2.4f + detail, above));
+                c = Color.Lerp(c, Sand, shore);
+                if (above < 0f) c = Color.Lerp(Sand, WetSand, Mathf.InverseLerp(0f, 2f, -above));
+            }
+
+            float rock = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.55f, 0.85f, slope + (detail - 0.5f) * 0.1f));
+            c = Color.Lerp(c, Rock, rock);
+
+            float worked = terrain.WorkedAt(gx, gy);
+            if (worked > 0.01f)
+            {
+                var soil = Color.Lerp(Earth, Gravel, detail);
+                c = Color.Lerp(c, soil, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.05f, 0.6f, worked)) * 0.85f);
+            }
+            return c;
         }
     }
 }

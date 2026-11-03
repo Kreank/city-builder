@@ -47,6 +47,7 @@ namespace CityBuilder.Game.UI
                 text += "\n\n<size=11>LMB bauen · RMB/Esc abbrechen · R gerade/Kurve · K Kreisverkehr · U ausbauen · I Richtung · B Abriss\n" +
                         "Tab Straßentyp · H Doppelbau · Bild↑/↓ Bauhöhe · G Einrasten (Strg = frei) · , . Vorlage drehen\n" +
                         "T Verkehrsregeln · V Stau-Ansicht · X Unterirdisch · Z Zonen ([ ] Pinsel) · C Bürger-Info · N Lärm · P Abgas\n" +
+                        "L Gelände · J Versorgung · O Strom/Wasser-Ansicht\n" +
                         "Leertaste Pause · 1/2/3 Tempo · Bauhöhe 0 = automatisch trassieren (Tunnel/Brücke/einebnen)\n" +
                         "WASD (Shift) bewegen · Q/E/Mitteltaste drehen · Mausrad zoomen · F1 Hilfe aus</size>";
 

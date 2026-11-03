@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Inspect }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -154,7 +154,24 @@ namespace CityBuilder.Game.Roads
 
             // G2 Bürger: Info-Modus (C) mit Bürger-/Gebäude-Panel
             Ensure<CityBuilder.Game.Citizens.CitizenPanel>().Init(this, previewMaterial);
+
+            // Terraforming-Werkzeug (Modus Terraform, Taste L)
+            Ensure<CityBuilder.Game.Terrain.TerraformTool>().Init(this, previewMaterial);
+
+            // --- G3 Strom & Wasser: Werkzeug (Modus Utility), Bauwerke/Leitungen, Info-Ansicht, Netz-Fenster
+            Ensure<CityBuilder.Game.Utilities.UtilityTool>().Init(this, previewMaterial);
+            var utilityOverlay = Ensure<CityBuilder.Game.Utilities.UtilityOverlayView>();
+            if (litBase != null)
+            {
+                Ensure<CityBuilder.Game.Utilities.UtilityView>().Init(runner, litBase, ground);
+                utilityOverlay.Init(runner, litBase, previewMaterial);
+            }
+            Ensure<CityBuilder.Game.Utilities.UtilityPanel>().Init(this, utilityOverlay);
+            // --- Ende G3
         }
+
+        /// <summary>Unterirdisch-Ansicht erzwingen (G3: Wasserrohre verlegen).</summary>
+        public bool ForceUnderground { get; set; }
 
         ZoneView zoneView;
 
@@ -250,7 +267,7 @@ namespace CityBuilder.Game.Roads
             if (kb != null) HandleKeys(kb);
             SnapActive = SnapEnabled && !(kb != null && kb.ctrlKey.isPressed);
             if (ground != null)
-                ground.UndergroundForced = IsBuildMode &&
+                ground.UndergroundForced = ForceUnderground || IsBuildMode &&
                     (BuildHeight < -0.1f || (step != Step.Start && startHeight - GroundAt(startPoint) < -0.1f));
             if (mouse.rightButton.wasPressedThisFrame) { Cancel(); if (CurrentMode == Mode.Traffic) ClearSelection(); }
 
@@ -276,6 +293,8 @@ namespace CityBuilder.Game.Roads
             {
                 case Mode.Zone: UpdateZone(raw); break;
                 case Mode.Inspect: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G2: Klick wählt Gebäude (CitizenPanel)
+                case Mode.Terraform: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // TerraformTool
+                case Mode.Utility: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G3: UtilityTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;

@@ -5,6 +5,7 @@ using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Traffic;
+using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Core
@@ -39,6 +40,23 @@ namespace CityBuilder.Simulation.Core
             Roads.Ground = Terrain;
             Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
+            // Terraforming: Gelände unter Straßen, Gebäuden und Versorgungsbauwerken ist gesperrt (weich überblendet)
+            Terrain.LockQuery = (min, max) =>
+            {
+                var locks = TerrainLocks.Query(Roads, City?.Buildings, Terrain, min, max);
+                if (Utilities == null) return locks;
+                var facilities = new List<UtilityFacility>();
+                foreach (var f in Utilities.Facilities)
+                    if (f.Contains(Vector2.Clamp(f.Position, min, max), TerrainLocks.Band + Terrain.CellSize + MathF.Max(f.Type.Width, f.Type.Depth)))
+                        facilities.Add(f);
+                if (facilities.Count == 0) return locks;
+                return p =>
+                {
+                    foreach (var f in facilities)
+                        if (f.Contains(p, Terrain.CellSize)) return 1f;
+                    return locks?.Invoke(p) ?? 0f;
+                };
+            };
         }
 
         /// <summary>
@@ -87,6 +105,11 @@ namespace CityBuilder.Simulation.Core
             // G2 Bürger (nach Verkehr und Stadt: Ankünfte und neue Gebäude sind im selben Tick schon bekannt)
             world.Citizens = new CitizenSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
             world.AddSystem(world.Citizens);
+
+            // --- G3 Strom & Wasser (nach Lärm und Stadt: stempelt nach dem Neuzeichnen des Lärms, liest fertige Gebäude)
+            world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
+            world.AddSystem(world.Utilities);
+            // --- Ende G3
             return world;
         }
 
@@ -95,6 +118,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Bürger, Haushalte, Jobs, Pendeln (G2). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public CitizenSystem Citizens { get; private set; }
+
+        /// <summary>Strom &amp; Wasser (G3). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public UtilitySystem Utilities { get; private set; }
 
         public void AddSystem(ISimulationSystem system)
         {

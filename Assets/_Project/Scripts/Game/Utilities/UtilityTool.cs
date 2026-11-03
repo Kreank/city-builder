@@ -1,0 +1,333 @@
+using CityBuilder.Game.Roads;
+using CityBuilder.Game.UI;
+using CityBuilder.Simulation.Utilities;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using SimVector2 = System.Numerics.Vector2;
+
+namespace CityBuilder.Game.Utilities
+{
+    /// <summary>
+    /// Versorgungs-Werkzeug (J): Kraftwerke/Pumpen platzieren (, und . drehen), Stromleitungen und Wasserrohre
+    /// Punkt für Punkt verlegen (Klick Start → Klick Ende, weiter in Kette, RMB beendet), Abriss.
+    /// Aktiv, wenn das RoadTool im Modus <see cref="RoadTool.Mode.Utility"/> ist – das RoadTool liefert den Cursor.
+    /// Alle Prüfungen und das Bauen macht die Simulation (<see cref="UtilitySystem"/>).
+    /// </summary>
+    public sealed class UtilityTool : MonoBehaviour
+    {
+        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove }
+
+        /// <summary>Höhe der Leiterseile über Gelände (Vorschau) bzw. Rohrtiefe darunter.</summary>
+        public const float WireHeight = 12f;
+        public const float PipeDepth = 2.5f;
+        const float SnapDistance = 8f;
+
+        static readonly Color Selected = new Color(0.45f, 0.75f, 1f);
+
+        RoadTool tool;
+        Material okMaterial, badMaterial;
+        GameObject ghost;
+        MeshRenderer ghostRenderer;
+        LineRenderer lineRenderer;
+        GUIStyle infoStyle, labelStyle;
+
+        bool placingLine;
+        SimVector2 lineStart;
+        string label;
+        bool labelError;
+        Vector3 labelWorld;
+
+        public UtilityAction Current { get; private set; } = UtilityAction.Facility;
+        public UtilityFacilityType SelectedType { get; private set; } = UtilityCatalog.CoalPlant;
+        public float Rotation { get; private set; }
+        public bool Active => tool != null && tool.CurrentMode == RoadTool.Mode.Utility;
+
+        UtilitySystem Utilities => tool.Runner.World.Utilities;
+
+        public void Init(RoadTool roadTool, Material transparent)
+        {
+            tool = roadTool;
+            okMaterial = new Material(transparent) { name = "UtilityPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
+            badMaterial = new Material(transparent) { name = "UtilityPreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
+        }
+
+        void Start()
+        {
+            ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ghost.name = "Utility Preview";
+            Destroy(ghost.GetComponent<Collider>());
+            ghost.transform.SetParent(transform, false);
+            ghostRenderer = ghost.GetComponent<MeshRenderer>();
+            ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ghost.SetActive(false);
+
+            var lineGo = new GameObject("Utility Line Preview");
+            lineGo.transform.SetParent(transform, false);
+            lineRenderer = lineGo.AddComponent<LineRenderer>();
+            lineRenderer.useWorldSpace = true;
+            lineRenderer.widthMultiplier = 0.8f;
+            lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lineRenderer.enabled = false;
+        }
+
+        void OnDestroy()
+        {
+            if (okMaterial != null) Destroy(okMaterial);
+            if (badMaterial != null) Destroy(badMaterial);
+        }
+
+        // ------------------------------------------------------------ Steuerung (Toolbar)
+
+        public void Select(UtilityAction action)
+        {
+            Current = action;
+            placingLine = false;
+            if (!Active) tool.SetMode(RoadTool.Mode.Utility);
+        }
+
+        public void SelectFacility(UtilityFacilityType type)
+        {
+            SelectedType = type;
+            Select(UtilityAction.Facility);
+        }
+
+        public void Rotate(float degrees) => Rotation = Mathf.Repeat(Rotation + degrees, 360f);
+
+        // ------------------------------------------------------------ Update
+
+        void Update()
+        {
+            if (tool == null) return;
+            var kb = Keyboard.current;
+            if (kb == null) return;
+            if (kb.jKey.wasPressedThisFrame) tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Utility);
+            if (!Active) return;
+            if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
+            if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
+            if (kb.escapeKey.wasPressedThisFrame) placingLine = false;
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.rightButton.wasPressedThisFrame) placingLine = false;
+        }
+
+        void LateUpdate()
+        {
+            label = null;
+            if (tool == null) return;
+            tool.ForceUnderground = Active && Current == UtilityAction.WaterPipe;
+            if (!Active || !tool.HasCursor || tool.Runner.World == null) { Hide(); placingLine &= Active; return; }
+
+            var mouse = Mouse.current;
+            bool clicked = mouse != null && mouse.leftButton.wasPressedThisFrame;
+            var p = tool.Cursor;
+            switch (Current)
+            {
+                case UtilityAction.Facility: UpdateFacility(p, clicked); break;
+                case UtilityAction.PowerLine: UpdateLine(UtilityKind.Power, p, clicked); break;
+                case UtilityAction.WaterPipe: UpdateLine(UtilityKind.Water, p, clicked); break;
+                case UtilityAction.Remove: UpdateRemove(p, clicked); break;
+            }
+        }
+
+        void Hide()
+        {
+            if (ghost != null) ghost.SetActive(false);
+            if (lineRenderer != null) lineRenderer.enabled = false;
+        }
+
+        float Ground(SimVector2 p) => tool.Runner.World.Terrain.HeightAt(p);
+
+        void UpdateFacility(SimVector2 p, bool clicked)
+        {
+            lineRenderer.enabled = false;
+            var plan = Utilities.PlanFacility(SelectedType, p, Rotation);
+            ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid);
+            var t = SelectedType;
+            string info = $"{t.DisplayName} · {t.Capacity:0} {UtilityCatalog.Unit(t.Kind)} · {t.Cost:0} € (+{t.UpkeepPerDay:0} €/Tag) · {Rotation:0}°";
+            if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
+            SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 8f));
+            if (clicked && plan.IsValid) Utilities.BuildFacility(plan);
+        }
+
+        void UpdateLine(UtilityKind kind, SimVector2 raw, bool clicked)
+        {
+            ghost.SetActive(false);
+            var p = Utilities.ResolveLinePoint(kind, raw, SnapDistance, out var snap);
+            float offset = kind == UtilityKind.Power ? WireHeight : -PipeDepth;
+            if (!placingLine)
+            {
+                // Nur Markierung am Cursor
+                lineRenderer.enabled = true;
+                lineRenderer.sharedMaterial = okMaterial;
+                lineRenderer.positionCount = 2;
+                lineRenderer.SetPosition(0, SimConvert.ToWorld(p, Ground(p)));
+                lineRenderer.SetPosition(1, SimConvert.ToWorld(p, Ground(p) + offset));
+                SetLabel($"{UtilityCatalog.LineName(kind)}: Startpunkt wählen{SnapText(snap)}", false, SimConvert.ToWorld(p, Ground(p) + WireHeight));
+                if (clicked) { lineStart = p; placingLine = true; }
+                return;
+            }
+
+            var plan = Utilities.PlanLine(kind, lineStart, p);
+            const int n = 16;
+            lineRenderer.enabled = true;
+            lineRenderer.sharedMaterial = plan.IsValid ? okMaterial : badMaterial;
+            lineRenderer.positionCount = n + 1;
+            for (int i = 0; i <= n; i++)
+            {
+                var q = SimVector2.Lerp(lineStart, p, i / (float)n);
+                lineRenderer.SetPosition(i, SimConvert.ToWorld(q, Ground(q) + offset));
+            }
+            string text = plan.IsValid
+                ? $"{UtilityCatalog.LineName(kind)} · {plan.Length:0} m · {plan.Cost:0} €{SnapText(snap)} · RMB beenden"
+                : ErrorText(plan.Error);
+            SetLabel(text, !plan.IsValid, SimConvert.ToWorld(p, Ground(p) + WireHeight));
+            if (clicked && plan.IsValid)
+            {
+                Utilities.BuildLine(plan);
+                lineStart = p; // in Kette weiterbauen
+            }
+        }
+
+        void UpdateRemove(SimVector2 p, bool clicked)
+        {
+            var f = Utilities.FacilityAt(p, 2f);
+            if (f != null)
+            {
+                lineRenderer.enabled = false;
+                ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 6f, false);
+                SetLabel($"{f.Type.DisplayName} abreißen", true, SimConvert.ToWorld(f.Position, f.Height + 10f));
+                if (clicked) Utilities.RemoveFacility(f.Id);
+                return;
+            }
+            ghost.SetActive(false);
+            var line = Utilities.LineNear(p, 6f);
+            if (line == null) { lineRenderer.enabled = false; return; }
+            float offset = line.Kind == UtilityKind.Power ? WireHeight : -PipeDepth;
+            lineRenderer.enabled = true;
+            lineRenderer.sharedMaterial = badMaterial;
+            lineRenderer.positionCount = 2;
+            lineRenderer.SetPosition(0, SimConvert.ToWorld(line.A, Ground(line.A) + offset));
+            lineRenderer.SetPosition(1, SimConvert.ToWorld(line.B, Ground(line.B) + offset));
+            SetLabel($"{UtilityCatalog.LineName(line.Kind)} abreißen ({line.Length:0} m)", true, SimConvert.ToWorld(p, Ground(p) + WireHeight));
+            if (clicked) Utilities.RemoveLine(line.Id);
+        }
+
+        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid)
+        {
+            ghost.SetActive(true);
+            ghost.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height + tall * 0.5f),
+                Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
+            ghost.transform.localScale = new Vector3(width, tall, depth);
+            ghostRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
+        }
+
+        void SetLabel(string text, bool error, Vector3 world)
+        {
+            label = text;
+            labelError = error;
+            labelWorld = world;
+        }
+
+        static string SnapText(UtilitySnap s)
+        {
+            switch (s)
+            {
+                case UtilitySnap.LineEnd: return " · an Leitungsende";
+                case UtilitySnap.Line: return " · an Leitung";
+                case UtilitySnap.Facility: return " · an Bauwerk";
+                case UtilitySnap.Road: return " · an Straße";
+                case UtilitySnap.Building: return " · an Gebäude";
+                default: return "";
+            }
+        }
+
+        public static string ErrorText(UtilityBuildError e)
+        {
+            switch (e)
+            {
+                case UtilityBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case UtilityBuildError.OverlapsRoad: return "Steht auf einer Straße";
+                case UtilityBuildError.OverlapsFacility: return "Überschneidet ein anderes Bauwerk";
+                case UtilityBuildError.OnWater: return "Nicht im Wasser bauen";
+                case UtilityBuildError.NeedsWater: return "Muss am Ufer stehen (Wasser in Reichweite)";
+                case UtilityBuildError.TooSteep: return $"Zu steil (max. {UtilitySystem.MaxFacilitySlope:0} m Höhenunterschied)";
+                case UtilityBuildError.TooShort: return "Zu kurz";
+                case UtilityBuildError.Duplicate: return "Diese Leitung gibt es schon";
+                default: return null;
+            }
+        }
+
+        // ------------------------------------------------------------ IMGUI
+
+        void OnGUI()
+        {
+            if (!Active || string.IsNullOrEmpty(label) || tool.Camera == null) return;
+            if (labelStyle == null) labelStyle = new GUIStyle(GUI.skin.box) { fontSize = 12, richText = true, alignment = TextAnchor.MiddleCenter };
+            var sp = tool.Camera.WorldToScreenPoint(labelWorld);
+            if (sp.z <= 0f) return;
+            var content = new GUIContent(labelError ? $"<color=#ff7060>{label}</color>" : label);
+            var size = labelStyle.CalcSize(content);
+            GUI.Box(new Rect(sp.x - size.x * 0.5f, Screen.height - sp.y - size.y - 6f, size.x + 8f, size.y + 4f), content, labelStyle);
+        }
+
+        /// <summary>Zeilen der Bauleiste (aufgerufen von <see cref="RoadToolbar"/> in deren Layout-Bereich).</summary>
+        public void DrawToolbarRows()
+        {
+            if (infoStyle == null) infoStyle = new GUIStyle(GUI.skin.label) { fontSize = 12, richText = true };
+            var overlay = GetComponent<UtilityOverlayView>();
+
+            GUILayout.BeginHorizontal();
+            foreach (var t in UtilityCatalog.All)
+                if (Button(ShortName(t), Active && Current == UtilityAction.Facility && SelectedType == t, 0f)) SelectFacility(t);
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (Button("Stromleitung", Active && Current == UtilityAction.PowerLine, 110f)) Select(UtilityAction.PowerLine);
+            if (Button("Wasserrohr", Active && Current == UtilityAction.WaterPipe, 110f)) Select(UtilityAction.WaterPipe);
+            if (Button("Abriss", Active && Current == UtilityAction.Remove, 80f)) Select(UtilityAction.Remove);
+            if (GUILayout.Button("⟲ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(-15f);
+            if (GUILayout.Button("⟳ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(15f);
+            GUILayout.FlexibleSpace();
+            if (overlay != null)
+            {
+                if (Button("Strom-Ansicht (O)", overlay.Current == UtilityOverlayView.Overlay.Power, 135f)) overlay.Toggle(UtilityOverlayView.Overlay.Power);
+                if (Button("Wasser-Ansicht (O)", overlay.Current == UtilityOverlayView.Overlay.Water, 140f)) overlay.Toggle(UtilityOverlayView.Overlay.Water);
+            }
+            if (Button("Unterirdisch (X)", tool.UndergroundView, 120f)) tool.ToggleUndergroundView();
+            GUILayout.EndHorizontal();
+
+            var u = Utilities;
+            string Balance(UtilityKind k)
+            {
+                float prod = u.TotalProduction(k), dem = u.TotalDemand(k);
+                string c = dem > prod + 0.001f ? "#ff7060" : "#7dff8a";
+                return $"<color={c}>{UtilityCatalog.KindName(k)} {prod:0}/{dem:0} {UtilityCatalog.Unit(k)}</color>";
+            }
+            GUILayout.Label($"{Balance(UtilityKind.Power)}  ·  {Balance(UtilityKind.Water)}  ·  Unterhalt {u.TotalUpkeepPerDay:0} €/Tag  ·  " +
+                            "Stadtstraßen tragen Strom + Wasser mit · Leitungen schließen Lücken · Rohre liegen unterirdisch", infoStyle);
+        }
+
+        static string ShortName(UtilityFacilityType t)
+        {
+            switch (t.Id)
+            {
+                case "power_coal": return "Kohle";
+                case "power_gas": return "Gas";
+                case "power_wind": return "Wind";
+                case "power_solar": return "Solar";
+                case "water_pump": return "Pumpe (Ufer)";
+                case "water_tower": return "Wasserturm";
+                default: return t.DisplayName;
+            }
+        }
+
+        static bool Button(string text, bool active, float width)
+        {
+            var old = GUI.backgroundColor;
+            if (active) GUI.backgroundColor = Selected;
+            bool clicked = width > 0f ? GUILayout.Button(text, GUILayout.Width(width), GUILayout.Height(24f))
+                                      : GUILayout.Button(text, GUILayout.Height(24f));
+            GUI.backgroundColor = old;
+            return clicked;
+        }
+    }
+}

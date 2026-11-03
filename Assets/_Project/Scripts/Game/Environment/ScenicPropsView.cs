@@ -20,6 +20,7 @@ namespace CityBuilder.Game.Environment
         readonly InstancedModels lamps = new InstancedModels();
         readonly InstancedModels trees = new InstancedModels();
         int roadsVersion = -1, terrainVersion = -1;
+        float lastTreeRebuild = -1f;
 
         struct Tree { public SimVector2 Pos; public float Scale, Yaw; public int Variant; public bool Alive; }
         Tree[] treeList;
@@ -91,8 +92,10 @@ namespace CityBuilder.Game.Environment
             foreach (var t in treeList)
             {
                 if (!t.Alive) continue;
+                float h = terrain.HeightAt(t.Pos);
+                if (h < terrain.WaterLevel + 0.3f) continue; // durch Terraforming geflutet
                 var model = AssetCatalog.Pick(catalog.Trees, t.Variant);
-                var pos = SimConvert.ToWorld(t.Pos, terrain.HeightAt(t.Pos) - 0.1f);
+                var pos = SimConvert.ToWorld(t.Pos, h - 0.1f);
                 trees.Add(model, Matrix4x4.TRS(pos, Quaternion.Euler(0f, t.Yaw, 0f), Vector3.one * t.Scale));
             }
         }
@@ -141,9 +144,12 @@ namespace CityBuilder.Game.Environment
                 roadsVersion = world.Roads.Version;
                 RebuildLamps();
             }
-            if (treeList != null && (treesDirty || world.Terrain.Version != terrainVersion))
+            // Geländeänderungen (Terraforming-Pinsel) höchstens 5× pro Sekunde nachziehen
+            bool terrainChanged = world.Terrain.Version != terrainVersion && Time.unscaledTime - lastTreeRebuild > 0.2f;
+            if (treeList != null && (treesDirty || terrainChanged))
             {
                 treesDirty = false;
+                lastTreeRebuild = Time.unscaledTime;
                 terrainVersion = world.Terrain.Version;
                 RebuildTrees();
             }
