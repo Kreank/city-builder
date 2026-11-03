@@ -197,6 +197,8 @@ namespace CityBuilder.Simulation.Utilities
         public float DemandOf(Building b, UtilityKind kind)
         {
             if (b == null || !b.IsConstructed) return 0f;
+            // Abwasser folgt immer dem tatsächlichen Wasserverbrauch (auch Industrie nach Rezept, G5)
+            if (kind == UtilityKind.Sewage) return DemandOf(b, UtilityKind.Water) * UtilityCatalog.SewageShareOfWater;
             float v = DemandProvider != null ? DemandProvider(b, kind) : float.NaN;
             return float.IsNaN(v) ? UtilityCatalog.Demand(b, kind) : v;
         }

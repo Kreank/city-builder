@@ -165,7 +165,8 @@ namespace CityBuilder.Simulation.Tests
             u.ForceTick();
             houses = Constructed(w); // der Bau hat ggf. Gebäude verdrängt
             Assert.All(houses, b => Assert.True(u.IsSupplied(b, UtilityKind.Sewage), $"{b} ohne Abwasser"));
-            float expected = houses.Sum(b => UtilityCatalog.Demand(b, UtilityKind.Water)) * UtilityCatalog.SewageShareOfWater;
+            // Wasserbedarf wie die Simulation ihn rechnet (seit G5 Industrie nach Rezept über DemandOf)
+            float expected = houses.Sum(b => u.DemandOf(b, UtilityKind.Water)) * UtilityCatalog.SewageShareOfWater;
             Assert.Equal(expected, u.TotalDemand(UtilityKind.Sewage), 2);
             Assert.Single(u.Networks(UtilityKind.Sewage).Where(n => n.Facilities > 0));
             w.WaterQuality.ForceTick();
