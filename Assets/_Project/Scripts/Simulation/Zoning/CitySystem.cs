@@ -28,15 +28,38 @@ namespace CityBuilder.Simulation.Zoning
     }
 
     /// <summary>
-    /// Stadt: Zonen malen, Nachfrage, wachsende Gebäude (Grundstückswahl, Einebnen, Bau, Einzug, Arbeitsplätze)
+    /// Arbeitsmarkt und Wohnungen aus den einzelnen Bürgern (G2). Wird vom Bürgersystem gefüllt,
+    /// die Stadt leitet daraus die Nachfrage ab – so kennt die Stadt keine Bürger-Typen.
+    /// </summary>
+    public sealed class PopulationInfo
+    {
+        /// <summary>Einwohner (ohne Einpendler).</summary>
+        public int Residents;
+        /// <summary>Einwohner im Erwerbsalter (18–64).</summary>
+        public int WorkingAge;
+        public int Unemployed;
+        /// <summary>Davon mit mittlerem/höherem Abschluss (für Büro-Nachfrage).</summary>
+        public int UnemployedEducated;
+        /// <summary>Einwohner, die außerhalb arbeiten (würden lieber hier arbeiten).</summary>
+        public int CommutersOut;
+        /// <summary>Arbeitskräfte von außerhalb auf hiesigen Jobs (könnten durch Einwohner ersetzt werden).</summary>
+        public int CommutersIn;
+        public int VacantJobs;
+        public int FreeHomes;
+        /// <summary>Einwohner, die einkaufen wollen, aber kein Geschäft erreichen.</summary>
+        public int UnservedShoppers;
+    }
+
+    /// <summary>
+    /// Stadt: Zonen malen, Nachfrage, wachsende Gebäude (Grundstückswahl, Einebnen, Bau)
     /// und Abriss, wenn ein Gebäude die Straßenanbindung verliert oder eine Straße hindurchgebaut wird.
-    /// G1: Einwohner/Arbeitsplätze als Zähler; in G2 übernehmen echte Bürger.
+    /// Einzug, Jobs und Pendeln übernimmt seit G2 das Bürgersystem (<c>Citizens.CitizenSystem</c>);
+    /// die Nachfrage kommt aus dessen <see cref="Population"/>.
     /// </summary>
     public sealed class CitySystem : ISimulationSystem
     {
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten.</summary>
         public int TickInterval => 5;
-        public const float PersonsPerHousehold = 2.3f;
         const float BuildingBucket = 32f;
 
         readonly RoadNetwork network;
@@ -50,6 +73,10 @@ namespace CityBuilder.Simulation.Zoning
         public ZoneMap ZoneMap { get; }
         public ZoneDemand Demand { get; } = new ZoneDemand();
         public CityStats Stats { get; } = new CityStats();
+        /// <summary>Bürgerdaten für die Nachfrage (gefüllt vom Bürgersystem).</summary>
+        public PopulationInfo Population { get; } = new PopulationInfo();
+        /// <summary>Wie sehr die Stadt Zuzug anzieht (0..100, aus Jobs vs. Arbeitssuchenden) – steuert den Einzug.</summary>
+        public float MoveInPull => moveInPull;
         public IEnumerable<Building> Buildings => buildings.Values;
         /// <summary>Wird bei jeder Änderung an Gebäuden/Zonen erhöht (für die Darstellung).</summary>
         public int Version { get; private set; }
@@ -124,26 +151,13 @@ namespace CityBuilder.Simulation.Zoning
 
         void UpdateBuildings()
         {
-            int population = 0, totalJobs = 0;
+            // Nur Baufortschritt – Einzug und Arbeitsplätze besetzt das Bürgersystem
             foreach (var b in buildings.Values)
             {
-                if (!b.IsConstructed)
-                {
-                    b.Construction = MathF.Min(1f, b.Construction + 0.1f);
-                    if (b.IsConstructed) Version++;
-                    continue;
-                }
-                // Einzug: ein Haushalt je Durchlauf, solange die Stadt attraktiv ist (unabhängig vom Leerstand)
-                if (b.OccupiedHouseholds < b.Households && moveInPull > 5f) b.OccupiedHouseholds++;
-                population += (int)MathF.Round(b.OccupiedHouseholds * PersonsPerHousehold);
-                totalJobs += b.Jobs;
+                if (b.IsConstructed) continue;
+                b.Construction = MathF.Min(1f, b.Construction + 0.1f);
+                if (b.IsConstructed) Version++;
             }
-
-            // Arbeitsplätze anteilig mit verfügbaren Arbeitskräften besetzen
-            float workforce = population * 0.55f;
-            float fill = totalJobs > 0 ? MathF.Min(1f, workforce / totalJobs) : 0f;
-            foreach (var b in buildings.Values)
-                b.Workers = b.IsConstructed ? (int)MathF.Round(b.Jobs * fill) : 0;
         }
 
         // ------------------------------------------------------------ Nachfrage
@@ -175,11 +189,16 @@ namespace CityBuilder.Simulation.Zoning
                 if (BuildingAt(cell.Center) == null) { free++; freeByZone[(int)z]++; }
             }
 
-            float population = occupied * PersonsPerHousehold;
-            float workforce = population * 0.55f;
+            // G2: Bevölkerung und Arbeitsmarkt aus den einzelnen Bürgern
+            var pop = Population;
+            float population = pop.Residents;
+            float workforce = pop.WorkingAge;
 
-            // Wohnen: hoch, wenn es mehr Jobs als Arbeitskräfte gibt; am Anfang Grundnachfrage zum Starten
-            float jobPull = Math.Clamp((jobs - workforce) / MathF.Max(40f, workforce), -1f, 1f);
+            // Wohnen: hoch, wenn es freie Jobs (oder von Einpendlern besetzte) gibt und kaum Arbeitssuchende;
+            // am Anfang Grundnachfrage zum Starten
+            float openJobs = pop.VacantJobs + pop.CommutersIn * 0.6f;
+            float seekers = pop.Unemployed + pop.CommutersOut * 0.6f;
+            float jobPull = Math.Clamp((openJobs - seekers) / MathF.Max(40f, workforce), -1f, 1f);
             float vacancy = households > 0 ? 1f - occupied / (float)households : 0f;
             moveInPull = 45f + 55f * jobPull;
             // Gebaut wird weniger, wenn schon viele Wohnungen leer stehen
@@ -188,18 +207,22 @@ namespace CityBuilder.Simulation.Zoning
             Demand[ZoneType.ResidentialMedium] = res * (population > 200 ? 1f : 0.6f);
             Demand[ZoneType.ResidentialHigh] = res * (population > 1000 ? 1f : 0.3f);
 
-            // Arbeit: Bedarf aus der Bevölkerung, Industrie braucht wenig Einwohner zum Start
+            // Arbeit: Grundbedarf aus der Bevölkerung, dazu Arbeitssuchende/Auspendler (Bildung → Büro, sonst Industrie).
+            // Industrie braucht wenig Einwohner zum Start.
             float Need(float wanted, float have) => wanted <= 0f ? 0f : 100f * Math.Clamp((wanted - have) / MathF.Max(8f, wanted), 0f, 1f);
-            Demand[ZoneType.Retail] = Need(population * 0.09f, retailJobs);
-            Demand[ZoneType.Office] = Need(population * 0.07f - 10f, officeJobs);
-            Demand[ZoneType.Industry] = Need(population * 0.14f + 20f, industryJobs);
+            float jobless = MathF.Max(0f, seekers - pop.VacantJobs);
+            float educatedShare = pop.Unemployed > 0 ? pop.UnemployedEducated / (float)pop.Unemployed : 0.3f;
+            float joblessPull = 60f * Math.Clamp(jobless / MathF.Max(20f, workforce * 0.2f), 0f, 1f);
+            Demand[ZoneType.Retail] = Need(population * 0.09f, retailJobs) + MathF.Min(40f, pop.UnservedShoppers * 0.5f);
+            Demand[ZoneType.Office] = Need(population * 0.07f - 10f, officeJobs) + joblessPull * educatedShare;
+            Demand[ZoneType.Industry] = Need(population * 0.14f + 20f, industryJobs) + joblessPull * (1f - educatedShare);
             Demand[ZoneType.Mixed] = (res + Demand[ZoneType.Retail]) * 0.5f;
 
             Stats.Buildings = built;
             Stats.UnderConstruction = constructing;
             Stats.Households = households;
             Stats.OccupiedHouseholds = occupied;
-            Stats.Population = (int)population;
+            Stats.Population = pop.Residents;
             Stats.Jobs = jobs;
             Stats.Workers = workers;
             Stats.ZonedCells = zoned;
@@ -208,7 +231,6 @@ namespace CityBuilder.Simulation.Zoning
         }
 
         int[] freeCells = new int[8];
-        /// <summary>Wie sehr die Stadt Zuzug anzieht (Jobs vs. Arbeitskräfte) – steuert den Einzug.</summary>
         float moveInPull = 45f;
 
         // ------------------------------------------------------------ Wachstum
@@ -306,6 +328,7 @@ namespace CityBuilder.Simulation.Zoning
                 Front = front,
                 Height = height,
                 FrontSegmentId = block.Segment.Id,
+                FrontT = block.Segment.ClosestT(center + front * (d * ZoneGrid.CellSize * 0.5f)),
                 Variant = rng.Next(1 << 20),
                 Households = Zones.HouseholdsPerCell(zone) > 0f ? Math.Max(1, (int)MathF.Round(Zones.HouseholdsPerCell(zone) * cells)) : 0,
                 Jobs = (int)MathF.Round(Zones.JobsPerCell(zone) * cells),
@@ -351,7 +374,11 @@ namespace CityBuilder.Simulation.Zoning
             {
                 var seg = network.FindNearestSegment(b.Entrance, 3f);
                 if (seg == null || seg.Type.Category != RoadCategory.City) remove.Add(b);
-                else b.FrontSegmentId = seg.Id;
+                else
+                {
+                    b.FrontSegmentId = seg.Id;
+                    b.FrontT = seg.ClosestT(b.Entrance);
+                }
             }
             foreach (var b in remove) RemoveBuilding(b);
         }

@@ -21,10 +21,17 @@ namespace CityBuilder.Simulation.Zoning
         /// <summary>Zufallswert für die Modellauswahl.</summary>
         public int Variant { get; internal set; }
 
+        /// <summary>Kapazität: Wohnungen bzw. Arbeitsplätze.</summary>
         public int Households { get; internal set; }
         public int Jobs { get; internal set; }
+
+        // G2: Belegung – wird vom Bürgersystem (Citizens.CitizenSystem) aus den einzelnen Bürgern gesetzt
         public int OccupiedHouseholds { get; internal set; }
+        public int Residents { get; internal set; }
+        /// <summary>Besetzte Arbeitsplätze (Einheimische + Einpendler).</summary>
         public int Workers { get; internal set; }
+        /// <summary>Anschlusspunkt an die Straße: Segment-Parameter t der Zufahrt auf <see cref="FrontSegmentId"/>.</summary>
+        public float FrontT { get; internal set; }
 
         /// <summary>Baufortschritt 0..1.</summary>
         public float Construction { get; internal set; }
