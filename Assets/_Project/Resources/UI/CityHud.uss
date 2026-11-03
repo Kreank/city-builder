@@ -1822,3 +1822,28 @@
     border-color: var(--cb-action);
     color: var(--cb-on-action);
 }
+
+/* ------------------------------------------------------------ Welt (Etappe 5): Weltkarte, Rohstoff-Untermenü */
+
+.cb-window--wide {
+    width: 780px;
+}
+
+.cb-image {
+    border-radius: 8px;
+    margin-bottom: 8px;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+.cb-flyout {
+    position: absolute;
+    left: 84px;
+    top: 136px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 12px;
+    padding-right: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}

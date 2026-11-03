@@ -38,6 +38,9 @@ namespace CityBuilder.Game.UI.Panels
 
         public WindowSlot Slot { get; }
 
+        /// <summary>Zusätzliche USS-Klasse des Rahmens, z. B. <c>cb-window--wide</c> für die Weltkarte.</summary>
+        public virtual string FrameClass => null;
+
         /// <summary>Host, an dem das Fenster hängt (gesetzt beim Anmelden).</summary>
         public WindowHost Host { get; internal set; }
 

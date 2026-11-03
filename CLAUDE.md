@@ -289,6 +289,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - G6 im HUD: Inspektor zeigt Bodenwert, Stufe + Fortschritt + „was fehlt“, Zustand (Übersicht) und alle Bodenwert-Faktoren mit
   Anforderungen der nächsten Stufe (Umfeld); linke Leiste Knopf „Bodenwert“ (F2); `UI/Hud/LandValueAlerts` meldet Aufstiege
   und Verfall gesammelt höchstens 1× je Spieltag.
+- Welt im HUD: `UI/Windows/WorldMapUiWindow` (mittig, breit, F4 oder Globus-Knopf oben; Textur über
+  `WorldMapWindow.TextureFor(mode)`, Umschalter Biome/Relief/Länder/Temperatur/Niederschlag/Rohstoffe (+ 7 Vorkommen),
+  Hover = Zelleninfo, Klick wählt ein Land: Hauptstadt, Primär-/Sekundärstärke, Bevölkerung, BIP, Saldo je Güterkategorie;
+  das IMGUI-Fenster bleibt Rückfall). Linke Leiste „Rohstoffe“ (F3) mit Untermenü der 7 Raster (`ShowResource`), Name in der
+  Ansicht-Anzeige. Obere Leiste: Jahreszeit, Tagestemperatur (+ Niederschlag) aus `world.Climate.Today` hinter dem Datum.
+  Inspektor: „Vorkommen“ (`DepositAt`) im Gebäude-Reiter Umfeld, beim Versorger und in der Stadtübersicht unter dem Mauszeiger.
+  Baukasten: `Ui.Image(texture, w, h, onClick, onHover)`, `GameWindow.FrameClass` (z. B. `cb-window--wide`).
 - Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
 ## Inspektor (Info-Modus, Taste C)
@@ -556,7 +563,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Darstellung:** Ressourcen-Ansicht im `EnvironmentOverlayView` (`Overlay.Resource`, **F3** schaltet Boden → … →
   Grundwasser → aus, Legende oben mit Gesamtmenge; `ShowResource(id)` für die HUD). `ScenicPropsView`: Bäume = Waldraster
   × 0,85 (gerodete Zellen lichten aus, Nachwuchs kommt zurück; Rückfall ohne Raster: alte Perlin-Verteilung).
-  `Game/WorldMap/WorldMapWindow` (IMGUI, **F4**, Begleiter am `RoadTool`): Textur 360 × 180 (×2), Modi Biome/Relief/Länder/
+  `Game/WorldMap/WorldMapWindow` (IMGUI nur noch Rückfall – neue UI: `WorldMapUiWindow`; **F4**, Begleiter am `RoadTool`): Textur 360 × 180 (×2), Modi Biome/Relief/Länder/
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
