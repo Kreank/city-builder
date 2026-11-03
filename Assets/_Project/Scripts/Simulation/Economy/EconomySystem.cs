@@ -241,7 +241,7 @@ namespace CityBuilder.Simulation.Economy
             {
                 foreach (var f in utilities.Facilities) d.Add(BudgetCategory.UtilityUpkeep, f.Type.UpkeepPerDay);
                 foreach (var l in utilities.Lines)
-                    d.Add(BudgetCategory.LineUpkeep, l.Length * UtilityCatalog.LineCostPerMeter(l.Kind) * EconomyRules.LineUpkeepShare);
+                    d.Add(BudgetCategory.LineUpkeep, l.Length * l.Type.CostPerMeter * EconomyRules.LineUpkeepShare);
             }
             foreach (var src in upkeepSources)
             {

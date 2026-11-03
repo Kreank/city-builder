@@ -17,8 +17,15 @@ namespace CityBuilder.Simulation.Utilities
         public float Height { get; internal set; }
         /// <summary>Aktuelle Leistung (Strom kW / Wasser m³/h).</summary>
         public float Output { get; internal set; }
-        /// <summary>Netz, zu dem das Bauwerk gehört (-1 = keins).</summary>
+        /// <summary>Netz, zu dem das Bauwerk gehört (-1 = keins). Umspannwerk: das Ortsnetz (Unterseite).</summary>
         public int NetworkId { get; internal set; } = -1;
+        // --- Netze selbst verlegt: Umspannwerk (abgeleitete Werte, werden je Durchlauf neu berechnet – nicht speichern)
+        /// <summary>Umspannwerk: Hochspannungsnetz der Oberseite (-1 = keins/kein Umspannwerk).</summary>
+        public int UpstreamNetworkId { get; internal set; } = -1;
+        /// <summary>Umspannwerk: aktuell ins Ortsnetz weitergegebene Leistung (kW, ≤ <see cref="UtilityFacilityType.Capacity"/>).</summary>
+        public float Load { get; internal set; }
+        public bool IsSubstation => Type.IsSubstation;
+        // --- Ende
 
         public UtilityKind Kind => Type.Kind;
         public Vector2 Side => new Vector2(-Front.Y, Front.X);
@@ -45,11 +52,20 @@ namespace CityBuilder.Simulation.Utilities
         public override string ToString() => $"{Type.DisplayName} #{Id}";
     }
 
-    /// <summary>Eine frei verlegte Stromleitung (oberirdisch) oder ein Wasserrohr (unterirdisch), gerade von A nach B.</summary>
+    /// <summary>
+    /// Eine selbst verlegte Leitung, gerade von A nach B: Wasserrohr/Abwasserkanal/Erdkabel (unterirdisch) oder
+    /// Hochspannungs-/Freileitung (oberirdisch mit Masten). Art und Spannungsebene stehen in <see cref="Type"/>.
+    /// Zu speichern: Id, <see cref="Type"/>.Id, A, B, Poles, Revision (NetworkId wird neu berechnet).
+    /// </summary>
     public sealed class UtilityLine
     {
         public int Id { get; internal set; }
-        public UtilityKind Kind { get; internal set; }
+        /// <summary>Leitungsart (Netze selbst verlegt): Kosten, Ebene, Masten oder unterirdisch.</summary>
+        public UtilityLineType Type { get; internal set; }
+        public UtilityKind Kind => Type.Kind;
+        public GridLevel Level => Type.Level;
+        /// <summary>Halbe Mast-Grundfläche + Rand dieser Leitungsart (für Platzprüfungen anderer Bauwerke).</summary>
+        public float PoleFootprintHalf => Type.PoleFootprintHalf;
         public Vector2 A { get; internal set; }
         public Vector2 B { get; internal set; }
         public int NetworkId { get; internal set; } = -1;
@@ -64,7 +80,7 @@ namespace CityBuilder.Simulation.Utilities
         public float Length => Vector2.Distance(A, B);
         public float DistanceTo(Vector2 p) => UtilityGeometry.DistanceToSegment(p, A, B);
 
-        public override string ToString() => $"{UtilityCatalog.LineName(Kind)} #{Id}";
+        public override string ToString() => $"{Type.DisplayName} #{Id}";
     }
 
     /// <summary>Geplanter Mast einer Stromleitung (Vorschau): Standort und ggf. warum er dort nicht stehen darf.</summary>
@@ -99,17 +115,33 @@ namespace CityBuilder.Simulation.Utilities
     {
         public int Id { get; internal set; }
         public UtilityKind Kind { get; internal set; }
-        /// <summary>Erzeugung aller Bauwerke im Netz.</summary>
+        /// <summary>Strom: Hochspannungsnetz oder Ortsnetz; Wasser/Abwasser immer <see cref="GridLevel.Distribution"/>.</summary>
+        public GridLevel Level { get; internal set; }
+        /// <summary>
+        /// Verfügbare Leistung im Netz: eigene Erzeugung (<see cref="Generation"/>) + über Umspannwerke bezogen
+        /// (<see cref="Imported"/>, nur Ortsnetz).
+        /// </summary>
         public float Production { get; internal set; }
-        /// <summary>Bedarf aller fertigen Gebäude im Netz.</summary>
+        /// <summary>Erzeugung der Bauwerke, die direkt in dieses Netz einspeisen.</summary>
+        public float Generation { get; internal set; }
+        /// <summary>Ortsnetz: über Umspannwerke aus der Hochspannung bezogen. Hochspannung: an Umspannwerke abgegeben.</summary>
+        public float Imported { get; internal set; }
+        /// <summary>Summe der Kapazitäten der angeschlossenen Umspannwerke (kW).</summary>
+        public float TransformerCapacity { get; internal set; }
+        /// <summary>Angeschlossene Umspannwerke (Ortsnetz: Unterseite, Hochspannung: Oberseite).</summary>
+        public int Substations { get; internal set; }
+        /// <summary>Bedarf: Ortsnetz/Rohrnetz = fertige Gebäude; Hochspannung = Anforderung der Umspannwerke.</summary>
         public float Demand { get; internal set; }
         /// <summary>Tatsächlich gelieferte Menge (≤ Erzeugung und ≤ Bedarf).</summary>
         public float Delivered { get; internal set; }
+        /// <summary>Erzeuger im Netz (Umspannwerke zählen in <see cref="Substations"/>).</summary>
         public int Facilities { get; internal set; }
         public int Buildings { get; internal set; }
         public int SuppliedBuildings { get; internal set; }
         public int Lines { get; internal set; }
 
+        /// <summary>Gibt es eine Quelle (Erzeuger oder Umspannwerk mit Hochspannung)?</summary>
+        public bool HasSource => Facilities > 0 || Imported > 0f || TransformerCapacity > 0f;
         public bool HasShortage => Demand > Production + 1e-3f;
         /// <summary>Deckungsgrad 0..1 (1 = alles versorgt).</summary>
         public float Coverage => Demand <= 0f ? 1f : MathF.Min(1f, Production / Demand);

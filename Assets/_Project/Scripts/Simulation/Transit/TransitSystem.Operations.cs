@@ -166,7 +166,7 @@ namespace CityBuilder.Simulation.Transit
                         return TransitBuildError.OverlapsFacility;
                 foreach (var l in utilities.Lines)
                     foreach (var p in l.Poles)
-                        if (ServiceGeometry.InRect(p, plan.Position, plan.Front, type.Width, type.Depth, Utilities.UtilitySystem.PoleFootprintHalf))
+                        if (ServiceGeometry.InRect(p, plan.Position, plan.Front, type.Width, type.Depth, l.PoleFootprintHalf))
                             return TransitBuildError.OverlapsPole;
             }
             if (!FindAccess(plan.Position, plan.Front, type.Width, type.Depth, out int seg, out float t)) return TransitBuildError.NoRoadAccess;
