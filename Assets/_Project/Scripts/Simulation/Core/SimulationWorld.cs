@@ -36,7 +36,39 @@ namespace CityBuilder.Simulation.Core
                 ? TerrainMap.Generate(Min, settings.SizeMeters, settings.TerrainCellSize, settings.TerrainSeed)
                 : TerrainMap.Flat(Min, settings.SizeMeters, settings.TerrainCellSize);
             Roads.Ground = Terrain;
+            Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
+        }
+
+        /// <summary>
+        /// Straßen haben Vorrang vor dem Gelände: unter einer ebenerdigen Fahrbahn liegt es exakt knapp darunter,
+        /// im Streifen daneben nie höher. Brücken und Tunnel (weit über/unter dem natürlichen Gelände) zählen nicht.
+        /// </summary>
+        float RoadRule(Vector2 p, float proposed)
+        {
+            float result = proposed;
+            float margin = Terrain.RoadMargin;
+            foreach (var s in Roads.Segments)
+            {
+                float reach = s.Type.HalfWidth + margin;
+                Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var min, out var max);
+                if (p.X < min.X - reach || p.Y < min.Y - reach || p.X > max.X + reach || p.Y > max.Y + reach) continue;
+
+                float t = s.ClosestT(p);
+                var q = s.Evaluate(t);
+                float d = Vector2.Distance(p, q);
+                if (d > reach) continue;
+
+                float road = s.HeightAt(t);
+                // Nur ebenerdige Abschnitte (bezogen aufs natürliche Gelände – stabil gegen spätere Änderungen)
+                float natural = road - Terrain.NaturalHeightAt(q);
+                float limit = s.FollowsTerrain ? TerrainMap.MaxCutFill + 0.5f : TerrainMap.ConformRange + 0.5f;
+                if (natural > limit || natural < -limit) continue;
+
+                float surface = road - TerrainMap.UnderRoad;
+                result = d <= s.Type.HalfWidth ? surface : MathF.Min(result, surface);
+            }
+            return result;
         }
 
         /// <summary>Verkehr (Spurgraph, Regeln, Fahrzeuge). Gesetzt von <see cref="CreateDefault"/>.</summary>

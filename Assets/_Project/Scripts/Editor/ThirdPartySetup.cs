@@ -27,6 +27,9 @@ namespace CityBuilder.Editor
             "Assets/Downtown Game Studio",
             "Assets/Nebula - Free low poly car pack",
             "Assets/Vladislav Simakov",
+            "Assets/Loading Games",          // Toon City Pack
+            "Assets/Buildings",              // Lowpoly Modern City Buildings Set
+            "Assets/Simple Vehicle Pack",
         };
 
         /// <summary>Mitgelieferte Skripte, die wir nicht wollen (eigene Kamera etc.).</summary>
@@ -35,6 +38,8 @@ namespace CityBuilder.Editor
             "Triangularity/ColorfulCity/Scripts/SimpleCameraController.cs",
             // Vorkompilierter Inspector-Helfer, nutzt in Unity 6 entfernte API (PrefabStage) → Fehler bei jedem Start
             "Triangularity/ColorfulCity/Scripts/libs/Editor",
+            // Demo-Skripte (alte Input-API, eigene Ampel-/Lichtlogik)
+            "Loading Games/Toon City Pack/Demo/Scripts",
         };
 
         [MenuItem("City Builder/Third Party/Organize And Convert")]

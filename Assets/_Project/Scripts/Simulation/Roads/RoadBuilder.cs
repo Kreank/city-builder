@@ -177,7 +177,14 @@ namespace CityBuilder.Simulation.Roads
             {
                 plan.Profile = Profiles.FollowTerrain(network.Ground, plan.Start, plan.Control, plan.End, plan.Length,
                     plan.StartHeight, plan.EndHeight, type.MaxSlope);
-                if (plan.Profile == null) { plan.Error = RoadBuildError.TooSteep; return plan; }
+                if (plan.Profile == null)
+                {
+                    // Grund nennen: Wasser im Weg (Ufer zu niedrig für Brückenrampe) oder einfach zu steil
+                    bool water = false;
+                    for (int i = 0; i <= 16 && !water; i++) water = network.Ground.IsWater(Bezier.Evaluate(plan.Start, plan.Control, plan.End, i / 16f));
+                    plan.Error = water ? RoadBuildError.OverWater : RoadBuildError.TooSteep;
+                    return plan;
+                }
             }
             ElevationRange(network.Ground, plan, out float minElev, out float maxElev);
             plan.Cost = plan.Length * type.CostPerMeter * CostFactor(minElev, maxElev);

@@ -105,7 +105,15 @@ namespace CityBuilder.Simulation.Roads
                 }
             }
 
-            // Steigung begrenzen: vorwärts und rückwärts klemmen
+            // Mindesthöhe über Wasser, steigungsgerecht in beide Richtungen ausgebreitet (Brückenrampen)
+            var floor = new float[n];
+            for (int k = 0; k < n; k++) floor[k] = water[k] ? ground.WaterLevel + WaterClearance : float.MinValue;
+            for (int k = 1; k < n; k++) floor[k] = MathF.Max(floor[k], floor[k - 1] - g);
+            for (int k = n - 2; k >= 0; k--) floor[k] = MathF.Max(floor[k], floor[k + 1] - g);
+            if (startHeight < floor[0] - 0.01f || endHeight < floor[n - 1] - 0.01f) return null; // Ufer zu niedrig für die Rampe
+            for (int k = 0; k < n; k++) smooth[k] = MathF.Max(smooth[k], floor[k]);
+
+            // Steigung begrenzen: vorwärts und rückwärts klemmen (hält die Mindesthöhe ein, da sie selbst steigungsgerecht ist)
             for (int k = 1; k < n; k++) smooth[k] = Math.Clamp(smooth[k], smooth[k - 1] - g, smooth[k - 1] + g);
             smooth[n - 1] = endHeight;
             for (int k = n - 2; k >= 0; k--) smooth[k] = Math.Clamp(smooth[k], smooth[k + 1] - g, smooth[k + 1] + g);

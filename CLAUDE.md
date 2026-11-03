@@ -98,6 +98,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - G3 Strom & Wasser (Erzeugung, Netze, Verbrauch, Folgen bei Ausfall)
    - G4 Dienste: Polizei, Feuerwehr, Gesundheit, Bildung, Parks, Müll
    - G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
+   - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
+     **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - G6 Bodenwert, Zufriedenheit, Ausbaustufen
 5. Welt: Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator)
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte

@@ -107,9 +107,30 @@ namespace CityBuilder.Simulation.Environment
         /// Passt das Gelände an eine ebenerdige Straße an: unter der Straße auf Fahrbahnhöhe, daneben
         /// weicher Übergang (Böschung). Brücken-, Trog- und Tunnelabschnitte bleiben unberührt.
         /// </summary>
+        /// <summary>So tief liegt das Gelände unter einer ebenerdigen Fahrbahn (damit es nie durchscheint).</summary>
+        public const float UnderRoad = 0.12f;
+
+        /// <summary>
+        /// Vorrangregel der Straßen: (Punkt, vorgeschlagene Höhe) → erlaubte Höhe. Unter ebenerdigen Straßen
+        /// liegt das Gelände exakt knapp unter der Fahrbahn, bis eine Rasterzelle daneben darf es nicht höher sein.
+        /// Wird von der Welt gesetzt und bei jeder Geländeänderung (Straßen, Grundstücke) angewandt.
+        /// </summary>
+        public Func<Vector2, float, float> RoadRule { get; set; }
+
+        /// <summary>Breite des Streifens neben der Fahrbahn, der nicht über die Straße ragen darf.</summary>
+        public float RoadMargin => CellSize + 0.5f;
+
+        float ApplyRoadRule(int idx, float proposed)
+        {
+            if (RoadRule == null) return proposed;
+            int x = idx % Resolution, y = idx / Resolution;
+            return RoadRule(PointAt(x, y), proposed);
+        }
+
         public void ConformTo(RoadSegment segment)
         {
-            float hw = segment.Type.HalfWidth + 1f;
+            // Innen (Fahrbahn + eine Rasterzelle) exakt auf Straßenhöhe, damit kein Rasterdreieck über die Kante ragt
+            float hw = segment.Type.HalfWidth + RoadMargin;
             float reach = hw + Band;
             // Geländefolgende Straßen: Damm/Einschnitt bis 6 m (darüber hinaus Brücke bzw. Trog/Tunnel)
             float range = segment.FollowsTerrain ? MaxCutFill : ConformRange;
@@ -122,7 +143,7 @@ namespace CityBuilder.Simulation.Environment
             {
                 float t = i / (float)samples;
                 var c = segment.Evaluate(t);
-                float road = segment.HeightAt(t) - 0.03f;
+                float road = segment.HeightAt(t) - UnderRoad;
                 float e = road - HeightAt(c);
                 if (MathF.Abs(e) > range || NaturalHeightAt(c) < WaterLevel) continue;
 
@@ -146,8 +167,15 @@ namespace CityBuilder.Simulation.Environment
             bool changed = false;
             foreach (var kv in weights)
             {
-                float target = Lerp(current[kv.Key], kv.Value.road, kv.Value.w);
-                if (MathF.Abs(target - current[kv.Key]) < 0.01f) continue;
+                float road = kv.Value.road;
+                if (kv.Value.w >= 1f)
+                {
+                    // Unter der Fahrbahn die genaue Höhe am nächsten Punkt der Straße (nicht die des Abtastpunkts)
+                    var p = PointAt(kv.Key % Resolution, kv.Key / Resolution);
+                    road = segment.HeightAt(segment.ClosestT(p)) - UnderRoad;
+                }
+                float target = ApplyRoadRule(kv.Key, Lerp(current[kv.Key], road, kv.Value.w));
+                if (MathF.Abs(target - current[kv.Key]) < 0.005f) continue;
                 current[kv.Key] = target;
                 changed = true;
             }
@@ -180,7 +208,8 @@ namespace CityBuilder.Simulation.Environment
                 int idx = y * Resolution + x;
                 if (natural[idx] < WaterLevel) continue;
                 float w = outside <= 0f ? 1f : 1f - SmoothStep(0f, band, outside);
-                float target = Lerp(current[idx], height, w);
+                // Grundstücke dürfen das Gelände nicht über benachbarte Straßen heben
+                float target = ApplyRoadRule(idx, Lerp(current[idx], height, w));
                 if (MathF.Abs(target - current[idx]) < 0.01f) continue;
                 current[idx] = target;
                 changed = true;

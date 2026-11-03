@@ -51,10 +51,16 @@ namespace CityBuilder.Editor
 
         static readonly Spec[] ResLow = Many("SimplePoly", "Building_House_0{0}_color01", 1, 4, 12f)
             .Concat(Many("SimplePoly", "Building_House_0{0}_color02", 1, 4, 12f))
-            .Concat(Many("SimplePoly", "Building_House_0{0}_color03", 1, 4, 12f)).ToArray();
+            .Concat(Many("SimplePoly", "Building_House_0{0}_color03", 1, 4, 12f))
+            .Concat(Names(Toon, 12f, "suburban-house-A", "suburban-house-B", "suburban-house-C", "suburban-house-D", "suburban-house-E"))
+            .Concat(Names(Modern, 12f, "house_1", "house_2", "house_3", "house_4", "house_5", "house_6"))
+            .Concat(Many(Modern, "house_2_v_{0}", 1, 8, 12f))
+            .Concat(Many(Modern, "house_2_v_{0}", 10, 34, 12f)).ToArray();
         static readonly Spec[] ResMedium = Many("SimplePoly", "Building_Residential_color0{0}", 1, 3, 20f)
             .Concat(Many(Panda, "Env_ResidentBuilding_0{0}", 1, 6, 20f))
-            .Concat(new[] { B(Colorful, "Building4_a_Medium_LP_0", 20f), B(Colorful, "Building12_a_MediumBlock_LP_0", 22f) }).ToArray();
+            .Concat(new[] { B(Colorful, "Building4_a_Medium_LP_0", 20f), B(Colorful, "Building12_a_MediumBlock_LP_0", 22f) })
+            .Concat(Names(Toon, 22f, "cb-apartment-A", "cb-apartment-B", "cb-apartment-C", "cb-apartment-D", "cb-apartment-E",
+                "cb-apartment-F", "cb-apartment-G", "cb-apartment-H", "cb-apartment-J")).ToArray();
         static readonly Spec[] ResHigh = Many("SimplePoly", "Building Sky_small_color0{0}", 1, 3, 24f)
             .Concat(new[] { B(Colorful, "Building3_a_Tall1_LP_0", 24f), B(Colorful, "Building7_a_Tall2_LP_0", 24f) }).ToArray();
         static readonly Spec[] MixedB = Many(Panda, "Env_CommercialBuilding_0{0}", 1, 4, 20f)
@@ -64,16 +70,29 @@ namespace CityBuilder.Editor
             "Building_Bakery", "Building_Bar", "Building_Books Shop", "Building_Chicken Shop", "Building_Clothing", "Building_Coffee Shop",
             "Building_Drug Store", "Building_Fast Food", "Building_Fruits  Shop", "Building_Gift Shop", "Building_Music Store", "Building_Pizza",
             "Building_Restaurant", "Building_Shoes Shop", "Building_Super Market",
-        }.Select(n => B("SimplePoly", n, n.Contains("Super") ? 22f : 14f)).ToArray();
+        }.Select(n => B("SimplePoly", n, n.Contains("Super") ? 22f : 14f))
+            .Concat(Names(Toon, 14f, "commercial-building-coffee-shop", "commercial-building-fastfood-shop",
+                "commercial-building-ice-cream-shop", "commercial-building-pizza-shop"))
+            .Concat(new[] { B(Toon, "commercial-building-shopping-center", 30f) })
+            .Concat(Names(Modern, 16f, "appliances_store", "bookstore", "car_store", "chemical_store", "clothing_store", "computer_store",
+                "cosmetic_shop", "electronic_store", "furniture_store", "grocery_store", "heavy_equipment_store", "industrial_shop",
+                "metal_store", "office_supply_store", "pharmacy", "rubber_store", "sport_store", "tobacco_shop", "toy_store", "video_games_store"))
+            .ToArray();
         static readonly Spec[] OfficeB = Many("SimplePoly", "Building Sky_big_color0{0}", 1, 3, 28f)
             .Concat(Many(Panda, "Env_CompanyBuilding_0{0}", 1, 4, 26f))
-            .Concat(new[] { B(Colorful, "Building1_a_MainHall_LP_0", 28f), B(Colorful, "Building6_a_Cube_LP_0", 24f) }).ToArray();
+            .Concat(new[] { B(Colorful, "Building1_a_MainHall_LP_0", 28f), B(Colorful, "Building6_a_Cube_LP_0", 24f) })
+            .Concat(Names(Toon, 26f, "commercial-building-office", "commercial-building-hotel"))
+            .Concat(Names(Modern, 24f, "software_company", "publisher", "studio_video_games", "movie_studio")).ToArray();
         static readonly Spec[] IndustryB = new[]
         {
             B("SimplePoly", "Building_Factory", 30f), B("SimplePoly", "Building_Auto Service", 22f),
             B(Colorful, "Building11_a_Hangar_LP_0", 30f), B(Colorful, "Building13_a_Workshop_LP_0", 24f),
             B(Colorful, "Building5_a_Long2_LP_0", 28f), B(Colorful, "Building8_a_Long2_LP_0", 28f),
-        };
+        }
+            .Concat(Names(Toon, 28f, "industrial-buildings-building-A", "industrial-buildings-building-B", "industrial-buildings-building-C"))
+            .Concat(Names(Modern, 28f, "appliances_factory", "car_factory", "chemical_laboratory", "cosmetic_laboratory", "electronics_factory",
+                "food_factory", "furniture_factory", "heavy_equipment_factory", "industrial_factory", "office_supplies_factory",
+                "pharmaceutical_factory", "sawmill", "sewing", "sports_equipment_factory", "toy_factory")).ToArray();
 
         const string SimplePoly = "SimplePoly City - Low Poly Assets/Prefab/Vehicles/Vehicle with Static Wheels";
         const string Nebula = "Nebula - Free low poly car pack/Prefabs/Simple Vehicles";
@@ -82,8 +101,18 @@ namespace CityBuilder.Editor
         const string Nature = "Nature Pack - Low Polly Trees & Bushes/Prefabs";
         const string Modular = "ModularLowpolyStreetsFree/Prefabs/Other";
 
+        const string Toon = "Toon City Pack";
+        const string SimpleCars = "Simple Vehicle Pack/Prefabs";
+        const string Modern = "ThirdParty/Buildings";
+
+        static Spec[] Names(string hint, float size, params string[] names) => names.Select(n => B(hint, n, size)).ToArray();
+
         static readonly Spec[] Cars =
         {
+            V(Toon, "civil-car-A", 4.4f), V(Toon, "civil-car-B", 4.4f), V(Toon, "civil-car-C", 4.5f), V(Toon, "civil-car-D", 4.5f),
+            V(Toon, "taxi", 4.5f),
+            V(SimpleCars, "Car_1", 4.4f), V(SimpleCars, "Car_2", 4.4f), V(SimpleCars, "Car_3", 4.5f), V(SimpleCars, "Car_4", 4.6f),
+            V(SimpleCars, "Taxi", 4.5f),
             V(SimplePoly, "Vehicle_Car_color01", 4.4f), V(SimplePoly, "Vehicle_Car_color02", 4.4f), V(SimplePoly, "Vehicle_Car_color03", 4.4f),
             V(SimplePoly, "Vehicle_SUV_color01", 4.7f), V(SimplePoly, "Vehicle_SUV_color02", 4.7f), V(SimplePoly, "Vehicle_SUV_color03", 4.7f),
             V(SimplePoly, "Vehicle_Taxi", 4.5f),
@@ -95,8 +124,13 @@ namespace CityBuilder.Editor
         {
             V(Nebula, "LorryCargo", 10f, 2.6f), V(Nebula, "LorryCargo", 10f, 2.6f),
             V(SimplePoly, "Vehicle_Truck_color01", 9f, 2.6f), V(SimplePoly, "Vehicle_Truck_color02", 9f, 2.6f),
+            V(Toon, "civil-truck-A", 9f, 2.6f), V(Toon, "civil-truck-B", 10f, 2.6f),
         };
-        static readonly Spec[] Buses = { V(Vlad, "Autobus_Mesh", 12f, 2.6f) };
+        static readonly Spec[] Buses =
+        {
+            V(Vlad, "Autobus_Mesh", 12f, 2.6f), V(Toon, "city-bus", 12f, 2.6f),
+            V(SimpleCars, "Bus_1", 12f, 2.6f), V(SimpleCars, "Bus_2", 12f, 2.6f),
+        };
         static readonly Spec[] Trams = { V(Vlad, "Tram_Mesh", 29f, 2.65f) };
         static readonly Spec[] Lamps = { P(Colorful, "StreetLamp2_a_Single_LP_0", 7f), P(Colorful, "StreetLamp1_d_Single_LP_0", 7f) };
         static readonly Spec[] Lights = { P(Modular, "Pole_traffic_light", 4.8f), P(Modular, "Traffic_light", 4.8f) };
@@ -117,8 +151,13 @@ namespace CityBuilder.Editor
 
             var catalog = ScriptableObject.CreateInstance<AssetCatalog>();
             AssetDatabase.CreateAsset(catalog, AssetPath);
+            // Prefabs und reine Modelldateien (manche Pakete liefern nur FBX); Mobil-Varianten auslassen
             var allPrefabs = AssetDatabase.FindAssets("t:Prefab", new[] { ThirdPartySetup.Root })
-                .Select(AssetDatabase.GUIDToAssetPath).ToList();
+                .Concat(AssetDatabase.FindAssets("t:Model", new[] { ThirdPartySetup.Root }))
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => !p.Contains("/Mobile/") && !p.Contains("_mobile"))
+                .OrderBy(p => p.EndsWith(".prefab") ? 0 : 1) // Prefab vor gleichnamigem Modell
+                .ToList();
 
             catalog.Cars = BakeAll(catalog, allPrefabs, Cars);
             catalog.Trucks = BakeAll(catalog, allPrefabs, Trucks);

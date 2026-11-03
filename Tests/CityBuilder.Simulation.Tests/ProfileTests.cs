@@ -82,6 +82,56 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
+        public void TerrainNeverPokesThroughRoad_OnSlopes_NearBuildingsAndCrossings()
+        {
+            var world = SimulationWorld.CreateDefault(new WorldSettings { GenerateTerrain = true, TerrainSeed = 7 });
+            var t = world.Terrain;
+            var net = world.Roads;
+            // Mehrere Straßen kreuz und quer durchs hügelige Gelände (am Rand stärker geneigt)
+            var built = new System.Collections.Generic.List<RoadSegment>();
+            void Road(Vector2 a, Vector2 b)
+            {
+                var plan = RoadBuilder.Plan(net, a, 8f, null, b, 8f, RoadCatalog.CityTwoLane, t.HeightAt(a), t.HeightAt(b), followTerrain: true);
+                if (plan.IsValid) built.AddRange(RoadBuilder.Build(net, plan));
+                else output.WriteLine($"Straße {a} → {b}: {plan.Error}");
+            }
+            Road(new Vector2(-600, 300), new Vector2(-200, 380));
+            Road(new Vector2(-500, 150), new Vector2(-300, 160));   // quer über den Fluss → automatische Brücke
+            Road(new Vector2(300, -500), new Vector2(620, -300));
+            Road(new Vector2(-100, -100), new Vector2(150, 60));
+            Assert.True(net.SegmentCount >= 4);
+
+            // Zonen + Wachstum: Grundstücke ebnen Gelände neben den Straßen ein
+            world.City.Paint(new Vector2(-400, 340), 200f, Zoning.ZoneType.ResidentialLow);
+            for (int i = 0; i < 400; i++) world.Step();
+
+            int checkedPoints = 0;
+            float worst = float.MinValue;
+            foreach (var s in net.Segments)
+            {
+                for (int i = 0; i <= 40; i++)
+                {
+                    float tt = i / 40f;
+                    var c = s.Evaluate(tt);
+                    float road = s.HeightAt(tt);
+                    float natural = road - t.NaturalHeightAt(c);
+                    if (System.MathF.Abs(natural) > TerrainMap.MaxCutFill) continue; // Brücke/Tunnel
+                    var right = s.Right(tt);
+                    foreach (float off in new[] { -s.Type.HalfWidth - 2f, -s.Type.HalfWidth, 0f, s.Type.HalfWidth, s.Type.HalfWidth + 2f })
+                    {
+                        var p = c + right * off;
+                        float over = t.HeightAt(p) - (road + 0.05f); // Fahrbahnoberfläche
+                        worst = System.MathF.Max(worst, over);
+                        checkedPoints++;
+                    }
+                }
+            }
+            output.WriteLine($"geprüft {checkedPoints} Punkte, Gebäude {world.City.Stats.Buildings}, schlimmster Überstand {worst:0.000} m");
+            Assert.True(checkedPoints > 200);
+            Assert.True(worst <= 0.001f, $"Gelände ragt {worst:0.00} m über die Fahrbahn");
+        }
+
+        [Fact]
         public void Split_KeepsProfile()
         {
             var (net, terrain, segs) = BuildAcross(Bump(5f));

@@ -47,7 +47,7 @@ namespace CityBuilder.Simulation.Tests
 
             RoadBuilder.Build(world.Roads, RoadBuilder.Plan(world.Roads, new Vector2(-100, 0), 0f, null, new Vector2(100, 0), 0f,
                 RoadCatalog.CityTwoLane, 0f, 0f));
-            Assert.InRange(hilly.HeightAt(new Vector2(0, 0)), -0.1f, 0.05f);   // unter der Straße abgetragen
+            Assert.InRange(hilly.HeightAt(new Vector2(0, 0)), -0.15f, -0.05f); // unter der Straße abgetragen (knapp unter Fahrbahn)
             Assert.InRange(hilly.HeightAt(new Vector2(0, 40)), 2.9f, 3.01f);  // weit weg unverändert
 
             // Brücke 10 m über Gelände: keine Anpassung
