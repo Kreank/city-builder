@@ -24,8 +24,10 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud : MonoBehaviour
     {
-        /// <summary>Platzhalter: Die Simulation kennt noch keinen Stadtnamen.</summary>
-        public const string CityName = "Neustadt";
+        /// <summary>Spielstart: Name der Spielerstadt aus der Simulation (<c>World.Realm</c>, im Spielstand; früher Platzhalter).</summary>
+        public static string CityName => activeRunner != null && activeRunner.World != null
+            ? activeRunner.World.Realm.CityName : CityBuilder.Simulation.World.PlayerRealm.DefaultCityName;
+        static SimulationRunner activeRunner;
 
         const string ThemeResource = "UI/CityTheme";
         const string StyleResource = "UI/CityHud";
@@ -90,6 +92,7 @@ namespace CityBuilder.Game.UI.Hud
         {
             tool = roadTool;
             runner = roadTool.Runner;
+            activeRunner = runner; // Spielstart: Stadtname
             envOverlay = FindAnyObjectByType<EnvironmentOverlayView>();
             trafficOverlay = GetComponent<TrafficOverlayView>();
             utilityOverlay = GetComponent<UtilityOverlayView>();
@@ -380,12 +383,14 @@ namespace CityBuilder.Game.UI.Hud
             logo.Add(Icon(HudIconKind.Logo, "cb-icon--l"));
             brand.Add(logo);
             var names = Container("cb-col");
-            names.Add(Text(CityName, "cb-city-name", "cb-heading"));
+            var cityLabel = Text(CityName, "cb-city-name", "cb-heading");
+            names.Add(cityLabel);
             var date = Text("", "cb-date");
             names.Add(date);
             brand.Add(names);
             topBar.Add(brand);
             slowRefresh.Add(() => date.text = DateText() + ClimateText());
+            slowRefresh.Add(() => { string n = CityName; if (cityLabel.text != n) cityLabel.text = n; }); // Spielstart: Stadtname
 
             // Spieltempo (Leertaste/1/2/3 bleiben im SimulationRunner)
             var speed = Container("cb-segment");

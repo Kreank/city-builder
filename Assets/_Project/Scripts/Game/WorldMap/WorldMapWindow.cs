@@ -148,6 +148,7 @@ namespace CityBuilder.Game.WorldMap
             if (p.IsRiver(i)) sb.Append(" · Fluss");
             var c = p.CountryOfCell(i);
             if (c != null) sb.Append($"\nRegion <b>{p.Regions[p.RegionOf[i]].Name}</b>, Land <b>{c.Name}</b>{(c.IsPlayer ? " (Spieler)" : "")}");
+            else if (p.RegionOf[i] >= 0) sb.Append($"\nRegion <b>{p.Regions[p.RegionOf[i]].Name}</b> · freies Land (unbesiedelt)");
             sb.Append($"\nBoden {p.Fertility[i]:0.00} · Wald {p.Forest[i]:0.00} · Erz {p.Ore[i]:0.00} · Kohle {p.Coal[i]:0.00} · Öl {p.Oil[i]:0.00} · " +
                       $"Sand {p.Sand[i]:0.00} · Grundwasser {p.Groundwater[i]:0.00}");
             return sb.ToString();
@@ -280,7 +281,7 @@ namespace CityBuilder.Game.WorldMap
                 {
                     if (!land) return ocean;
                     var country = p.CountryOfCell(i);
-                    uint rgb = country.Color;
+                    uint rgb = country != null ? country.Color : FreeLandColor; // Spielstart: freies Land hell/neutral
                     var c = new Color32((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, 255);
                     // Grenzen dunkler
                     for (int k = 0; k < 4; k++)
@@ -320,6 +321,12 @@ namespace CityBuilder.Game.WorldMap
                 }
             }
         }
+
+        /// <summary>Farbe eines Bioms (wie in der Biom-Ansicht) – auch für die Karte im Neues-Spiel-Fenster.</summary>
+        public static Color32 BiomeColor(Biome b) => BiomeColors[Mathf.Clamp((int)b, 0, BiomeColors.Length - 1)];
+
+        /// <summary>Spielstart: unbesiedeltes Land ohne Staat (Länder-Ansicht).</summary>
+        public const uint FreeLandColor = 0xD8D2C0;
 
         static Color32 ResourceColor(Mode m)
         {

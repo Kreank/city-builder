@@ -54,6 +54,7 @@ namespace CityBuilder.Simulation.Core
                 resources = RegionMapping.ResourcesFor(region);
                 terrainSeed = unchecked(settings.TerrainSeed + region.Id * 7919);
             }
+            Realm = new PlayerRealm(Planet, settings.CityName); // Spielstart: Stadtname, Spieler-Gebiet („Freie Stadt …“)
             Terrain = settings.GenerateTerrain
                 ? TerrainMap.Generate(Min, settings.SizeMeters, settings.TerrainCellSize, terrainSeed, terrainParams)
                 : TerrainMap.Flat(Min, settings.SizeMeters, settings.TerrainCellSize);
@@ -124,6 +125,9 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Ressourcen-Raster der Stadtkarte (Boden, Wald, Erz, Kohle, Öl, Sand, Grundwasser) – immer gesetzt.</summary>
         public ResourceMap Resources { get; }
         // --- Ende Welt
+
+        /// <summary>Spielstart: Gebiet des Spielers (Stadtname, Stadtstaat → später Land) – immer gesetzt.</summary>
+        public PlayerRealm Realm { get; }
 
         /// <summary>Verkehr (Spurgraph, Regeln, Fahrzeuge). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public TrafficSystem Traffic { get; private set; }

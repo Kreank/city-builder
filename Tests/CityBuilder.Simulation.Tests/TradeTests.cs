@@ -571,7 +571,8 @@ namespace CityBuilder.Simulation.Tests
                              $"beendet (behalten) {t.History.Count}, Lieferungen unterwegs {t.InTransit.Count}, Commands {t.CommandLog.Count}");
             foreach (var n in t.Nations.Take(8))
                 output.WriteLine($"  {n.Country.Name,-14} {n.Personality.Describe(),-50} Export {n.ExportValue / 1e6:0.0} M€ · Import {n.ImportValue / 1e6:0.0} M€ · Zoll {n.Tariffs.General * 100:0} %");
-            Assert.Equal(36, p.Countries.Count);
+            Assert.Equal(37, p.Countries.Count); // 36 NPC-Länder + Stadtstaat des Spielers (Spielstart)
+            Assert.True(p.PlayerCountry.IsCityState);
             Assert.True(total > 50, $"es wird gehandelt ({total})");
             Assert.True(year < 15000, $"1 Jahr in {year:0} ms");
         }

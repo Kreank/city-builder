@@ -37,5 +37,10 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Auflösung/Anzahl Regionen und Länder; null = Standard.</summary>
         public World.PlanetSettings Planet;
         // --- Ende Welt
+
+        // --- Spielstart & Startregion
+        /// <summary>Name der Spielerstadt (null = „Neustadt“); der Stadtstaat heißt „Freie Stadt {Name}“. Laufend: <c>SimulationWorld.Realm</c>.</summary>
+        public string CityName;
+        // --- Ende Spielstart
     }
 }

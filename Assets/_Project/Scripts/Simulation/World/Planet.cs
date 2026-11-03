@@ -144,34 +144,88 @@ namespace CityBuilder.Simulation.World
             return r;
         }
 
+        /// <summary>Land einer Zelle; null für Meer und für unbesiedeltes (freies) Land.</summary>
         public Country CountryOfCell(int i)
         {
             int r = RegionOf[i];
-            return r >= 0 ? Countries[Regions[r].CountryId] : null;
+            return r >= 0 && Regions[r].CountryId >= 0 ? Countries[Regions[r].CountryId] : null;
         }
 
         // ------------------------------------------------------------ Startregion
 
-        /// <summary>Setzt die Region der Spielerstadt (deren Land wird Spieler-Land).</summary>
-        public void SetStartRegion(int regionId)
+        // --- Spielstart & Startregion: freies Land, Spieler als Stadtstaat
+        /// <summary>Anzahl der Regionen ohne Land (unbesiedelt, „frei“).</summary>
+        public int FreeRegionCount
         {
-            if (regionId < 0 || regionId >= Regions.Count) throw new ArgumentOutOfRangeException(nameof(regionId));
-            if (StartRegionId >= 0) Countries[Regions[StartRegionId].CountryId].IsPlayer = false;
-            StartRegionId = regionId;
-            Countries[Regions[regionId].CountryId].IsPlayer = true;
+            get { int n = 0; foreach (var r in Regions) if (r.IsFree) n++; return n; }
+        }
+
+        /// <summary>Kann der Spieler hier (neu) beginnen? Freie Region oder die Region seines Stadtstaats.</summary>
+        public static bool IsStartable(Region r) => r.IsFree || (r.Country != null && r.Country.IsCityState);
+
+        /// <summary>Stadtstaat des Spielers (null, wenn der Spieler in einem NPC-Land begonnen hat – alte Spielstände).</summary>
+        public Country PlayerCityState
+        {
+            get { foreach (var c in Countries) if (c.IsCityState) return c; return null; }
         }
 
         /// <summary>
+        /// Setzt die Region der Spielerstadt. <b>Freie Region</b> (Normalfall): Der Spieler wird ein eigener
+        /// <b>Stadtstaat</b> (<see cref="Country.IsCityState"/>, hinten an <see cref="Countries"/> angehängt, eigene kleine
+        /// Volkswirtschaft) – erneuter Aufruf mit einer anderen freien Region verlegt ihn. <b>Region eines NPC-Landes</b>
+        /// (alte Spielstände ohne freies Land): dieses Land wird Spieler-Land wie bisher. Vor dem Anlegen des Handels aufrufen.
+        /// </summary>
+        public void SetStartRegion(int regionId)
+        {
+            if (regionId < 0 || regionId >= Regions.Count) throw new ArgumentOutOfRangeException(nameof(regionId));
+            var region = Regions[regionId];
+            var cityState = PlayerCityState;
+            if (cityState != null)
+            {
+                if (!region.IsFree && region.CountryId != cityState.Id)
+                    throw new InvalidOperationException("Der Stadtstaat kann nur in eine freie Region verlegt werden.");
+                StartRegionId = regionId;
+                PlanetGenerator.PlaceCityState(this, cityState, region);
+                return;
+            }
+            if (StartRegionId >= 0) Countries[Regions[StartRegionId].CountryId].IsPlayer = false;
+            StartRegionId = regionId;
+            if (region.IsFree)
+                PlanetGenerator.PlaceCityState(this, null, region);
+            else
+                Countries[region.CountryId].IsPlayer = true;
+        }
+
+        /// <summary>Region einem Land zuordnen (null = frei); hält <see cref="Region.CountryId"/>/<see cref="Region.Country"/> und <see cref="Country.Regions"/> gleich.</summary>
+        internal void AssignRegion(Region r, Country c)
+        {
+            if (r.Country == c && r.CountryId == (c?.Id ?? -1)) return;
+            r.Country?.Regions.Remove(r.Id);
+            r.Country = c;
+            r.CountryId = c?.Id ?? -1;
+            if (c != null && !c.Regions.Contains(r.Id))
+            {
+                c.Regions.Add(r.Id);
+                c.Regions.Sort();
+            }
+        }
+        // --- Ende Spielstart
+
+        /// <summary>
         /// Gute Startregion: gemäßigtes Klima, fruchtbar, Fluss oder Küste (Wasser für Pumpe/Hafen), nicht zu
-        /// zerklüftet. Deterministisch (bei Gleichstand kleinste Id).
+        /// zerklüftet. Gibt es freies Land, nur unter den freien Regionen (Spieler startet als Stadtstaat).
+        /// Deterministisch (bei Gleichstand kleinste Id).
         /// </summary>
         public int SuggestStartRegion()
         {
             int best = 0;
             float bestScore = float.MinValue;
+            bool anyFree = false;
+            foreach (var r in Regions) if (IsStartable(r)) { anyFree = true; break; }
             foreach (var r in Regions)
             {
                 if (r.Cells.Count < 4) continue;
+                if (anyFree && !IsStartable(r)) continue;
                 float climate = 1f - MathF.Min(1f, MathF.Abs(r.MeanTemperature - 11f) / 12f);
                 float water = (r.HasRiver ? 0.6f : 0f) + (r.IsCoastal ? 0.4f : 0f);
                 float relief = 1f - MathF.Min(1f, MathF.Abs(r.Ruggedness - 300f) / 900f);
@@ -187,7 +241,12 @@ namespace CityBuilder.Simulation.World
     {
         public int Id { get; internal set; }
         public string Name { get; internal set; }
+        /// <summary>Land der Region; −1 = unbesiedeltes, freies Land (dort kann der Spieler eine Stadt gründen).</summary>
         public int CountryId { get; internal set; } = -1;
+        /// <summary>Land der Region (null = frei). Gleich zu <see cref="CountryId"/>.</summary>
+        public Country Country { get; internal set; }
+        /// <summary>Unbesiedeltes Land ohne Staat (Status „frei“).</summary>
+        public bool IsFree => CountryId < 0;
         public List<int> Cells { get; } = new List<int>();
         /// <summary>Benachbarte Regionen über Land.</summary>
         public List<int> Neighbors { get; } = new List<int>();
@@ -241,6 +300,11 @@ namespace CityBuilder.Simulation.World
         public CountryProfile Profile { get; } = new CountryProfile();
         public NationEconomy Economy { get; internal set; }
         public bool IsPlayer { get; internal set; }
+        /// <summary>
+        /// Spieler-Gebiet ohne eigenen Staatsnamen: die „Freie Stadt {Stadtname}“ in einer vorher freien Region.
+        /// Etappe 7: mehrere Städte → Land gründen (eigener Name/Flagge, s. <see cref="PlayerRealm"/>).
+        /// </summary>
+        public bool IsCityState { get; internal set; }
         /// <summary>Kartenfarbe RGB (0xRRGGBB).</summary>
         public uint Color { get; internal set; }
 

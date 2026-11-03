@@ -160,8 +160,8 @@ namespace CityBuilder.Simulation.Tests
             // Migration: Weltabschnitt v1 (vor dem Zeitmodell) hat keinen Verkehrsschritt → Tick-Grenze
             var c = Persistence.SaveGame.Capture(w);
             var ws = c.Find(Persistence.SaveGame.WorldSectionId);
-            Assert.Equal(2, ws.Version);
-            c.Set(ws.Id, 1, ws.Data.Take(ws.Data.Length - 4).ToArray());
+            Assert.Equal(3, ws.Version); // v3 (Spielstart): + freies Land (Float) + Stadtname (String, null = 1 Byte)
+            c.Set(ws.Id, 1, ws.Data.Take(ws.Data.Length - 4 - 5).ToArray());
             var old = Persistence.SaveGame.Restore(Persistence.SaveContainer.FromBytes(c.ToBytes()));
             Assert.True(old.AtTickBoundary);
             Assert.Equal(w.Clock.Tick, old.Clock.Tick);
