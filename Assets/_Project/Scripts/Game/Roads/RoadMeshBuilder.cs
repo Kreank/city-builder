@@ -24,15 +24,15 @@ namespace CityBuilder.Game.Roads
 
         // ------------------------------------------------------------ Kurvenabtastung
 
-        /// <summary>Abgetastete Kurve mit Bogenlänge und Höhe – erlaubt Streifen "von Meter x bis Meter y".</summary>
+        /// <summary>
+        /// Abgetastete Kurve mit Bogenlänge, Höhe und Geländehöhe – erlaubt Streifen "von Meter x bis Meter y".
+        /// Geometrie (inkl. Innenkanten enger Kurven ohne Selbstschnitt) kommt aus <see cref="SampledCurve"/>.
+        /// </summary>
         sealed class Curve
         {
-            readonly List<SimVector2> points = new List<SimVector2>();
-            readonly List<SimVector2> rights = new List<SimVector2>();
-            readonly List<float> dist = new List<float>();
-            readonly List<float> heights = new List<float>();
-            readonly List<float> grounds = new List<float>();
-            public float Length => dist[dist.Count - 1];
+            readonly SampledCurve sc;
+            readonly float[] grounds;
+            public float Length => sc.Length;
 
             public Curve(SimVector2 p0, SimVector2 p1, SimVector2 p2, float h0 = 0f, float h1 = 0f, IGround ground = null)
                 : this(p0, p1, p2, t => Mathf.Lerp(h0, h1, t), ground) { }
@@ -40,94 +40,53 @@ namespace CityBuilder.Game.Roads
             /// <summary>Kurve mit beliebigem Höhenverlauf (z. B. geländefolgendes Profil).</summary>
             public Curve(SimVector2 p0, SimVector2 p1, SimVector2 p2, System.Func<float, float> heightAt, IGround ground = null)
             {
-                float approx = Bezier.ApproximateLength(p0, p1, p2);
-                int n = Mathf.Clamp(Mathf.CeilToInt(approx / 2f), 2, 512);
-                float d = 0f;
-                for (int i = 0; i <= n; i++)
-                {
-                    float t = i / (float)n;
-                    var p = Bezier.Evaluate(p0, p1, p2, t);
-                    var tan = Bezier.Derivative(p0, p1, p2, t);
-                    if (tan.LengthSquared() < 1e-6f) tan = p2 - p0;
-                    tan = SimVector2.Normalize(tan);
-                    if (i > 0) d += SimVector2.Distance(points[i - 1], p);
-                    points.Add(p);
-                    rights.Add(new SimVector2(tan.Y, -tan.X));
-                    dist.Add(d);
-                    heights.Add(heightAt(t));
-                    grounds.Add(ground != null ? ground.HeightAt(p) : 0f);
-                }
+                sc = new SampledCurve(p0, p1, p2, heightAt);
+                grounds = new float[sc.Count];
+                for (int i = 0; i < sc.Count; i++) grounds[i] = ground != null ? ground.HeightAt(sc.Point(i)) : 0f;
             }
 
             /// <summary>Wie <see cref="At(float, out SimVector2, out SimVector2, out float)"/>, zusätzlich Geländehöhe.</summary>
             public void At(float d, out SimVector2 pos, out SimVector2 right, out float baseHeight, out float groundHeight)
             {
-                At(d, out pos, out right, out baseHeight);
-                int last = dist.Count - 1;
-                if (d <= 0f) { groundHeight = grounds[0]; return; }
-                if (d >= dist[last]) { groundHeight = grounds[last]; return; }
-                int lo = 0, hi = last;
-                while (hi - lo > 1)
-                {
-                    int mid = (lo + hi) / 2;
-                    if (dist[mid] <= d) lo = mid; else hi = mid;
-                }
-                float u = (d - dist[lo]) / Mathf.Max(1e-6f, dist[hi] - dist[lo]);
-                groundHeight = Mathf.Lerp(grounds[lo], grounds[hi], u);
+                sc.At(d, out pos, out right, out baseHeight);
+                int i = sc.Locate(d, out float u);
+                groundHeight = Mathf.Lerp(grounds[i], grounds[i + 1], u);
             }
 
-            public void At(float d, out SimVector2 pos, out SimVector2 right, out float baseHeight)
-            {
-                int last = dist.Count - 1;
-                if (d <= 0f) { pos = points[0]; right = rights[0]; baseHeight = heights[0]; return; }
-                if (d >= dist[last]) { pos = points[last]; right = rights[last]; baseHeight = heights[last]; return; }
-                int lo = 0, hi = last;
-                while (hi - lo > 1)
-                {
-                    int mid = (lo + hi) / 2;
-                    if (dist[mid] <= d) lo = mid; else hi = mid;
-                }
-                float u = (d - dist[lo]) / Mathf.Max(1e-6f, dist[hi] - dist[lo]);
-                pos = SimVector2.Lerp(points[lo], points[hi], u);
-                right = SimVector2.Normalize(SimVector2.Lerp(rights[lo], rights[hi], u));
-                baseHeight = Mathf.Lerp(heights[lo], heights[hi], u);
-            }
+            public void At(float d, out SimVector2 pos, out SimVector2 right, out float baseHeight) =>
+                sc.At(d, out pos, out right, out baseHeight);
+
+            /// <summary>Punkt bei Meter d, seitlich um offset versetzt (positiv = rechts) – in engen Kurven ohne Selbstschnitt.</summary>
+            public SimVector2 Offset(float d, float offset) => sc.OffsetAt(d, offset);
 
             /// <summary>Größte Höhe über Gelände.</summary>
             public float MaxElevation
             {
-                get { float m = float.MinValue; for (int i = 0; i < heights.Count; i++) m = Mathf.Max(m, heights[i] - grounds[i]); return m; }
+                get { float m = float.MinValue; for (int i = 0; i < sc.Count; i++) m = Mathf.Max(m, sc.Height(i) - grounds[i]); return m; }
             }
 
             /// <summary>Kleinste Höhe über Gelände (negativ = unter der Erde).</summary>
             public float MinElevation
             {
-                get { float m = float.MaxValue; for (int i = 0; i < heights.Count; i++) m = Mathf.Min(m, heights[i] - grounds[i]); return m; }
+                get { float m = float.MaxValue; for (int i = 0; i < sc.Count; i++) m = Mathf.Min(m, sc.Height(i) - grounds[i]); return m; }
             }
 
             /// <summary>Stellen (Bogenlänge), an denen die Höhe über Gelände den Wert <paramref name="level"/> durchläuft.</summary>
             public List<float> Crossings(float level)
             {
                 var result = new List<float>();
-                for (int i = 0; i < heights.Count - 1; i++)
+                for (int i = 0; i < sc.Count - 1; i++)
                 {
-                    float a = heights[i] - grounds[i] - level, b = heights[i + 1] - grounds[i + 1] - level;
+                    float a = sc.Height(i) - grounds[i] - level, b = sc.Height(i + 1) - grounds[i + 1] - level;
                     if ((a > 0f) == (b > 0f) || Mathf.Approximately(a, b)) continue;
                     float u = a / (a - b);
-                    result.Add(Mathf.Lerp(dist[i], dist[i + 1], u));
+                    result.Add(Mathf.Lerp(sc.Distance(i), sc.Distance(i + 1), u));
                 }
                 return result;
             }
 
             /// <summary>Stützstellen zwischen d0 und d1 (inkl. Ränder).</summary>
-            public void Stations(float d0, float d1, List<float> result)
-            {
-                result.Clear();
-                result.Add(d0);
-                for (int i = 0; i < dist.Count; i++)
-                    if (dist[i] > d0 + 0.01f && dist[i] < d1 - 0.01f) result.Add(dist[i]);
-                result.Add(d1);
-            }
+            public void Stations(float d0, float d1, List<float> result) => sc.Stations(d0, d1, result);
         }
 
         // ------------------------------------------------------------ Mesh-Daten
@@ -153,9 +112,9 @@ namespace CityBuilder.Game.Roads
                 int baseIndex = Vertices.Count;
                 foreach (float d in stations)
                 {
-                    c.At(d, out var p, out var r, out float h);
-                    Vertices.Add(SimConvert.ToWorld(p + r * left, h + height));
-                    Vertices.Add(SimConvert.ToWorld(p + r * right, h + height));
+                    c.At(d, out _, out _, out float h);
+                    Vertices.Add(SimConvert.ToWorld(c.Offset(d, left), h + height));
+                    Vertices.Add(SimConvert.ToWorld(c.Offset(d, right), h + height));
                     Uvs.Add(new Vector2(0f, d / 4f));
                     Uvs.Add(new Vector2(1f, d / 4f));
                 }
@@ -185,8 +144,8 @@ namespace CityBuilder.Game.Roads
                 int baseIndex = Vertices.Count;
                 foreach (float d in stations)
                 {
-                    c.At(d, out var p, out var r, out float h);
-                    var q = p + r * offset;
+                    c.At(d, out _, out _, out float h);
+                    var q = c.Offset(d, offset);
                     Vertices.Add(SimConvert.ToWorld(q, h + bottom));
                     Vertices.Add(SimConvert.ToWorld(q, h + top));
                     Uvs.Add(new Vector2(0f, d / 4f));
@@ -216,11 +175,11 @@ namespace CityBuilder.Game.Roads
                 var ok = new bool[stations.Count];
                 for (int i = 0; i < stations.Count; i++)
                 {
-                    c.At(stations[i], out var p, out var r, out float h, out float g);
+                    c.At(stations[i], out _, out _, out float h, out float g);
                     ok[i] = h - g >= minElev && h - g <= maxElev;
                     float y = onGround ? g + height : h + height;
-                    Vertices.Add(SimConvert.ToWorld(p + r * left, y));
-                    Vertices.Add(SimConvert.ToWorld(p + r * right, y));
+                    Vertices.Add(SimConvert.ToWorld(c.Offset(stations[i], left), y));
+                    Vertices.Add(SimConvert.ToWorld(c.Offset(stations[i], right), y));
                     Uvs.Add(new Vector2(0f, stations[i] / 4f));
                     Uvs.Add(new Vector2(1f, stations[i] / 4f));
                 }
@@ -255,9 +214,9 @@ namespace CityBuilder.Game.Roads
                 var ok = new bool[stations.Count];
                 for (int i = 0; i < stations.Count; i++)
                 {
-                    c.At(stations[i], out var p, out var r, out float h, out float g);
+                    c.At(stations[i], out _, out _, out float h, out float g);
                     ok[i] = h - g >= minElev && h - g <= maxElev;
-                    var q = p + r * offset;
+                    var q = c.Offset(stations[i], offset);
                     Vertices.Add(SimConvert.ToWorld(q, bottom(h, g)));
                     Vertices.Add(SimConvert.ToWorld(q, top(h, g)));
                     Uvs.Add(new Vector2(0f, stations[i] / 4f));
@@ -278,12 +237,13 @@ namespace CityBuilder.Game.Roads
             /// <summary>Senkrechte Fläche quer zur Straße (Tunnelportal), beidseitig sichtbar.</summary>
             public void CrossWall(Curve c, float d, float left, float right, float y0, float y1, int surface)
             {
-                c.At(d, out var p, out var r, out _);
+                var pl = c.Offset(d, left);
+                var pr = c.Offset(d, right);
                 int b = Vertices.Count;
-                Vertices.Add(SimConvert.ToWorld(p + r * left, y0));
-                Vertices.Add(SimConvert.ToWorld(p + r * right, y0));
-                Vertices.Add(SimConvert.ToWorld(p + r * left, y1));
-                Vertices.Add(SimConvert.ToWorld(p + r * right, y1));
+                Vertices.Add(SimConvert.ToWorld(pl, y0));
+                Vertices.Add(SimConvert.ToWorld(pr, y0));
+                Vertices.Add(SimConvert.ToWorld(pl, y1));
+                Vertices.Add(SimConvert.ToWorld(pr, y1));
                 for (int k = 0; k < 4; k++) Uvs.Add(Vector2.zero);
                 var tris = Triangles[surface];
                 tris.Add(b); tris.Add(b + 2); tris.Add(b + 1);
@@ -360,17 +320,40 @@ namespace CityBuilder.Game.Roads
         // ------------------------------------------------------------ Straße
 
         /// <summary>
-        /// Baut das Mesh eines Segments. trimStart/trimEnd kürzen das Segment an Kreuzungen,
-        /// damit die Kreuzungsfläche frei von Markierungen bleibt.
+        /// Baut das Mesh eines Segments. trimStart/trimEnd kürzen das Segment an Kreuzungen und Knicken
+        /// (<see cref="JunctionTrim"/>), damit Kreuzungsfläche bzw. Eckstück anschließen, ohne zu überlappen.
+        /// structureTrimStart/-End kürzen zusätzlich Brückenplatte, Brüstung und Trogwände (an Knicken, wo das
+        /// Eckstück sie selbst mitbringt); an Kreuzungen laufen sie unter der Kreuzungsfläche durch (0).
         /// </summary>
-        public static Mesh BuildSegment(RoadSegment segment, float trimStart, float trimEnd, Mesh mesh = null, IGround ground = null)
+        public static Mesh BuildSegment(RoadSegment segment, float trimStart, float trimEnd, Mesh mesh = null, IGround ground = null,
+            float structureTrimStart = 0f, float structureTrimEnd = 0f)
         {
-            var type = segment.Type;
             var curve = new Curve(segment.Start.Position, segment.Control, segment.End.Position, segment.HeightAt, ground);
-            float d0 = Mathf.Clamp(trimStart, 0f, curve.Length * 0.45f);
-            float d1 = curve.Length - Mathf.Clamp(trimEnd, 0f, curve.Length * 0.45f);
-
+            float d0 = Mathf.Clamp(trimStart, 0f, curve.Length * 0.5f);
+            float d1 = curve.Length - Mathf.Clamp(trimEnd, 0f, curve.Length * 0.5f);
+            float s0 = Mathf.Clamp(structureTrimStart, 0f, curve.Length * 0.5f);
+            float s1 = curve.Length - Mathf.Clamp(structureTrimEnd, 0f, curve.Length * 0.5f);
             var data = new MeshData(RoadMaterials.SurfaceCount);
+            BuildRoad(data, curve, segment.Type, d0, d1, s0, s1);
+            return data.ToMesh(mesh);
+        }
+
+        /// <summary>
+        /// Eckstück an einem Knick zweier Segmente gleichen Typs: voller Querschnitt (Fahrbahn, Gehwege,
+        /// Bordstein, Markierungen, ggf. Brücke/Trog) entlang einer Bézierkurve zwischen den gekürzten Enden –
+        /// innen gerundet, außen Bogen. Weltkoordinaten.
+        /// </summary>
+        public static Mesh BuildBend(BendLayout bend, Mesh mesh = null, IGround ground = null)
+        {
+            var curve = new Curve(bend.P0, bend.Control, bend.P2, bend.H0, bend.H2, ground);
+            var data = new MeshData(RoadMaterials.SurfaceCount);
+            BuildRoad(data, curve, bend.Type, 0f, curve.Length, 0f, curve.Length);
+            return data.ToMesh(mesh);
+        }
+
+        /// <summary>Querschnitt eines Straßentyps entlang der Kurve: Fahrbahn d0..d1, Bauwerke s0..s1.</summary>
+        static void BuildRoad(MeshData data, Curve curve, RoadType type, float d0, float d1, float s0, float s1)
+        {
             var lanes = type.Lanes;
             bool highway = type.Category != RoadCategory.City;
             float dash = highway ? 6f : 3f, gap = highway ? 12f : 6f;
@@ -452,13 +435,13 @@ namespace CityBuilder.Game.Roads
             // Brücke: Fahrbahnplatte, Brüstung und Pfeiler – nur wo die Straße deutlich über dem Gelände liegt
             if (curve.MaxElevation > 0.6f)
             {
-                data.StripWhere(curve, 0f, curve.Length, -hw, hw, -DeckThickness, concrete, 0.6f, float.MaxValue, facingDown: true);
+                data.StripWhere(curve, s0, s1, -hw, hw, -DeckThickness, concrete, 0.6f, float.MaxValue, facingDown: true);
                 System.Func<float, float, float> deckBottom = (h, g) => h - DeckThickness;
                 System.Func<float, float, float> parapet = (h, g) => h + SidewalkHeight + 0.6f;
-                data.WallWhere(curve, 0f, curve.Length, -hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
-                data.WallWhere(curve, 0f, curve.Length, hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
+                data.WallWhere(curve, s0, s1, -hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
+                data.WallWhere(curve, s0, s1, hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
 
-                for (float d = PillarSpacing * 0.5f; d < curve.Length; d += PillarSpacing)
+                for (float d = s0 + PillarSpacing * 0.5f; d < s1; d += PillarSpacing)
                 {
                     curve.At(d, out var p, out var r, out float h, out float g);
                     if (h - g < 2f) continue;
@@ -474,207 +457,93 @@ namespace CityBuilder.Game.Roads
                 const float tunnelClear = 5.5f;
                 System.Func<float, float, float> bottom = (h, g) => h - 0.2f;
                 System.Func<float, float, float> top = (h, g) => h - g > -td ? Mathf.Max(g, h + SidewalkHeight + 0.6f) : h + tunnelClear;
-                data.WallWhere(curve, 0f, curve.Length, -wall, bottom, top, concrete, float.MinValue, 0.2f);
-                data.WallWhere(curve, 0f, curve.Length, wall, bottom, top, concrete, float.MinValue, 0.2f);
+                data.WallWhere(curve, s0, s1, -wall, bottom, top, concrete, float.MinValue, 0.2f);
+                data.WallWhere(curve, s0, s1, wall, bottom, top, concrete, float.MinValue, 0.2f);
 
                 // Geländekante neben dem Trog – überdeckt die Kachelränder des Bodenlochs
                 int groundSurface = (int)RoadSurface.Ground;
-                data.StripWhere(curve, 0f, curve.Length, -wall - 8f, -wall, 0.02f, groundSurface, -td, -0.3f, onGround: true);
-                data.StripWhere(curve, 0f, curve.Length, wall, wall + 8f, 0.02f, groundSurface, -td, -0.3f, onGround: true);
+                data.StripWhere(curve, s0, s1, -wall - 8f, -wall, 0.02f, groundSurface, -td, -0.3f, onGround: true);
+                data.StripWhere(curve, s0, s1, wall, wall + 8f, 0.02f, groundSurface, -td, -0.3f, onGround: true);
                 // Mauerkrone
-                data.StripWhere(curve, 0f, curve.Length, -wall - 0.4f, -wall, 0.04f, concrete, -td, -0.3f, onGround: true);
-                data.StripWhere(curve, 0f, curve.Length, wall, wall + 0.4f, 0.04f, concrete, -td, -0.3f, onGround: true);
+                data.StripWhere(curve, s0, s1, -wall - 0.4f, -wall, 0.04f, concrete, -td, -0.3f, onGround: true);
+                data.StripWhere(curve, s0, s1, wall, wall + 0.4f, 0.04f, concrete, -td, -0.3f, onGround: true);
 
                 // Tunnelportal: Stirnwand über der Einfahrt
                 foreach (float d in curve.Crossings(-td))
                 {
+                    if (d < s0 || d > s1) continue;
                     curve.At(d, out _, out _, out float h, out float g);
                     data.CrossWall(curve, d, -wall - 0.4f, wall + 0.4f, h + tunnelClear, g + 0.04f, concrete);
                 }
             }
-
-            return data.ToMesh(mesh);
-        }
-
-        /// <summary>Asphaltscheibe (Weltkoordinaten) – schließt Lücken an Knicken zwischen zwei Straßen.</summary>
-        public static Mesh BuildDisc(SimVector2 center, float radius, float height, Mesh mesh = null, int segments = 32)
-        {
-            var data = new MeshData(1);
-            data.Vertices.Add(SimConvert.ToWorld(center, height));
-            data.Uvs.Add(new Vector2(0.5f, 0.5f));
-            for (int i = 0; i <= segments; i++)
-            {
-                float a = i / (float)segments * Mathf.PI * 2f;
-                data.Vertices.Add(SimConvert.ToWorld(center + new SimVector2(Mathf.Cos(a), Mathf.Sin(a)) * radius, height));
-                data.Uvs.Add(new Vector2(Mathf.Cos(a) * 0.5f + 0.5f, Mathf.Sin(a) * 0.5f + 0.5f));
-                if (i > 0) { data.Triangles[0].Add(0); data.Triangles[0].Add(i + 1); data.Triangles[0].Add(i); }
-            }
-            return data.ToMesh(mesh);
         }
 
         // ------------------------------------------------------------ Kreuzungen
 
-        /// <summary>Eine an der Kreuzung angeschlossene Straße, gesehen vom Knoten weg.</summary>
-        struct Arm
-        {
-            public RoadSegment Segment;
-            public SimVector2 Dir;      // vom Knoten weg
-            public float Angle;         // Richtungswinkel für die Sortierung
-            public float Trim;          // so weit endet die Straße vor dem Knoten
-            public SimVector2 Point;    // Mittellinie am Straßenende
-            public SimVector2 Right;    // rechts, vom Knoten weg gesehen
-            public float Height;
-            public float Carriageway;   // halbe Fahrbahnbreite
-            public float Full;          // halbe Gesamtbreite
-            public bool HasSidewalk;
-        }
-
-        static SimVector2 DirectionAway(RoadSegment s, RoadNode node, float t)
-        {
-            var tan = s.Tangent(t);
-            return node == s.Start ? tan : -tan;
-        }
-
-        static List<Arm> SortedArms(RoadNetwork network, RoadNode node)
-        {
-            var arms = new List<Arm>();
-            foreach (int id in node.SegmentIds)
-            {
-                var s = network.GetSegment(id);
-                var dir = DirectionAway(s, node, node == s.Start ? 0f : 1f);
-                arms.Add(new Arm { Segment = s, Dir = dir, Angle = Mathf.Atan2(dir.Y, dir.X) });
-            }
-            arms.Sort((a, b) => a.Angle.CompareTo(b.Angle)); // gegen den Uhrzeigersinn
-            return arms;
-        }
-
         /// <summary>
-        /// Wie weit endet eine Straße vor dem Kreuzungsknoten? So weit, dass sie sich mit den
-        /// Nachbarstraßen (nach Winkel) nicht mehr überlappt. Wird von Segment- und Kreuzungsmesh gleich benutzt.
+        /// Wie weit endet eine Straße vor dem Knoten (Bogenlänge)? An Kreuzungen so weit, dass der gerundete
+        /// Bordstein und die Gehweg-Außenkanten der Nachbarn davor liegen; an Knicken bis zum Eckstück.
+        /// Wird von Segment-, Kreuzungs- und Eckstück-Mesh gleich benutzt (<see cref="JunctionGeometry.Trim"/>).
         /// </summary>
-        public static float JunctionTrim(RoadNetwork network, RoadNode node, RoadSegment segment)
-        {
-            if (!NeedsJunctionMesh(network, node)) return 0f;
-            var arms = SortedArms(network, node);
-            int i = arms.FindIndex(a => a.Segment == segment);
-            if (i < 0) return 0f;
-            return Trim(arms, i);
-        }
+        public static float JunctionTrim(RoadNetwork network, RoadNode node, RoadSegment segment) =>
+            JunctionGeometry.Trim(network, node, segment);
 
         /// <summary>
         /// Braucht der Knoten eine eigene Fläche? Kreuzungen (ab 3 Straßen) und Übergänge zwischen
-        /// unterschiedlichen Straßentypen (z. B. 4-spurig → 2-spurig).
+        /// unterschiedlichen Straßentypen (z. B. 4-spurig → 2-spurig). Knicke gleichen Typs bekommen
+        /// stattdessen ein Eckstück (<see cref="NodeShape.Bend"/>, <see cref="BuildBend"/>).
         /// </summary>
-        public static bool NeedsJunctionMesh(RoadNetwork network, RoadNode node)
-        {
-            int n = node.SegmentIds.Count;
-            if (n >= 3) return true;
-            if (n != 2) return false;
-            return network.GetSegment(node.SegmentIds[0]).Type != network.GetSegment(node.SegmentIds[1]).Type;
-        }
-
-        static float Trim(List<Arm> arms, int i)
-        {
-            var me = arms[i];
-            if (arms.Count == 2)
-            {
-                // Übergang zweier Straßentypen: Länge nach Breitenunterschied (ca. 1:4 Verjüngung)
-                var other = arms[1 - i];
-                float dw = Mathf.Abs(me.Segment.Type.HalfWidth - other.Segment.Type.HalfWidth);
-                return Mathf.Min(Mathf.Max(6f, dw * 4f + 4f), me.Segment.Length * 0.45f, 60f);
-            }
-            float needed = 0f;
-            foreach (int k in new[] { (i + arms.Count - 1) % arms.Count, (i + 1) % arms.Count })
-            {
-                if (k == i) continue;
-                var other = arms[k];
-                float angle = Mathf.Max(20f, RoadGeometry.Angle(me.Dir, other.Dir));
-                float hw = Mathf.Max(me.Segment.Type.HalfWidth, other.Segment.Type.HalfWidth);
-                needed = Mathf.Max(needed, hw / Mathf.Tan(angle * 0.5f * Mathf.Deg2Rad));
-            }
-            needed = Mathf.Max(needed, me.Segment.Type.HalfWidth * 0.5f) + 1f;
-            return Mathf.Min(needed, me.Segment.Length * 0.45f, 60f);
-        }
+        public static bool NeedsJunctionMesh(RoadNetwork network, RoadNode node) =>
+            JunctionGeometry.Classify(network, node) == NodeShape.Junction;
 
         /// <summary>
-        /// Kreuzungsfläche: Fahrbahn aus den Fahrbahnkanten aller Arme mit gerundeten Ecken,
-        /// dazu Gehweg-Ecken mit Bordstein zwischen benachbarten Stadtstraßen. Weltkoordinaten.
+        /// Kreuzungsfläche: Fahrbahn aus den Fahrbahnkanten aller Arme mit gerundeten Bordsteinecken
+        /// (trianguliert, kein Gehweg darüber), dazu Gehweg-Ecken mit Bordstein zwischen benachbarten
+        /// Stadtstraßen. Geometrie aus <see cref="JunctionGeometry.Layout"/>. Weltkoordinaten.
         /// Submesh 0 = Asphalt, 1 = Gehweg.
         /// </summary>
         public static Mesh BuildJunction(RoadNetwork network, RoadNode node, Mesh mesh = null)
         {
-            var arms = SortedArms(network, node);
-            for (int i = 0; i < arms.Count; i++)
-            {
-                var a = arms[i];
-                var s = a.Segment;
-                a.Trim = Trim(arms, i);
-                float t = Mathf.Clamp01(a.Trim / Mathf.Max(0.01f, s.Length));
-                if (node == s.End) t = 1f - t;
-                a.Point = s.Evaluate(t);
-                a.Dir = DirectionAway(s, node, t);
-                a.Right = new SimVector2(a.Dir.Y, -a.Dir.X);
-                a.Height = s.HeightAt(t);
-                a.Carriageway = s.Type.CarriagewayHalfWidth;
-                a.Full = s.Type.HalfWidth;
-                a.HasSidewalk = s.Type.Lanes.Count > 0 && s.Type.Lanes[0].Kind == LaneKind.Sidewalk;
-                arms[i] = a;
-            }
-
+            var layout = JunctionGeometry.Layout(network, node);
             var data = new MeshData(2);
 
-            // Fahrbahn: Fächer um den Knoten, Punkte gegen den Uhrzeigersinn
-            var ring = new List<(SimVector2 p, float h)>();
-            for (int i = 0; i < arms.Count; i++)
+            // Fahrbahn: Umriss gegen den Uhrzeigersinn, Ohren-Triangulierung (auch bei nicht sternförmigen Umrissen)
+            var ring = layout.Ring;
+            int baseRing = data.Vertices.Count;
+            for (int i = 0; i < ring.Count; i++)
             {
-                var a = arms[i];
-                var b = arms[(i + 1) % arms.Count];
-                ring.Add((a.Point + a.Right * a.Carriageway, a.Height));
-                // Ecke von der linken Fahrbahnkante von a zur rechten von b (enthält beide Endpunkte)
-                var corner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway, arms.Count == 2);
-                for (int k = 0; k < corner.Length - 1; k++)
-                    ring.Add((corner[k], Mathf.Lerp(a.Height, b.Height, k / (float)(corner.Length - 1))));
+                data.Vertices.Add(SimConvert.ToWorld(ring[i], layout.RingHeights[i] + RoadHeight));
+                data.Uvs.Add(new Vector2(ring[i].X / 4f, ring[i].Y / 4f));
             }
-            int center = data.Vertices.Count;
-            data.Vertices.Add(SimConvert.ToWorld(node.Position, node.Height + RoadHeight));
-            data.Uvs.Add(new Vector2(0.5f, 0.5f));
-            foreach (var (p, h) in ring)
+            var tris = Geometry2D.Triangulate(ring);
+            for (int k = 0; k < tris.Count; k += 3)
             {
-                data.Vertices.Add(SimConvert.ToWorld(p, h + RoadHeight));
-                data.Uvs.Add(new Vector2(p.X / 4f, p.Y / 4f));
-            }
-            for (int k = 0; k < ring.Count; k++)
-            {
-                int v0 = center + 1 + k;
-                int v1 = center + 1 + (k + 1) % ring.Count;
-                data.Triangles[0].Add(center); data.Triangles[0].Add(v1); data.Triangles[0].Add(v0);
+                // gegen den Uhrzeigersinn (Simulation) → im Uhrzeigersinn von oben (Unity) = Normale nach oben
+                data.Triangles[0].Add(baseRing + tris[k]);
+                data.Triangles[0].Add(baseRing + tris[k + 2]);
+                data.Triangles[0].Add(baseRing + tris[k + 1]);
             }
 
             // Gehweg-Ecken
-            for (int i = 0; i < arms.Count; i++)
+            foreach (var corner in layout.Corners)
             {
-                var a = arms[i];
-                var b = arms[(i + 1) % arms.Count];
-                if (!a.HasSidewalk || !b.HasSidewalk) continue;
-
-                var inner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway, arms.Count == 2);
-                var outer = CornerPath(node.Position, a, b, a.Full, b.Full, arms.Count == 2);
-                int cornerSteps = inner.Length - 1;
+                if (!corner.HasSidewalk) continue;
+                float ha = layout.Arms[corner.ArmA].Height, hb = layout.Arms[corner.ArmB].Height;
+                var inner = corner.Curb;
+                var outer = corner.Outer;
+                int steps = inner.Length - 1;
 
                 int baseIndex = data.Vertices.Count;
-                for (int k = 0; k <= cornerSteps; k++)
+                for (int k = 0; k <= steps; k++)
                 {
-                    float u = k / (float)cornerSteps;
-                    float h = Mathf.Lerp(a.Height, b.Height, u);
-                    var pi = inner[k];
-                    var po = outer[k];
-                    // innen (zum Knoten) = links, außen = rechts in Laufrichtung → Normale nach oben
-                    data.Vertices.Add(SimConvert.ToWorld(pi, h + SidewalkHeight));
-                    data.Vertices.Add(SimConvert.ToWorld(po, h + SidewalkHeight));
+                    float h = Mathf.Lerp(ha, hb, k / (float)steps);
+                    // innen (Bordstein, zum Knoten) = links, außen = rechts in Laufrichtung → Normale nach oben
+                    data.Vertices.Add(SimConvert.ToWorld(inner[k], h + SidewalkHeight));
+                    data.Vertices.Add(SimConvert.ToWorld(outer[k], h + SidewalkHeight));
                     data.Uvs.Add(Vector2.zero);
                     data.Uvs.Add(Vector2.right);
                 }
-                for (int k = 0; k < cornerSteps; k++)
+                for (int k = 0; k < steps; k++)
                 {
                     int bi = baseIndex + k * 2;
                     data.Triangles[1].Add(bi); data.Triangles[1].Add(bi + 2); data.Triangles[1].Add(bi + 1);
@@ -683,17 +552,15 @@ namespace CityBuilder.Game.Roads
 
                 // Bordstein entlang der Innenkante
                 int curbBase = data.Vertices.Count;
-                for (int k = 0; k <= cornerSteps; k++)
+                for (int k = 0; k <= steps; k++)
                 {
-                    float u = k / (float)cornerSteps;
-                    float h = Mathf.Lerp(a.Height, b.Height, u);
-                    var pi = inner[k];
-                    data.Vertices.Add(SimConvert.ToWorld(pi, h + RoadHeight));
-                    data.Vertices.Add(SimConvert.ToWorld(pi, h + SidewalkHeight));
+                    float h = Mathf.Lerp(ha, hb, k / (float)steps);
+                    data.Vertices.Add(SimConvert.ToWorld(inner[k], h + RoadHeight));
+                    data.Vertices.Add(SimConvert.ToWorld(inner[k], h + SidewalkHeight));
                     data.Uvs.Add(Vector2.zero);
                     data.Uvs.Add(Vector2.up);
                 }
-                for (int k = 0; k < cornerSteps; k++)
+                for (int k = 0; k < steps; k++)
                 {
                     int bi = curbBase + k * 2;
                     data.Triangles[1].Add(bi); data.Triangles[1].Add(bi + 2); data.Triangles[1].Add(bi + 1);
@@ -704,57 +571,6 @@ namespace CityBuilder.Game.Roads
             }
 
             return data.ToMesh(mesh);
-        }
-
-        const int CornerSteps = 8;
-
-        /// <summary>
-        /// Verlauf einer Kreuzungsecke von der linken Kante von Arm a (Breite wa) zur rechten Kante von Arm b (wb),
-        /// gegen den Uhrzeigersinn, immer CornerSteps + 1 Punkte (innen und außen passen so zusammen).
-        ///   Spitze Ecke (&lt; 180°): Bogen, Kontrollpunkt = Schnitt der Kanten.
-        ///   Gerade Durchfahrt (≈ 180°): gerade Linie.
-        ///   Überstumpf (&gt; 180°): Bogen hinter dem Knoten herum, sonst würde sich die Fläche überschlagen.
-        /// </summary>
-        static SimVector2[] CornerPath(SimVector2 node, Arm a, Arm b, float wa, float wb, bool transition = false)
-        {
-            var p0 = a.Point - a.Right * wa;
-            var p2 = b.Point + b.Right * wb;
-            var pts = new SimVector2[CornerSteps + 1];
-
-            float angA = Mathf.Atan2(a.Dir.Y, a.Dir.X) * Mathf.Rad2Deg;
-            float angB = Mathf.Atan2(b.Dir.Y, b.Dir.X) * Mathf.Rad2Deg;
-            float span = Mathf.Repeat(angB - angA, 360f);
-            if (span < 1e-3f) span = 360f; // nur bei einem Arm denkbar
-
-            if (span < 175f)
-            {
-                var hit = RoadBuilder.RayIntersection(p0, -a.Dir, p2, -b.Dir);
-                var mid = (p0 + p2) * 0.5f;
-                var c = hit.HasValue && SimVector2.Distance(hit.Value, mid) < SimVector2.Distance(p0, p2) * 1.5f + 1f ? hit.Value : mid;
-                for (int k = 0; k <= CornerSteps; k++) pts[k] = Bezier.Evaluate(p0, c, p2, k / (float)CornerSteps);
-                return pts;
-            }
-
-            // Übergang zweier Straßen: stumpfe Seite gerade verbinden (sonst Delle hinter dem Knoten)
-            if (span <= 185f || transition)
-            {
-                for (int k = 0; k <= CornerSteps; k++) pts[k] = SimVector2.Lerp(p0, p2, k / (float)CornerSteps);
-                return pts;
-            }
-
-            // Überstumpf: p0 → Bogen um den Knoten (von links von a bis rechts von b) → p2
-            float from = (angA + 90f) * Mathf.Deg2Rad;
-            float sweep = (span - 180f) * Mathf.Deg2Rad;
-            float radius = Mathf.Max(wa, wb);
-            pts[0] = p0;
-            pts[CornerSteps] = p2;
-            for (int k = 1; k < CornerSteps; k++)
-            {
-                float u = (k - 1) / (float)(CornerSteps - 2);
-                float ang = from + sweep * u;
-                pts[k] = node + new SimVector2(Mathf.Cos(ang), Mathf.Sin(ang)) * radius;
-            }
-            return pts;
         }
 
         // ------------------------------------------------------------ Vorschau

@@ -81,9 +81,13 @@ namespace CityBuilder.Editor
                 meshes++;
                 Object.DestroyImmediate(mesh);
             }
-            foreach (var n in roads.Nodes.Where(n => n.SegmentIds.Count >= 3))
+            foreach (var n in roads.Nodes)
             {
-                var mesh = RoadMeshBuilder.BuildJunction(roads, n);
+                var shape = JunctionGeometry.Classify(roads, n);
+                if (shape == NodeShape.None) continue;
+                var mesh = shape == NodeShape.Junction
+                    ? RoadMeshBuilder.BuildJunction(roads, n)
+                    : RoadMeshBuilder.BuildBend(JunctionGeometry.Bend(roads, n));
                 vertices += mesh.vertexCount;
                 meshes++;
                 Object.DestroyImmediate(mesh);
