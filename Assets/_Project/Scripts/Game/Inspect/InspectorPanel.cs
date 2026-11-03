@@ -20,14 +20,12 @@ namespace CityBuilder.Game.Inspect
     /// bei Bürgern zusätzlich Wohnung und Arbeitsplatz), Fahrzeuge/Bürger können verfolgt werden (F).
     /// Ohne Auswahl: Stadtübersicht der Bürger. Liest nur – Änderungen laufen über die Simulation.
     /// <para>
-    /// Werte, die erst mit dem Bedürfnismodell entstehen (Gesundheit, Zufriedenheit, Gemüt, Gebäudezustand), sind
-    /// als <see cref="Pending"/> markiert und zeigen bewusst keine Zahl.
+    /// Bedürfnismodell: Zufriedenheit, Gemüt, Gesundheit, Familienstand, Persönlichkeit, Bedürfnisse und Erinnerungen
+    /// kommen aus <see cref="CitizenSystem"/>; Gebäude zeigen Zustand und Zufriedenheit von Bewohnern/Mitarbeitern/Umfeld.
     /// </para>
     /// </summary>
     public sealed class InspectorPanel : MonoBehaviour
     {
-        /// <summary>Anzeige für Werte, die es noch nicht gibt.</summary>
-        const string Pending = "<color=#9aa4b0>— (kommt mit Bedürfnismodell)</color>";
         const int PageSize = 25;
         const int MaxHistory = 30;
 
@@ -37,6 +35,7 @@ namespace CityBuilder.Game.Inspect
         static readonly Color AgeColor = new Color(0.45f, 0.75f, 1f);
         static readonly Color EduColor = new Color(0.55f, 0.9f, 0.55f);
         static readonly Color NeedColor = new Color(1f, 0.7f, 0.3f);
+        readonly List<string> memoryTexts = new List<string>();
 
         RoadTool tool;
         BuildingView buildingView;
@@ -484,10 +483,11 @@ namespace CityBuilder.Game.Inspect
                     UtilityLine(world, b, UtilityKind.Water);
 
                     Section("Zustand & Zufriedenheit");
-                    Line("Zustand", Pending);
-                    if (b.Households > 0) Line("Zufriedenheit Bewohner", Pending);
-                    if (b.Jobs > 0) Line("Zufriedenheit Mitarbeiter", Pending);
-                    Line("Zufriedenheit Umfeld", Pending);
+                    Line("Zustand", Percent(citizens.BuildingCondition(b)) + " <color=#9aa4b0>(Stufe und Versorgung, noch ohne Verfall)</color>");
+                    if (b.Households > 0) Line("Zufriedenheit Bewohner", SatisfactionValue(citizens.ResidentSatisfaction(b.Id)));
+                    if (b.Jobs > 0) Line("Zufriedenheit Mitarbeiter", SatisfactionValue(citizens.WorkerSatisfaction(b.Id)) +
+                                         " <color=#9aa4b0>(Arbeit + Arbeitsweg)</color>");
+                    Line("Zufriedenheit Umfeld", Percent(citizens.SurroundingsScore(b)) + " <color=#9aa4b0>(Ruhe, Sicherheit, Dienste, Park)</color>");
                     break;
                 }
                 case "Bewohner": ResidentsTab(world, b); break;
@@ -590,9 +590,9 @@ namespace CityBuilder.Game.Inspect
             Line("Müll am Gebäude", $"{services.GarbageAt(b):0.##} t ({services.GarbageLevel(b) * 100f:0} % voll)");
             Line("Brandrisiko", $"{services.FireRisk(b) * 100f:0} % (Kennwert, noch ohne Brände)");
 
+            Line("Zufriedenheit Umfeld", Percent(world.Citizens.SurroundingsScore(b)));
             Section("Später");
             Line("Bodenwert", "<color=#9aa4b0>— (kommt mit G6)</color>");
-            Line("Zufriedenheit Umfeld", Pending);
         }
 
         // ------------------------------------------------------------ Bürger
@@ -600,8 +600,8 @@ namespace CityBuilder.Game.Inspect
         void CitizenDetail(SimulationWorld world, Citizen c)
         {
             if (c == null) return;
-            GUILayout.Label($"Bürger #{c.Id}", header);
-            GUILayout.Label($"{c.Age} Jahre · {StageName(c)} · {ActivityName(c)}", small);
+            GUILayout.Label($"{c.FullName} <color=#9aa4b0>#{c.Id}</color>", header);
+            GUILayout.Label($"{c.Age} Jahre · {StageName(c)} · {ActivityName(c)} · {CitizenSystem.MoodText(c.Mood)}", small);
 
             switch (Tabs("Person", "Alltag", "Befinden"))
             {
@@ -610,7 +610,17 @@ namespace CityBuilder.Game.Inspect
                     Section("Person");
                     Line("Alter", $"{c.Age} J. (Geburtstag: Tag {c.BirthDayOfYear + 1} des Jahres)");
                     Line("Bildung", EducationName(c.Education) + (c.Age < Citizen.AdultAge ? " (Abschluss mit 18)" : ""));
-                    Line("Familienstand", "<color=#9aa4b0>— (eigenes Merkmal fehlt noch; siehe Haushalt)</color>");
+                    Line("Familienstand", world.Citizens.FamilyStatusText(c));
+                    var partner = world.Citizens.PartnerOf(c);
+                    if (partner != null)
+                    {
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label("Partner", small, GUILayout.Width(150f));
+                        Link($"{partner.FullName} ({partner.Age} J.)", new Selection(SelectionKind.Citizen, partner.Id));
+                        GUILayout.EndHorizontal();
+                    }
+                    Line("Persönlichkeit", c.Personality.Describe(c.Gender));
+                    Line("Charakterzüge", TraitList(c.Personality));
 
                     Section("Haushalt & Wohnung");
                     if (c.Household == null)
@@ -666,18 +676,28 @@ namespace CityBuilder.Game.Inspect
                         }
                     }
 
-                    Section("Bedürfnisse (vorhanden)");
-                    NeedBar("Einkaufen", c.ShoppingNeed);
+                    if (c.Activity == Activity.Leisure) Line("Freizeit", CitizenSystem.LeisurePlaceText(c));
+                    Section("Einkaufen");
+                    NeedBar("Einkaufsdrang", c.ShoppingNeed);
                     break;
                 }
                 default:
                 {
                     Section("Befinden");
-                    Line("Gesundheit", Pending);
-                    Line("Zufriedenheit", Pending);
-                    Line("Gemüt", Pending);
+                    Line("Gesundheit", $"{CitizenSystem.HealthText(c)} ({Percent(c.Health)})" + (c.IsIll ? " <color=#ff9080>krank</color>" : ""));
+                    Line("Zufriedenheit", SatisfactionValue(c.Satisfaction));
+                    Line("Gemüt", $"{CitizenSystem.MoodText(c.Mood)} ({Percent(c.Mood)})");
+                    Line("Sorgen", CitizenSystem.Concerns(c));
 
-                    Section("Einflüsse (Rohwerte, noch ohne Bewertung)");
+                    Section("Bedürfnisse (Erfüllung)");
+                    foreach (var k in Needs.All) FulfilmentBar(Needs.DisplayName(k), c.Need(k));
+
+                    Section("Erinnerungen");
+                    world.Citizens.MemoryTexts(c, memoryTexts);
+                    if (memoryTexts.Count == 0) GUILayout.Label("<color=#9aa4b0>Noch nichts Besonderes erlebt.</color>", small);
+                    foreach (var t in memoryTexts) GUILayout.Label($"„{t}“", small);
+
+                    Section("Einflüsse (Rohwerte)");
                     var hb = c.Home.IsBuilding ? world.City.GetBuilding(c.Home.BuildingId) : null;
                     if (hb != null)
                     {
@@ -690,12 +710,45 @@ namespace CityBuilder.Game.Inspect
                     else Line("Wohnung", "außerhalb – keine Werte");
                     if (c.IsWorkingAge) Line("Arbeit", c.IsEmployed ? "beschäftigt" : $"arbeitslos seit {c.UnemployedDays} Tagen");
                     Line("Einkaufsbedürfnis", $"{c.ShoppingNeed:0.00}");
-                    GUILayout.Label("<color=#9aa4b0>Diese Werte gibt es schon; wie sie Gesundheit, Zufriedenheit und Gemüt beeinflussen, " +
-                                    "legt das Bedürfnismodell fest.</color>", small);
+                    if (c.Household != null) Line("Haushaltseinkommen", $"{c.Household.Income:0} € je Tag (brutto)");
                     break;
                 }
             }
         }
+
+        /// <summary>Erfüllungsbalken 0..1 (rot = schlecht, grün = gut).</summary>
+        void FulfilmentBar(string label, float value)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(label, small, GUILayout.Width(150f));
+            var r = GUILayoutUtility.GetRect(160f, 14f, GUILayout.Width(160f));
+            if (Event.current.type == EventType.Repaint)
+            {
+                var old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, 0.12f);
+                GUI.DrawTexture(r, Texture2D.whiteTexture);
+                GUI.color = Color.Lerp(new Color(1f, 0.45f, 0.4f), new Color(0.45f, 0.95f, 0.5f), Mathf.Clamp01(value));
+                GUI.DrawTexture(new Rect(r.x, r.y, r.width * Mathf.Clamp01(value), r.height), Texture2D.whiteTexture);
+                GUI.color = old;
+            }
+            GUILayout.Label($"{value * 100f:0} % · {Needs.Describe(value)}", small);
+            GUILayout.EndHorizontal();
+        }
+
+        static string Percent(float v) => $"{v * 100f:0} %";
+
+        /// <summary>Deutlich ausgeprägte Züge (|Wert − 0,5| ≥ 0,2), sonst „ausgeglichen“.</summary>
+        static string TraitList(Personality p)
+        {
+            var names = Personality.AllTraits
+                .Where(t => Mathf.Abs(p[t] - 0.5f) >= 0.2f)
+                .Select(t => p[t] >= 0.5f ? Personality.DisplayName(t) : Personality.OppositeName(t))
+                .ToList();
+            return names.Count > 0 ? string.Join(", ", names) : "ausgeglichen";
+        }
+
+        static string SatisfactionValue(float s) =>
+            s < 0f ? "<color=#9aa4b0>– (niemand da)</color>" : $"{CitizenSystem.SatisfactionText(s)} ({s * 100f:0} %)";
 
         void NeedBar(string label, float value)
         {
@@ -898,7 +951,7 @@ namespace CityBuilder.Game.Inspect
         {
             string job = c.WorkplaceId != 0 ? $"arbeitet in #{c.WorkplaceId}" : c.WorksOutside ? "Auspendler" :
                 c.IsWorkingAge ? "<color=#ff9080>arbeitslos</color>" : StageName(c);
-            return $"Bürger #{c.Id} · {c.Age} J. · {job} · {ActivityName(c)}";
+            return $"{c.FullName} · {c.Age} J. · {job} · {ActivityName(c)}";
         }
 
         static string StageName(Citizen c)
@@ -920,6 +973,7 @@ namespace CityBuilder.Game.Inspect
                 case Activity.Work: return "bei der Arbeit";
                 case Activity.Shopping: return "einkaufen";
                 case Activity.Travelling: return c.Mode == TravelMode.Car ? "im Auto unterwegs" : "unterwegs";
+                case Activity.Leisure: return c.LeisureParkId > 0 ? "im Park" : "Spaziergang im Viertel";
                 default: return "außerhalb";
             }
         }

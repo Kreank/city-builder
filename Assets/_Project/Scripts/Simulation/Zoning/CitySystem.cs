@@ -48,6 +48,8 @@ namespace CityBuilder.Simulation.Zoning
         public int FreeHomes;
         /// <summary>Einwohner, die einkaufen wollen, aber kein Geschäft erreichen.</summary>
         public int UnservedShoppers;
+        // --- Bedürfnismodell (Hook): mittlere Zufriedenheit der Einwohner 0..1, −1 = unbekannt (noch keine Einwohner)
+        public float AverageSatisfaction = -1f;
     }
 
     /// <summary>
@@ -208,6 +210,9 @@ namespace CityBuilder.Simulation.Zoning
             float jobPull = Math.Clamp((openJobs - seekers) / MathF.Max(40f, workforce), -1f, 1f);
             float vacancy = households > 0 ? 1f - occupied / (float)households : 0f;
             moveInPull = 45f + 55f * jobPull;
+            // --- Bedürfnismodell (Hook): zufriedene Einwohner ziehen an (Ruf der Stadt), unzufriedene schrecken ab.
+            // ±16 bei Zufriedenheit 1,0 bzw. 0,2 (neutral 0,6); wirkt über moveInPull auch auf die Wohn-Nachfrage.
+            if (pop.AverageSatisfaction >= 0f) moveInPull = Math.Clamp(moveInPull + (pop.AverageSatisfaction - 0.6f) * 40f, 0f, 100f);
             // Gebaut wird weniger, wenn schon viele Wohnungen leer stehen
             float res = moveInPull - MathF.Max(0f, vacancy - 0.15f) * 80f;
             Demand[ZoneType.ResidentialLow] = res + 10f;

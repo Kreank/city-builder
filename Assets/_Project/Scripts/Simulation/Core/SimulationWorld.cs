@@ -115,6 +115,8 @@ namespace CityBuilder.Simulation.Core
             // --- G4 Dienste (nach der Versorgung: hängt sich an deren Grundstücks-/Bau-Sperren an, stempelt Lärm nach dem NoiseSystem)
             world.Services = new ServiceSystem(world.Roads, world.Terrain, world.City, world.Utilities, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Services);
+            // Bedürfnismodell ↔ Dienste: Abdeckung, Müll, Parks als Freizeitziel, Schülerzahlen
+            CitizenServiceBinding.Connect(world.Citizens, world.Services);
             // --- Ende G4
 
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)

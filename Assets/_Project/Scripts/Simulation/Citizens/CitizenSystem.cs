@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using CityBuilder.Simulation.Citizens.Content;
 using CityBuilder.Simulation.Core;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Traffic;
@@ -48,6 +49,31 @@ namespace CityBuilder.Simulation.Citizens
         public int CarTripsFailed;
 
         public int ExternalConnections;
+
+        // Bedürfnismodell
+        /// <summary>Mittlere Zufriedenheit/Gemüt der Einwohner (0..1).</summary>
+        public float AverageSatisfaction = 0.6f;
+        public float AverageMood = 0.5f;
+        public int Ill;
+        public int AtLeisure;
+        /// <summary>Mittlere Erfüllung je Bedürfnis (Index = <see cref="NeedKind"/>).</summary>
+        public readonly float[] AverageNeeds = new float[Needs.Count];
+        // kumuliert
+        public int Born;
+        public int Partnerships;
+        public int Weddings;
+        public int Separations;
+        public int MovedOutOfParents;
+        public int MovedWithinCity;
+        /// <summary>Haushalte, die sich zum Wegzug entschieden haben (Unzufriedenheit/Arbeitslosigkeit).</summary>
+        public int LeftCity;
+        public int JobChanges;
+        public int JobsLost;
+        public int LeisureHome;
+        public int LeisurePark;
+        /// <summary>Davon in einem echten Park (G4).</summary>
+        public int LeisureRealPark;
+        public int LeisureStroll;
     }
 
     /// <summary>
@@ -57,7 +83,7 @@ namespace CityBuilder.Simulation.Citizens
     /// Ein Teil der Fahrten fährt als sichtbares Auto im <see cref="TrafficSystem"/> und meldet die Ankunft zurück,
     /// der Rest gilt als zu Fuß/ÖPNV (Platzhalter mit Fahrzeit aus der Luftlinie).
     /// </summary>
-    public sealed class CitizenSystem : ISimulationSystem
+    public sealed partial class CitizenSystem : ISimulationSystem
     {
         public int TickInterval => 1;
 
@@ -90,7 +116,8 @@ namespace CityBuilder.Simulation.Citizens
         readonly TrafficSystem traffic;
         readonly RoadNetwork network;
         readonly SimulationClock clock;
-        readonly Random rng;
+        /// <summary>Eigener geseedeter RNG (deterministisch, plattformunabhängig).</summary>
+        readonly SimRandom rng;
         readonly RoadComponents components;
 
         readonly List<Citizen> citizens = new List<Citizen>();
@@ -106,6 +133,9 @@ namespace CityBuilder.Simulation.Citizens
         readonly List<Building> jobBuildings = new List<Building>();
         readonly List<Building> shops = new List<Building>();
         readonly List<Building> housing = new List<Building>();
+        /// <summary>Wohngebäude mit freien Wohnungen beim letzten Durchlauf (Stichproben für Umzug/Auszug).</summary>
+        readonly List<Building> freeHousing = new List<Building>();
+        bool freeHousingDirty = true;
 
         int nextCitizenId = 1, nextHouseholdId = 1, nextTripId = 1;
         int householdCount;
@@ -125,7 +155,7 @@ namespace CityBuilder.Simulation.Citizens
             this.traffic = traffic ?? throw new ArgumentNullException(nameof(traffic));
             this.network = network ?? throw new ArgumentNullException(nameof(network));
             this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
-            rng = new Random(seed * 7919 + 17);
+            rng = new SimRandom(seed * 7919 + 17);
             components = new RoadComponents(network);
             city.BuildingRemoved += OnBuildingRemoved;
             traffic.TripEnded += OnTripEnded;
@@ -161,9 +191,11 @@ namespace CityBuilder.Simulation.Citizens
 
         public void Tick(SimulationWorld world)
         {
+            this.world = world;
             long now = clock.Tick;
             if (now % ManageInterval == 0) Manage(now);
             if (now % SimulationClock.TicksPerDay == 0) Daily();
+            UpdateNeedsSlice();
             Routines(now);
             if (now % ManageInterval == 0) UpdateStats();
         }
@@ -204,6 +236,15 @@ namespace CityBuilder.Simulation.Citizens
             }
         }
 
+        /// <summary>Wohngebäude mit freien Wohnungen neu sammeln (täglich und bei leerer Stichprobe).</summary>
+        void RefreshFreeHousing()
+        {
+            freeHousingDirty = false;
+            freeHousing.Clear();
+            foreach (var b in housing)
+                if (city.GetBuilding(b.Id) != null && HouseholdsIn(b.Id).Count < b.Households) freeHousing.Add(b);
+        }
+
         // ------------------------------------------------------------ Zuzug / Wegzug
 
         void MoveIn()
@@ -213,36 +254,43 @@ namespace CityBuilder.Simulation.Citizens
             foreach (var b in housing)
             {
                 if (HouseholdsIn(b.Id).Count >= b.Households) continue;
+                // Bedürfnismodell: Neue meiden Häuser mit unzufriedenen Bewohnern
+                float sat = ResidentSatisfaction(b.Id);
+                if (sat >= 0f && sat < 0.45f && rng.Chance((0.45f - sat) * 2f)) continue;
                 CreateHousehold(b);
             }
         }
 
-        Household CreateHousehold(Building home)
+        internal Household CreateHousehold(Building home)
         {
             var h = new Household { Id = nextHouseholdId++, HomeId = home.Id, MovedInDay = clock.Day };
             double roll = rng.NextDouble();
-            if (roll < 0.28) AddMember(h, rng.Next(18, 41));                                  // Single
-            else if (roll < 0.50) { int a = rng.Next(22, 61); AddMember(h, a); AddMember(h, Math.Max(18, a + rng.Next(-5, 6))); } // Paar
+            if (roll < 0.28)
+            {
+                var single = AddMember(h, rng.Next(18, 41));                                  // Single
+                if (single.Age >= 26 && rng.Chance(0.15)) single.Relationship = Relationship.Separated;
+            }
+            else if (roll < 0.50) { int a = rng.Next(22, 61); AddCouple(h, a, Math.Max(18, a + rng.Next(-5, 6))); } // Paar
             else if (roll < 0.82)
             {
                 int a = rng.Next(25, 51);                                                     // Familie
-                AddMember(h, a);
-                AddMember(h, Math.Max(18, a + rng.Next(-5, 6)));
+                var (p1, p2) = AddCouple(h, a, Math.Max(18, a + rng.Next(-5, 6)), married: 0.8);
                 int kids = rng.Next(1, 4);
-                for (int i = 0; i < kids; i++) AddMember(h, rng.Next(0, Math.Min(18, a - 17)));
+                for (int i = 0; i < kids; i++) AddChild(h, rng.Next(0, Math.Min(18, a - 17)), p1, p2);
             }
             else if (roll < 0.92)
             {
                 int a = rng.Next(22, 51);                                                     // Alleinerziehend
-                AddMember(h, a);
+                var parent = AddMember(h, a);
+                parent.Relationship = rng.Chance(0.7) ? Relationship.Separated : Relationship.Single;
                 int kids = rng.Next(1, 3);
-                for (int i = 0; i < kids; i++) AddMember(h, rng.Next(0, Math.Min(18, a - 17)));
+                for (int i = 0; i < kids; i++) AddChild(h, rng.Next(0, Math.Min(18, a - 17)), parent, null);
             }
             else
             {
                 int a = rng.Next(65, 86);                                                     // Senioren
-                AddMember(h, a);
-                if (rng.NextDouble() < 0.6) AddMember(h, Math.Max(65, a + rng.Next(-4, 5)));
+                if (rng.NextDouble() < 0.6) AddCouple(h, a, Math.Max(65, a + rng.Next(-4, 5)), married: 0.9);
+                else AddMember(h, a).Relationship = rng.Chance(0.6) ? Relationship.Widowed : Relationship.Single;
             }
             if (!homes.TryGetValue(home.Id, out var list)) homes[home.Id] = list = new List<Household>();
             list.Add(h);
@@ -252,13 +300,41 @@ namespace CityBuilder.Simulation.Citizens
             return h;
         }
 
-        void AddMember(Household h, int age)
+        Citizen AddMember(Household h, int age)
         {
             var c = NewCitizen(age);
             c.Household = h;
             c.Location = Place.Building(h.HomeId);
             c.Activity = Activity.Home;
             h.MemberList.Add(c);
+            return c;
+        }
+
+        /// <summary>Paar (meist Frau und Mann, sonst gleichgeschlechtlich), verheiratet mit Wahrscheinlichkeit <paramref name="married"/>.</summary>
+        (Citizen, Citizen) AddCouple(Household h, int ageA, int ageB, double married = 0.55)
+        {
+            var a = AddMember(h, ageA);
+            var b = AddMember(h, ageB);
+            b.Gender = rng.Chance(0.93) ? (a.Gender == Gender.Female ? Gender.Male : Gender.Female) : a.Gender;
+            a.PartnerId = b.Id;
+            b.PartnerId = a.Id;
+            a.Relationship = b.Relationship = rng.Chance(married) ? Relationship.Married : Relationship.Partnered;
+            if (a.Relationship == Relationship.Married && rng.Chance(0.8)) b.LastNameIndex = a.LastNameIndex;
+            return (a, b);
+        }
+
+        /// <summary>Kind: Persönlichkeit aus den Eltern gemischt, Nachname eines Elternteils.</summary>
+        Citizen AddChild(Household h, int age, Citizen p1, Citizen p2)
+        {
+            var c = AddMember(h, age);
+            c.ParentAId = p1?.Id ?? 0;
+            c.ParentBId = p2?.Id ?? 0;
+            if (p1 != null)
+            {
+                c.Personality = Personality.Mix(p1.Personality, p2?.Personality ?? Personality.FromArchetype(Archetypes.Roll(rng), rng), rng);
+                c.LastNameIndex = p2 != null && rng.Chance(0.5) ? p2.LastNameIndex : p1.LastNameIndex;
+            }
+            return c;
         }
 
         Citizen NewCitizen(int age)
@@ -272,6 +348,13 @@ namespace CityBuilder.Simulation.Citizens
                 ShoppingNeed = age >= Citizen.AdultAge ? (float)rng.NextDouble() : 0f,
             };
             c.Education = age >= Citizen.AdultAge ? RollEducation() : age >= 6 ? Education.Basic : Education.None;
+            // Bedürfnismodell: Name, Persönlichkeit (Archetyp + Streuung), Gesundheit
+            c.Gender = rng.Chance(0.5) ? Gender.Female : Gender.Male;
+            c.FirstNameIndex = rng.Next(1000);
+            c.LastNameIndex = rng.Next(1000);
+            c.Personality = Personality.FromArchetype(Archetypes.Roll(rng), rng);
+            c.Health = age < 50 ? 1f : MathF.Max(0.45f, 1f - (age - 50) * 0.012f);
+            c.ArrivedDay = clock.Day;
             citizens.Add(c);
             byId[c.Id] = c;
             return c;
@@ -283,10 +366,10 @@ namespace CityBuilder.Simulation.Citizens
             return r < 0.10 ? Education.None : r < 0.45 ? Education.Basic : r < 0.80 ? Education.Secondary : Education.Higher;
         }
 
-        void RemoveHousehold(Household h)
+        internal void RemoveHousehold(Household h)
         {
             foreach (var m in h.MemberList.ToArray()) RemoveCitizen(m, countAsMovedOut: true);
-            if (homes.TryGetValue(h.HomeId, out var list) && list.Remove(h)) householdCount--;
+            if (homes.TryGetValue(h.HomeId, out var list) && list.Remove(h)) { householdCount--; freeHousingDirty = true; }
             HouseholdMovedOut?.Invoke(h);
         }
 
@@ -294,6 +377,11 @@ namespace CityBuilder.Simulation.Citizens
         {
             if (!gone.Add(c)) return;
             Fire(c);
+            if (c.PartnerId != 0)
+            {
+                var partner = Get(c.PartnerId);
+                if (partner != null && partner.PartnerId == c.Id) partner.PartnerId = 0;
+            }
             if (c.TripId != 0) { trips.Remove(c.TripId); c.TripId = 0; }
             if (c.Household != null)
             {
@@ -307,49 +395,62 @@ namespace CityBuilder.Simulation.Citizens
         void Daily()
         {
             int doy = clock.DayOfYear;
+            freeHousingDirty = true;
             foreach (var c in citizens.ToArray())
             {
                 if (gone.Contains(c)) continue;
                 if (!c.IsCommuterIn && c.Age >= Citizen.AdultAge) c.ShoppingNeed = MathF.Min(1.5f, c.ShoppingNeed + 0.34f);
                 if (c.IsWorkingAge && !c.IsCommuterIn && !c.IsEmployed) c.UnemployedDays++;
 
-                if (c.BirthDayOfYear != doy) continue;
-                c.Age++;
-                if (c.Age == Citizen.AdultAge) c.Education = RollEducation(); // Schulabschluss
-                if (c.Age >= Citizen.RetirementAge && c.IsEmployed)
+                // Bedürfnismodell: Erinnerungen, Gesundheit, Lebensereignisse
+                DailyLife(c);
+                if (gone.Contains(c)) continue;
+
+                bool illDeath = c.IsIll && c.Age >= 70 && rng.Chance(0.01 * LifeEventRate);
+                if (c.BirthDayOfYear != doy && !illDeath) continue;
+                if (c.BirthDayOfYear == doy)
                 {
-                    if (c.IsCommuterIn) { RemoveCitizen(c, false); continue; }
-                    Fire(c); // Rente
-                    c.OutsideWorkConnectionId = 0;
+                    c.Age++;
+                    if (c.Age == Citizen.AdultAge) c.Education = RollEducation(); // Schulabschluss
+                    if (c.Age >= Citizen.RetirementAge && c.IsEmployed)
+                    {
+                        if (c.IsCommuterIn) { RemoveCitizen(c, false); continue; }
+                        int workplace = c.WorkplaceId;
+                        Fire(c); // Rente
+                        c.OutsideWorkConnectionId = 0;
+                        c.CommuteMeters = 0f;
+                        OnRetired(c, workplace);
+                    }
                 }
-                if (c.Age >= 80 && rng.NextDouble() < (c.Age - 79) * 0.12)
+                if (illDeath || (c.BirthDayOfYear == doy && c.Age >= 80 && rng.NextDouble() < (c.Age - 79) * 0.12))
                 {
                     var h = c.Household;
+                    OnDeath(c);
                     RemoveCitizen(c, false);
                     Stats.Died++;
                     if (h != null && h.MemberList.Count == 0 && homes.TryGetValue(h.HomeId, out var list) && list.Remove(h))
                     {
-                        householdCount--;
+                        { householdCount--; freeHousingDirty = true; }
                         HouseholdMovedOut?.Invoke(h);
                     }
                 }
             }
+            MatchSingles();
 
-            // Wegzug: Haushalte, in denen alle Erwerbsfähigen lange arbeitslos sind
-            var leaving = new List<Household>();
+            // Einkommen je Haushalt (ohne Steuern)
             foreach (var list in homes.Values)
                 foreach (var h in list)
                 {
-                    int working = 0, longUnemployed = 0;
-                    foreach (var m in h.MemberList)
-                    {
-                        if (!m.IsWorkingAge) continue;
-                        working++;
-                        if (!m.IsEmployed && m.UnemployedDays > 10) longUnemployed++;
-                    }
-                    if (working > 0 && longUnemployed == working && rng.NextDouble() < 0.08) leaving.Add(h);
+                    float income = 0f;
+                    foreach (var m in h.MemberList) income += DailyIncome(m);
+                    h.Income = income;
                 }
-            foreach (var h in leaving) RemoveHousehold(h);
+
+            // Utility-AI: Wegzug/Umzug (ersetzt die frühere feste Regel „alle Erwerbsfähigen > 10 Tage arbeitslos → 8 %/Tag“,
+            // die jetzt als starker Faktor in LeaveProbability steckt) und Jobwechsel
+            int day = clock.Day;
+            HouseholdDecisions(day);
+            JobDecisions(day);
         }
 
         // ------------------------------------------------------------ Arbeit
@@ -366,6 +467,7 @@ namespace CityBuilder.Simulation.Citizens
             c.WorkplaceId = b.Id;
             c.OutsideWorkConnectionId = 0;
             c.UnemployedDays = 0;
+            RefreshCommute(c);
         }
 
         void Fire(Citizen c)
@@ -403,34 +505,41 @@ namespace CityBuilder.Simulation.Citizens
                 if (job != null)
                 {
                     if (displaced != null) RemoveCitizen(displaced, false); // Einpendler verliert den Job an einen Einwohner
+                    bool wasUnemployed = !c.IsEmployed;
                     Employ(c, job);
+                    if (wasUnemployed) Remember(c, MemoryKind.NewJob, 0.6f, building: job.Id);
                     continue;
                 }
                 if (c.WorksOutside || c.UnemployedDays < 1) continue;
                 // Kein Job in der Stadt: außerhalb arbeiten, wenn ein Außenanschluss erreichbar ist
                 var ext = NearestExternal(home.Entrance, comp);
-                if (ext != null) c.OutsideWorkConnectionId = ext.Id;
+                if (ext != null)
+                {
+                    c.OutsideWorkConnectionId = ext.Id;
+                    RefreshCommute(c);
+                }
             }
         }
 
-        /// <summary>Nächster passender Job; ohne freien Platz ggf. einer, den ein Einpendler besetzt (<paramref name="displaced"/>).</summary>
+        /// <summary>
+        /// Bester passender Job nach <see cref="JobUtility"/> (Arbeitssuchende nehmen den besten, kein Würfeln);
+        /// ohne freien Platz ggf. einer, den ein Einpendler besetzt (<paramref name="displaced"/>).
+        /// </summary>
         Building FindJob(Citizen c, Vector2 from, int comp, out Citizen displaced)
         {
             displaced = null;
             if (comp < 0) return null;
             Building best = null, bestTaken = null;
-            float bestScore = float.MaxValue, bestTakenScore = float.MaxValue;
+            float bestScore = float.MinValue, bestTakenScore = float.MinValue;
             foreach (var b in jobBuildings)
             {
                 if (c.Education < MinEducation(b.Zone)) continue;
                 bool free = FreeJobs(b) > 0;
                 if (!free && (c.WorksOutside || !HasCommuterIn(b))) continue;
                 if (ComponentOf(b) != comp) continue;
-                float score = Vector2.Distance(from, b.Entrance);
-                // Höher Gebildete bevorzugen passende Jobs (Büro)
-                if (c.Education >= Education.Secondary && b.Zone != ZoneType.Office) score += 250f;
-                if (free) { if (score < bestScore) { bestScore = score; best = b; } }
-                else if (score < bestTakenScore) { bestTakenScore = score; bestTaken = b; }
+                float score = JobUtility(c, b, from);
+                if (free) { if (score > bestScore) { bestScore = score; best = b; } }
+                else if (score > bestTakenScore) { bestTakenScore = score; bestTaken = b; }
             }
             if (best != null) return best;
             if (bestTaken == null) return null;
@@ -493,7 +602,7 @@ namespace CityBuilder.Simulation.Citizens
             {
                 if (gone.Contains(c)) continue;
                 if (c.IsCommuterIn && network.GetNode(c.CommuterConnectionId) == null) { RemoveCitizen(c, false); continue; }
-                if (c.WorksOutside && network.GetNode(c.OutsideWorkConnectionId) == null) c.OutsideWorkConnectionId = 0;
+                if (c.WorksOutside && network.GetNode(c.OutsideWorkConnectionId) == null) { c.OutsideWorkConnectionId = 0; c.CommuteMeters = 0f; }
                 if (c.Activity != Activity.Travelling && c.Location.IsOutside && network.GetNode(c.Location.ConnectionNodeId) == null)
                     TeleportHome(c);
             }
@@ -531,6 +640,17 @@ namespace CityBuilder.Simulation.Citizens
                         {
                             TryShop(c, now);
                         }
+                        // Bedürfnismodell: Freizeit am Nachmittag/Abend (Utility AI: zu Hause / Park / Bummeln)
+                        else if (c.Activity == Activity.Home && c.Age >= 12 && c.LastLeisureDay != day && tod >= LeisureFrom && tod < LeisureUntil &&
+                                 c.Need(NeedKind.Leisure) < 0.65f && !(c.IsEmployed && c.LastWorkDay != day && tod < c.WorkStart + 30))
+                        {
+                            TryLeisure(c, now, day);
+                        }
+                        break;
+                    case Activity.Leisure:
+                        c.Activity = Activity.Home;
+                        c.LeisureParkId = 0;
+                        c.BusyUntil = now + 2;
                         break;
                     case Activity.Work:
                         if (!c.IsCommuterIn && c.ShoppingNeed >= 0.6f && tod >= ShopFrom && tod < ShopUntil && TryShop(c, now)) break;
@@ -559,6 +679,7 @@ namespace CityBuilder.Simulation.Citizens
             if (best == null)
             {
                 c.BusyUntil = now + 20; // in 2 h erneut versuchen
+                if (c.ShoppingNeed >= 1.2f && rng.Chance(0.2f)) Remember(c, MemoryKind.NoShop, 0.4f);
                 return false;
             }
             StartTrip(c, TripPurpose.ToShop, Place.Building(best.Id), now);
@@ -579,19 +700,21 @@ namespace CityBuilder.Simulation.Citizens
             var b = PositionOf(destination);
             if (!a.HasValue || !b.HasValue) { c.ArriveTick = now + 1; Stats.OtherTrips++; return; }
 
-            if (c.Age >= Citizen.AdultAge && WantsCar(c) && TryStartCar(c, destination, now)) return;
-
             float dist = Vector2.Distance(a.Value, b.Value);
+            c.TripDistance = dist;
+            if (c.Age >= Citizen.AdultAge && WantsCar(c, dist) && TryStartCar(c, destination, now)) return;
+
             int ticks = Math.Max(1, (int)MathF.Ceiling(dist / OtherMetersPerTick));
             if (c.Location.IsOutside || destination.IsOutside) ticks += OutsideTicks;
             c.ArriveTick = now + ticks;
             Stats.OtherTrips++;
         }
 
-        bool WantsCar(Citizen c)
+        /// <summary>Verkehrsmittelwahl (Utility AI, s. <see cref="CarProbability"/>).</summary>
+        bool WantsCar(Citizen c, float distance)
         {
-            float share = (c.IsCommuterIn ? CommuterCarShare : CarShare) * traffic.Demand;
-            if (share <= 0f || rng.NextDouble() >= share) return false;
+            float p = CarProbability(c, distance);
+            if (p <= 0f || rng.NextDouble() >= p) return false;
             return trips.Count < traffic.MaxVehicles * MaxVehicleShare;
         }
 
@@ -620,6 +743,13 @@ namespace CityBuilder.Simulation.Citizens
             c.TripId = 0;
             c.ArriveTick = 0; // kommt im nächsten Tagesablauf-Durchlauf an
             if (arrived) Stats.CarArrivals++; else Stats.CarTripsFailed++;
+
+            // Bedürfnismodell: Stau erkennen (Verkehrszeit deutlich über freier Fahrt bzw. abgebrochen) → Erinnerung
+            float expected = c.TripDistance * 1.3f / 11f + 20f;
+            float actual = traffic.Time - v.StartTime;
+            float strength = !arrived ? 0.6f : actual > expected * 2.2f + 20f ? Math.Clamp((actual / expected - 2f) / 3f, 0.25f, 0.8f) : 0f;
+            if (strength > 0f) Remember(c, MemoryKind.TrafficJam, strength, street: v.Lane?.Segment.Id ?? 0,
+                                        building: c.WorkplaceId != 0 ? c.WorkplaceId : 0);
         }
 
         void Arrive(Citizen c, long now)
@@ -646,6 +776,7 @@ namespace CityBuilder.Simulation.Citizens
                     long end = now - tod + c.WorkStart + WorkTicks;
                     c.BusyUntil = end > now ? end : now + 10; // zu spät angekommen: kurz bleiben
                     if (!SamePlace(dest, c.Workplace)) c.BusyUntil = now + 1; // Job unterwegs verloren → gleich wieder heim
+                    else if (c.CommuteMeters > 3000f && rng.Chance(0.15f)) Remember(c, MemoryKind.LongCommute, 0.3f, building: c.WorkplaceId);
                     break;
                 case TripPurpose.ToShop:
                     c.Activity = Activity.Shopping;
@@ -653,6 +784,14 @@ namespace CityBuilder.Simulation.Citizens
                     // Einkauf für den ganzen Haushalt
                     if (c.Household != null) foreach (var m in c.Household.MemberList) m.ShoppingNeed = 0f;
                     c.ShoppingNeed = 0f;
+                    if (c.LeisureTrip)
+                    {
+                        // Freizeitbummel: dauert länger, füllt die Freizeit
+                        c.LeisureTrip = false;
+                        c.BusyUntil = now + ShopTicks * 2;
+                        c.NeedValues[(int)NeedKind.Leisure] = MathF.Min(1f, c.NeedValues[(int)NeedKind.Leisure] + 0.35f);
+                        if (rng.Chance(0.3f)) Remember(c, MemoryKind.NiceShopping, 0.35f, building: dest.BuildingId);
+                    }
                     break;
                 default:
                     c.Activity = c.IsCommuterIn ? Activity.Outside : Activity.Home;
@@ -678,6 +817,8 @@ namespace CityBuilder.Simulation.Citizens
             c.Mode = TravelMode.None;
             c.Activity = c.IsCommuterIn ? Activity.Outside : Activity.Home;
             c.BusyUntil = 0;
+            c.LeisureTrip = false;
+            c.LeisureParkId = 0;
         }
 
         // ------------------------------------------------------------ Orte
@@ -737,14 +878,20 @@ namespace CityBuilder.Simulation.Citizens
                     var target = FindFreeHome(b.Position, b.Id);
                     if (target == null)
                     {
-                        householdCount--;
+                        { householdCount--; freeHousingDirty = true; }
                         foreach (var m in h.MemberList.ToArray()) RemoveCitizen(m, countAsMovedOut: true);
                         HouseholdMovedOut?.Invoke(h);
                         continue;
                     }
                     h.HomeId = target.Id;
+                    h.MovedInDay = clock.Day;
                     if (!homes.TryGetValue(target.Id, out var list)) homes[target.Id] = list = new List<Household>();
                     list.Add(h);
+                    foreach (var m in h.MemberList)
+                    {
+                        RefreshCommute(m);
+                        Remember(m, MemoryKind.Demolished, 0.7f, street: b.FrontSegmentId, building: target.Id);
+                    }
                 }
             }
             // Beschäftigte: verlieren den Job (Einpendler gehen)
@@ -754,9 +901,14 @@ namespace CityBuilder.Simulation.Citizens
                 foreach (var w in ws.ToArray())
                 {
                     w.WorkplaceId = 0;
+                    w.CommuteMeters = 0f;
                     if (w.IsCommuterIn) RemoveCitizen(w, false);
+                    else Remember(w, MemoryKind.JobLost, 0.6f, building: 0);
                 }
             }
+            contexts.Remove(b.Id);
+            residentSatisfaction.Remove(b.Id);
+            workerSatisfaction.Remove(b.Id);
             // Wer gerade drin ist, ist jetzt zu Hause
             foreach (var c in citizens)
                 if (!gone.Contains(c) && c.Activity != Activity.Travelling && c.Location.BuildingId == b.Id) TeleportHome(c);
@@ -785,13 +937,17 @@ namespace CityBuilder.Simulation.Citizens
             s.AtHome = s.AtWork = s.Shopping = s.Travelling = s.TravellingByCar = 0;
             Array.Clear(s.AgeGroups, 0, s.AgeGroups.Length);
             Array.Clear(s.ByEducation, 0, s.ByEducation.Length);
+            Array.Clear(s.AverageNeeds, 0, s.AverageNeeds.Length);
             int unemployedEducated = 0, unserved = 0;
+            float satSum = 0f, moodSum = 0f;
+            s.Ill = s.AtLeisure = 0;
 
             foreach (var c in citizens)
             {
                 if (gone.Contains(c)) continue;
                 switch (c.Activity)
                 {
+                    case Activity.Leisure: s.AtLeisure++; break;
                     case Activity.Home: s.AtHome++; break;
                     case Activity.Work: s.AtWork++; break;
                     case Activity.Shopping: s.Shopping++; break;
@@ -803,6 +959,10 @@ namespace CityBuilder.Simulation.Citizens
                 if (c.IsCommuterIn) { s.CommutersIn++; continue; }
 
                 s.Population++;
+                satSum += c.Satisfaction;
+                moodSum += c.Mood;
+                if (c.IsIll) s.Ill++;
+                for (int i = 0; i < Needs.Count; i++) s.AverageNeeds[i] += c.NeedValues[i];
                 switch (c.Stage)
                 {
                     case LifeStage.Child: s.Children++; break;
@@ -827,17 +987,37 @@ namespace CityBuilder.Simulation.Citizens
             }
             s.Households = householdCount;
             s.ExternalConnections = traffic.ExternalConnections.Count;
+            s.AverageSatisfaction = s.Population > 0 ? satSum / s.Population : 0.6f;
+            s.AverageMood = s.Population > 0 ? moodSum / s.Population : 0.5f;
+            for (int i = 0; i < Needs.Count; i++) s.AverageNeeds[i] = s.Population > 0 ? s.AverageNeeds[i] / s.Population : 0.6f;
 
-            // Belegung an die Gebäude, Arbeitsmarkt an die Stadt (Nachfrage)
+            // Belegung an die Gebäude, Arbeitsmarkt an die Stadt (Nachfrage); Zufriedenheit je Gebäude
             int vacant = 0, freeHomes = 0;
             foreach (var b in city.Buildings)
             {
                 var hs = HouseholdsIn(b.Id);
                 int residents = 0;
-                foreach (var h in hs) residents += h.MemberList.Count;
+                float hsat = 0f;
+                foreach (var h in hs)
+                {
+                    float sum = 0f;
+                    foreach (var m in h.MemberList) sum += m.Satisfaction;
+                    h.Satisfaction = h.MemberList.Count > 0 ? sum / h.MemberList.Count : 0.6f;
+                    hsat += sum;
+                    residents += h.MemberList.Count;
+                }
+                if (residents > 0) residentSatisfaction[b.Id] = hsat / residents; else residentSatisfaction.Remove(b.Id);
+                var ws = WorkersAt(b.Id);
+                if (ws.Count > 0)
+                {
+                    float wsat = 0f;
+                    foreach (var w in ws) wsat += 0.6f * w.NeedValues[(int)NeedKind.Work] + 0.4f * w.NeedValues[(int)NeedKind.Mobility];
+                    workerSatisfaction[b.Id] = wsat / ws.Count;
+                }
+                else workerSatisfaction.Remove(b.Id);
                 b.OccupiedHouseholds = hs.Count;
                 b.Residents = residents;
-                b.Workers = WorkersAt(b.Id).Count;
+                b.Workers = ws.Count;
                 if (!b.IsConstructed) continue;
                 vacant += Math.Max(0, b.Jobs - b.Workers);
                 freeHomes += Math.Max(0, b.Households - b.OccupiedHouseholds);
@@ -852,6 +1032,7 @@ namespace CityBuilder.Simulation.Citizens
             p.VacantJobs = vacant;
             p.FreeHomes = freeHomes;
             p.UnservedShoppers = unserved;
+            p.AverageSatisfaction = s.Population > 0 ? s.AverageSatisfaction : -1f;
         }
     }
 }

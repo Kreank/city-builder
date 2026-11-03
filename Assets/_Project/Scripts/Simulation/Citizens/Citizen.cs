@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CityBuilder.Simulation.Citizens.Content;
 
 namespace CityBuilder.Simulation.Citizens
 {
@@ -25,6 +26,21 @@ namespace CityBuilder.Simulation.Citizens
         Travelling,
         /// <summary>Außerhalb der Stadt (Einpendler zu Hause, Auspendler bei der Arbeit).</summary>
         Outside,
+        /// <summary>Freizeit im Viertel (Spaziergang/Park), Ort bleibt die Wohnung – bis G4 echte Parks als Ziel liefert.</summary>
+        Leisure,
+    }
+
+    public enum Gender : byte { Female, Male }
+
+    /// <summary>Familienstand (Kinder unter 18 sind immer <see cref="Single"/>, Anzeige „ledig (Kind)“).</summary>
+    public enum Relationship : byte
+    {
+        Single,
+        /// <summary>In Partnerschaft (mit <see cref="Citizen.PartnerId"/>).</summary>
+        Partnered,
+        Married,
+        Separated,
+        Widowed,
     }
 
     public enum TripPurpose : byte { None, ToWork, ToShop, ToHome }
@@ -120,6 +136,60 @@ namespace CityBuilder.Simulation.Citizens
         internal long BusyUntil;
         internal int LastWorkDay = -1;
 
+        // ------------------------------------------------------------ Bedürfnismodell
+
+        public Gender Gender { get; internal set; }
+        internal int FirstNameIndex, LastNameIndex;
+        public string FirstName => Names.First(Gender, FirstNameIndex);
+        public string LastName => Names.LastName(LastNameIndex);
+        public string FullName => FirstName + " " + LastName;
+
+        /// <summary>Charakterzüge (Gewichte auf Bedürfnisse und Entscheidungen).</summary>
+        public Personality Personality { get; internal set; }
+
+        /// <summary>Erfüllung je Bedürfnis 0..1 (Index = <see cref="NeedKind"/>), gestaffelt aktualisiert.</summary>
+        internal readonly float[] NeedValues = NewNeeds();
+        public float Need(NeedKind k) => NeedValues[(int)k];
+
+        /// <summary>Zufriedenheit 0..1: gewichteter Mittelwert der Bedürfnisse (Lebensphase × Persönlichkeit).</summary>
+        public float Satisfaction { get; internal set; } = 0.6f;
+        /// <summary>Gemüt 0..1: kurzfristige Stimmung aus Erinnerungen (0,5 = ausgeglichen).</summary>
+        public float Mood { get; internal set; } = 0.5f;
+        /// <summary>Körperliche Gesundheit 0..1 (sinkt bei Krankheit, Alter, Abgas).</summary>
+        public float Health { get; internal set; } = 1f;
+        public bool IsIll { get; internal set; }
+
+        public Relationship Relationship { get; internal set; }
+        /// <summary>Partner (Bürger-Id, 0 = keiner). Partner wohnen im selben Haushalt.</summary>
+        public int PartnerId { get; internal set; }
+        /// <summary>Eltern (Bürger-Ids, 0 = unbekannt/zugezogen ohne Eltern).</summary>
+        public int ParentAId { get; internal set; }
+        public int ParentBId { get; internal set; }
+
+        internal MemoryList MemoryStore;
+        static readonly MemoryList NoMemories = new MemoryList();
+        /// <summary>Erinnerungen (kurze Liste mit Abklingen), Texte über <see cref="CitizenSystem.MemoryText"/>.</summary>
+        public MemoryList Memories => MemoryStore ?? NoMemories;
+
+        /// <summary>Luftlinie der laufenden Fahrt (m).</summary>
+        internal float TripDistance;
+        /// <summary>Luftlinie Wohnung → Arbeit (m), 0 = kein Pendeln.</summary>
+        public float CommuteMeters { get; internal set; }
+        internal int LastLeisureDay = -1;
+        /// <summary>Laufende Fahrt zum Laden ist ein Freizeitbummel.</summary>
+        internal bool LeisureTrip;
+        /// <summary>Besuchter Park (Dienstgebäude-Id aus G4) während <see cref="Activity.Leisure"/>, 0 = Spaziergang im Viertel.</summary>
+        public int LeisureParkId { get; internal set; }
+        /// <summary>Tag der Ankunft in der Stadt/Geburt.</summary>
+        public int ArrivedDay { get; internal set; }
+
+        static float[] NewNeeds()
+        {
+            var n = new float[Needs.Count];
+            for (int i = 0; i < n.Length; i++) n[i] = 0.6f;
+            return n;
+        }
+
         public LifeStage Stage => Age < 6 ? LifeStage.Child : Age < AdultAge ? LifeStage.Student : Age < RetirementAge ? LifeStage.Adult : LifeStage.Senior;
         public bool IsWorkingAge => Age >= AdultAge && Age < RetirementAge;
 
@@ -183,6 +253,13 @@ namespace CityBuilder.Simulation.Citizens
         public IReadOnlyList<Citizen> Members => MemberList;
         /// <summary>Haushaltsart aus den aktuellen Mitgliedern (ändert sich mit Altern/Tod).</summary>
         public HouseholdKind Kind => HouseholdKinds.Classify(MemberList);
+        /// <summary>
+        /// Einkommen je Spieltag (Löhne/Renten der Mitglieder, brutto, ohne Steuern – die rechnet die Wirtschaft).
+        /// Täglich vom Bürgersystem gesetzt.
+        /// </summary>
+        public float Income { get; internal set; }
+        /// <summary>Mittlere Zufriedenheit der Mitglieder (gesetzt mit der Statistik).</summary>
+        public float Satisfaction { get; internal set; } = 0.6f;
 
         public override string ToString() => $"Haushalt #{Id} ({MemberList.Count} Personen)";
     }
