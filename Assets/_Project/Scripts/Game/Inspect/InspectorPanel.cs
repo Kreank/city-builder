@@ -142,10 +142,23 @@ namespace CityBuilder.Game.Inspect
             SelectionVersion++;
         }
 
-        /// <summary>Info-Modus verlassen (Schließen-Knopf).</summary>
+        /// <summary>
+        /// UX: Stadtübersicht ausdrücklich angefordert (Info-Knopf/C). Ohne Auswahl und ohne Übersicht bleibt das Panel zu –
+        /// im Auswählen-Modus (Standard) wird nichts aufgedrängt.
+        /// </summary>
+        public bool ShowOverview { get; set; }
+
+        /// <summary>Soll das Inspektor-Panel offen sein? (Auswahl vorhanden oder Übersicht angefordert)</summary>
+        public bool WantsPanel => Active && (!selection.IsNone || ShowOverview);
+
+        FacilityMover mover;
+        bool MoverBusy => (mover != null || (mover = GetComponent<FacilityMover>()) != null) && mover.Moving;
+
+        /// <summary>Panel schließen (×): Auswahl und Übersicht weg, der Auswählen-Modus bleibt.</summary>
         public void Close()
         {
-            if (tool != null && tool.CurrentMode == RoadTool.Mode.Inspect) tool.SetMode(RoadTool.Mode.Straight);
+            ClearSelection();
+            ShowOverview = false;
         }
 
         void Update()
@@ -153,6 +166,7 @@ namespace CityBuilder.Game.Inspect
             if (cameraController == null && tool != null && tool.Camera != null) cameraController = tool.Camera.GetComponent<CameraController>();
             if (!Active)
             {
+                ShowOverview = false;
                 HideMarkers();
                 StopFollowing();
                 return;
@@ -164,8 +178,9 @@ namespace CityBuilder.Game.Inspect
             {
                 var screen = mouse.position.ReadValue();
                 bool overUi = UiBlocker.IsPointerOverUi(screen);
-                if (mouse.leftButton.wasPressedThisFrame && !overUi && tool.Camera != null) PickAt(screen);
-                if (mouse.rightButton.wasPressedThisFrame && !overUi) ClearSelection();
+                bool moving = MoverBusy; // UX: während Verschieben gehören die Klicks dem FacilityMover
+                if (mouse.leftButton.wasPressedThisFrame && !overUi && tool.Camera != null && !moving) PickAt(screen);
+                if (mouse.rightButton.wasPressedThisFrame && !overUi && !moving) ClearSelection();
             }
             if (kb != null && kb.fKey.wasPressedThisFrame && CanFollow) follow = !follow;
 

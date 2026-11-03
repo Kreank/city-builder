@@ -232,10 +232,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(d.Front.Y < -0.99f, "Vorderseite zeigt zur Straße");
             Assert.True(d.HasAccess);
             var plan = RoadBuilder.Plan(w.Roads, new Vector2(0, -100), 8f, null, new Vector2(0, 200), 8f, RoadCatalog.CityTwoLane);
-            Assert.True(plan.IsValid);
-            RoadBuilder.Build(w.Roads, plan);
-            Assert.Contains(d, t.Depots); // Straßenbau reißt nicht ab – der Straßenblocker fragt BlocksRoad
-            Assert.Contains(w.Roads.Segments, s => t.BlocksRoad(s) == d);
+            // UX-Runde: Straßenblocker hängt jetzt im RoadBuilder – der Plan ist ungültig, das Depot bleibt
+            Assert.Equal(RoadBuildError.OverlapsStructure, plan.Error);
+            Assert.Equal("depot", plan.BlockedBy.Kind);
+            Assert.Equal(d.Id, plan.BlockedBy.Id);
+            Assert.Empty(RoadBuilder.Build(w.Roads, plan));
+            Assert.Contains(d, t.Depots);
             Assert.True(t.BlocksPoint(d.Position));
         }
 

@@ -17,7 +17,10 @@ namespace CityBuilder.Simulation.Services
         OverlapsFacility,
         /// <summary>Strommast im Weg (Leitungen werden nicht automatisch verlegt).</summary>
         OverlapsPole,
-        /// <summary>Keine Stadtstraße in Reichweite (Rand ≤ <see cref="ServiceSystem.RoadReach"/>) – Fahrzeuge kommen nicht raus.</summary>
+        /// <summary>
+        /// Keine Zufahrt an der Vorderseite: vor der Mitte der Vorderkante liegt keine ebenerdige Stadtstraße
+        /// (Rand ≤ <see cref="ServiceSystem.RoadReach"/>) – Fahrzeuge kommen nicht raus.
+        /// </summary>
         NoRoadAccess,
         /// <summary>Zu wenig Geld in der Stadtkasse (Kontostand + Kreditrahmen) oder Baustopp.</summary>
         InsufficientFunds,
@@ -58,6 +61,19 @@ namespace CityBuilder.Simulation.Services
         public float LoadFactor => Load <= 1e-6f ? (EffectiveCapacity > 0f ? 1f : 0f) : MathF.Min(1f, EffectiveCapacity / Load);
 
         public bool Contains(Vector2 p, float margin = 0f) => ServiceGeometry.InRect(p, Position, Front, Type.Width, Type.Depth, margin);
+        /// <summary>Grundfläche (gemeinsamer Baustein mit Straßensperre und Ausrichtung).</summary>
+        public Footprint Footprint => new Footprint(Position, Front, Type.Width, Type.Depth);
+
+        StructureBlock block;
+        /// <summary>Eintrag für die Bauwerks-Sperre im Straßennetz (Straßen dürfen das Gebäude nicht überbauen).</summary>
+        internal StructureBlock Block => block ??= new StructureBlock("service", Id, Type.DisplayName, Footprint, Height);
+        internal void Relocate(Vector2 position, Vector2 front, float height)
+        {
+            Position = position;
+            Front = front;
+            Height = height;
+            block = null;
+        }
         public Vector2[] Corners() => ServiceGeometry.Corners(Position, Front, Type.Width, Type.Depth);
         /// <summary>Abstand eines Punktes zur Grundfläche (0 = darauf).</summary>
         public float DistanceTo(Vector2 p) => ServiceGeometry.RectDistance(p, Position, Front, Type.Width, Type.Depth);
@@ -76,9 +92,15 @@ namespace CityBuilder.Simulation.Services
         public ServiceBuildError Error;
         public int AccessSegmentId = -1;
         public float AccessT;
+        /// <summary>Automatisch zur Straße ausgerichtet (Vorderseite zeigt zur Straße, Vorderkante am Gehweg).</summary>
+        public bool Aligned;
+        /// <summary>Verschieben: Id des bestehenden Dienstgebäudes (0 = Neubau). <see cref="Cost"/> ist dann der Umzugspreis.</summary>
+        public int MovingId;
         /// <summary>Gebäude, die abgerissen würden.</summary>
         public readonly List<Building> Displaced = new List<Building>();
         public bool IsValid => Error == ServiceBuildError.None;
+        /// <summary>Mitte der Vorderkante (Anschlusspunkt, Vorschau-Pfeil).</summary>
+        public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
     }
 
     /// <summary>

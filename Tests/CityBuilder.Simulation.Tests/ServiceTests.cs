@@ -77,7 +77,7 @@ namespace CityBuilder.Simulation.Tests
 
             Road(w, new Vector2(0, -150), new Vector2(0, 150));     // Westufer
             Road(w, new Vector2(230, -150), new Vector2(230, 150)); // Ostufer
-            var police = s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-22, 0));
+            var police = s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-18, 0), 90f); // Vorderseite zur Straße (Osten)
             Assert.NotNull(police);
             Assert.True(police.HasAccess);
             s.ForceTick();
@@ -156,7 +156,7 @@ namespace CityBuilder.Simulation.Tests
         {
             var w = TwoStreets(out var west, out var east);
             var s = w.Services;
-            var tiny = s.TryBuild(Custom(ServiceKinds.Police, 1f), new Vector2(-22, 0));
+            var tiny = s.TryBuild(Custom(ServiceKinds.Police, 1f), new Vector2(-18, 0), 90f); // Vorderseite zum Straßenende
             Assert.NotNull(tiny);
             s.ForceTick();
             output.WriteLine($"Belastung {tiny.Load:0.#} bei Kapazität 1, Faktor {tiny.LoadFactor:0.###}");
@@ -166,7 +166,7 @@ namespace CityBuilder.Simulation.Tests
 
             // Ausreichende Kapazität → volle Abdeckung im Nahbereich
             Assert.True(s.Remove(tiny.Id));
-            var real = s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-22, 0));
+            var real = s.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-18, 0), 90f);
             s.ForceTick();
             Assert.True(real.Utilization < 1f);
             Assert.All(west, b => Assert.True(s.Coverage(ServiceKinds.Police, b) > 0.95f, $"{b}: {s.Coverage(ServiceKinds.Police, b):0.##}"));
@@ -176,7 +176,7 @@ namespace CityBuilder.Simulation.Tests
             // Halbe Kapazität des Bedarfs → Abdeckung ≈ 0,5
             float load = real.Load;
             Assert.True(s.Remove(real.Id));
-            var half = s.TryBuild(Custom(ServiceKinds.Police, load * 0.5f), new Vector2(-22, 0));
+            var half = s.TryBuild(Custom(ServiceKinds.Police, load * 0.5f), new Vector2(-18, 0), 90f);
             s.ForceTick();
             Assert.InRange(half.LoadFactor, 0.45f, 0.55f);
             Assert.True(s.Coverage(ServiceKinds.Police, west[0]) <= 0.55f);
@@ -187,7 +187,7 @@ namespace CityBuilder.Simulation.Tests
         {
             var w = TwoStreets(out var west, out _);
             var s = w.Services;
-            Assert.NotNull(s.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(-30, 0)));
+            Assert.NotNull(s.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(-20, 0), 90f));
             s.ForceTick();
             var b = west[0];
             Assert.True(s.Coverage(ServiceKinds.EducationPrimary, b) > 0.9f);
@@ -209,7 +209,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(before > 0f);
             Assert.All(west, b => Assert.True(s.GarbageAt(b) > 0f));
 
-            var dump = s.TryBuild(ServiceCatalog.Landfill, new Vector2(-40, 0));
+            var dump = s.TryBuild(ServiceCatalog.Landfill, new Vector2(-32, 0), 90f);
             Assert.NotNull(dump);
             float eastBefore = east.Sum(b => s.GarbageAt(b));
             for (int i = 0; i < 48 * 3; i++) s.ForceTick();
@@ -228,7 +228,7 @@ namespace CityBuilder.Simulation.Tests
             var w = TwoStreets(out var west, out _);
             var s = w.Services;
             var small = new ServiceType("dump_small", "Mini-Halde", ServiceKinds.Garbage, 30f, 20f, 100f, "t/Tag", 3f, 0f, 0f, storage: 0.01f);
-            var dump = s.TryBuild(small, new Vector2(-24, 0));
+            var dump = s.TryBuild(small, new Vector2(-18, 0), 90f);
             Assert.NotNull(dump);
             for (int i = 0; i < 48 * 2; i++) s.ForceTick();
             Assert.True(dump.IsFull);
@@ -243,7 +243,7 @@ namespace CityBuilder.Simulation.Tests
             var s = w.Services;
             s.ForceTick();
             float without = s.FireRisk(west[0]);
-            Assert.NotNull(s.TryBuild(ServiceCatalog.FireStation, new Vector2(-24, 0)));
+            Assert.NotNull(s.TryBuild(ServiceCatalog.FireStation, new Vector2(-20, 0), 90f));
             s.ForceTick();
             float with = s.FireRisk(west[0]);
             output.WriteLine($"Brandrisiko ohne {without:0.###}, mit Feuerwache {with:0.###}");
@@ -264,7 +264,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(ServiceBuildError.OutOfWorld, s.Plan(ServiceCatalog.Hospital, w.Max - new Vector2(5, 5)).Error);
             Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.Library, new Vector2(100, 120)).Error);
 
-            var school = s.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(100, 20));
+            var school = s.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(100, 20), 180f); // Vorderseite zur Straße (Süden)
             Assert.NotNull(school);
             Assert.Equal(ServiceBuildError.OverlapsFacility, s.Plan(ServiceCatalog.Clinic, new Vector2(110, 25)).Error);
             // Versorger dürfen nicht auf Dienstflächen (Hook im UtilitySystem) – und umgekehrt
@@ -287,7 +287,7 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
-        public void Build_DisplacesBuildings_AndRoadThroughFacilityRemovesIt()
+        public void Build_DisplacesBuildings_AndRoadThroughFacility_IsBlocked()
         {
             var w = TwoStreets(out var west, out _);
             var s = w.Services;
@@ -299,7 +299,7 @@ namespace CityBuilder.Simulation.Tests
             {
                 for (float off = 0f; off <= 12f && plan == null; off += 2f)
                 {
-                    var p = s.Plan(ServiceCatalog.Library, b.Position - b.Front * off);
+                    var p = s.Plan(ServiceCatalog.Library, b.Position - b.Front * off, b.Front);
                     if (p.IsValid && p.Displaced.Contains(b)) { plan = p; target = b; }
                 }
                 if (plan != null) break;
@@ -308,13 +308,19 @@ namespace CityBuilder.Simulation.Tests
             Assert.NotNull(s.Build(plan));
             Assert.Null(w.City.GetBuilding(target.Id));
 
-            var hospital = s.TryBuild(ServiceCatalog.Hospital, new Vector2(-27, 0));
+            var hospital = s.TryBuild(ServiceCatalog.Hospital, new Vector2(-24, 0), 90f);
             Assert.NotNull(hospital);
             int removed = 0;
             s.FacilityRemoved += f => { if (f == hospital) removed++; };
-            Road(w, new Vector2(-27, -120), new Vector2(-27, -5));
-            Assert.Null(s.GetFacility(hospital.Id));
-            Assert.Equal(1, removed);
+            // Neu (UX-Runde): Straße durchs Dienstgebäude → Plan ungültig mit Namen, Gebäude bleibt
+            var plan2 = RoadBuilder.Plan(w.Roads, new Vector2(-24, -120), 8f, null, new Vector2(-24, -5), 8f, RoadCatalog.CityTwoLane);
+            Assert.Equal(RoadBuildError.OverlapsStructure, plan2.Error);
+            Assert.NotNull(plan2.BlockedBy);
+            Assert.Equal(hospital.Id, plan2.BlockedBy.Id);
+            Assert.Equal(ServiceCatalog.Hospital.DisplayName, plan2.BlockedBy.Name);
+            Assert.Empty(RoadBuilder.Build(w.Roads, plan2));
+            Assert.NotNull(s.GetFacility(hospital.Id));
+            Assert.Equal(0, removed);
         }
 
         [Fact]

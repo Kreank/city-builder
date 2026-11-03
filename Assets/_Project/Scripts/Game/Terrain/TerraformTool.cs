@@ -93,7 +93,7 @@ namespace CityBuilder.Game.Terrain
             var mouse = Mouse.current;
 
             if (kb != null && kb.lKey.wasPressedThisFrame)
-                tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Terraform);
+                tool.ToggleMode(RoadTool.Mode.Terraform); // UX: erneut L = Auswählen
 
             if (!Active || mouse == null)
             {

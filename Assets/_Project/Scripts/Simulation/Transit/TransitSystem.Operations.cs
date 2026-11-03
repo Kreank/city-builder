@@ -154,7 +154,7 @@ namespace CityBuilder.Simulation.Transit
             if (hi - lo > TransitRules.DepotMaxSlope) return TransitBuildError.TooSteep;
             foreach (var s in roads.Segments)
                 if (ServiceGeometry.RoadCrossesRect(s, plan.Position, plan.Front, type.Width, type.Depth, 0f)) return TransitBuildError.OverlapsRoad;
-            if (DepotOverlaps(plan.Position, plan.Front, type.Width, type.Depth)) return TransitBuildError.OverlapsFacility;
+            if (DepotOverlaps(plan.Position, plan.Front, type.Width, type.Depth, plan.MovingId)) return TransitBuildError.OverlapsFacility;
             if (services != null)
                 foreach (var f in services.Facilities)
                     if (ServiceGeometry.RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
@@ -226,6 +226,48 @@ namespace CityBuilder.Simulation.Transit
         }
 
         public TransitDepot TryBuildDepot(DepotType type, Vector2 position, float rotationDegrees = 0f) => BuildDepot(PlanDepot(type, position, rotationDegrees));
+
+        // --- UX: Verschieben (gleiche Platzregeln, 10 % Umzugspreis, Depot behält Id und Busse)
+        /// <summary>Umzugspreis als Anteil der Baukosten.</summary>
+        public const double MoveCostShare = 0.1;
+
+        /// <summary>Umzugsplan für ein Depot (Vorderseite als Winkel wie <see cref="PlanDepot"/>).</summary>
+        public DepotPlan PlanMoveDepot(int id, Vector2 position, float rotationDegrees)
+        {
+            var d = GetDepot(id);
+            if (d == null) return null;
+            float a = rotationDegrees * MathF.PI / 180f;
+            var plan = new DepotPlan { Type = d.Type, Position = position, Front = new Vector2(MathF.Sin(a), MathF.Cos(a)), MovingId = id,
+                Cost = d.Type.Cost * MoveCostShare };
+            plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
+            plan.Error = CheckDepot(plan);
+            if (plan.Error == TransitBuildError.None && !Affordable(plan.Cost)) plan.Error = TransitBuildError.InsufficientFunds;
+            if (plan.Error == TransitBuildError.None && city != null)
+                foreach (var b in city.Buildings)
+                    if (ServiceGeometry.RectsOverlap(position, plan.Front, d.Type.Width, d.Type.Depth, b.Position, b.Front, b.Width, b.Depth))
+                        plan.Displaced.Add(b);
+            return plan;
+        }
+
+        /// <summary>Führt einen gültigen Umzugsplan aus (Busse im Einsatz fahren weiter, neue starten am neuen Ort).</summary>
+        public bool MoveDepot(DepotPlan plan)
+        {
+            if (plan == null || !plan.IsValid || plan.MovingId <= 0 || !Affordable(plan.Cost)) return false;
+            var d = GetDepot(plan.MovingId);
+            if (d == null) return false;
+            Budget?.Spend(Economy.BudgetCategory.TransitConstruction, plan.Cost);
+            if (city != null) foreach (var b in plan.Displaced) city.RemoveBuilding(b);
+            d.Position = plan.Position;
+            d.Front = plan.Front;
+            d.Height = plan.Height;
+            d.AccessSegmentId = plan.AccessSegmentId;
+            d.AccessT = plan.AccessT;
+            terrain.FlattenArea(d.Position, d.Front, d.Type.Width, d.Type.Depth, d.Height);
+            Version++;
+            routesDirty = true;
+            return true;
+        }
+        // --- Ende UX
 
         /// <summary>Spieler-Abriss: 25 % zurück. Busse des Depots werden abgezogen.</summary>
         public bool DemolishDepot(int id)
