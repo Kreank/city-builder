@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CityBuilder.Simulation.Roads;
+using CityBuilder.Simulation.Zoning;
 using UnityEngine;
 using SimVector2 = System.Numerics.Vector2;
 
@@ -8,6 +9,8 @@ namespace CityBuilder.Game.Roads
     /// <summary>
     /// Bauhilfen fürs Straßen-Werkzeug: Verlängerungs- und Lotlinien, Winkelbögen, Kurvengriffe,
     /// Fahrtrichtungspfeil, Einrast-Markierung sowie Beschriftungen (Länge, Winkel, Kosten, Fehler).
+    /// Bauhilfe Parallelabstand: gestrichelte Parallelen im optimalen Abstand, Zonentiefe bestehender Straßen und der
+    /// Vorschau, Blockraster (F4).
     /// Reine Anzeige – liest nur den Zustand des <see cref="RoadTool"/>.
     /// </summary>
     public sealed class RoadGuidesView : MonoBehaviour
@@ -61,6 +64,15 @@ namespace CityBuilder.Game.Roads
                     Circle(tool.Cursor, tool.BrushRadius, c, width * 1.5f, 40);
                 }
                 else DrawSnapMarker(tool.CursorAnchor, width);
+                // --- Bauhilfe Parallelabstand
+                if (tool.ShowParallelGuides)
+                {
+                    DrawParallelGuides(width);
+                    if (g.Active && !g.LabelOnly && !g.IsRoundabout && g.Type != null) DrawOwnZones(g, width);
+                }
+                if (tool.BlockGrid && tool.CurrentMode == RoadTool.Mode.Straight && g.Active && !g.LabelOnly && !g.IsRoundabout && g.Type != null)
+                    DrawBlockTicks(g, width);
+                // --- Ende Bauhilfe
                 if (g.Active)
                 {
                     if (g.LabelOnly) DrawLabels(g);
@@ -169,6 +181,172 @@ namespace CityBuilder.Game.Roads
                 labels.Add((SimConvert.ToWorld(g.Center, LineHeight), g.Error, true));
         }
 
+        // ------------------------------------------------------------ Bauhilfe Parallelabstand
+
+        const float GuideSearchRadius = 60f;
+        const int MaxGuideRoads = 3;
+        const float DashLength = 4f, DashGap = 3f;
+        const float GuideRange = 150f;
+        static readonly Color ParallelColor = new Color(0.45f, 0.85f, 1f, 0.75f);
+        static readonly Color ParallelActiveColor = new Color(0.3f, 1f, 0.5f, 1f);
+        static readonly Color ZoneBandColor = new Color(1f, 1f, 1f, 0.07f);
+        static readonly Color ZoneRowColor = new Color(1f, 1f, 1f, 0.18f);
+        static readonly Color OwnZoneColor = new Color(0.35f, 1f, 0.55f, 0.16f);
+        static readonly Color OwnZoneEdgeColor = new Color(0.35f, 1f, 0.55f, 0.55f);
+        static readonly Color BlockTickColor = new Color(1f, 0.85f, 0.3f, 0.6f);
+
+        readonly List<GuideHit> guideHits = new List<GuideHit>();
+        readonly List<int> guideSeen = new List<int>();
+
+        /// <summary>Gestrichelte Parallelen (optimaler Abstand für den gewählten Typ) neben den nächsten Stadtstraßen,
+        /// dazu deren Zonentiefe als zarte Fläche mit Reihenlinien.</summary>
+        void DrawParallelGuides(float width)
+        {
+            var roads = tool.Runner.World.Roads;
+            ParallelGuides.FindGuides(roads, tool.Cursor, tool.SelectedType, tool.ParallelRows, GuideSearchRadius, guideHits);
+            var snapped = tool.SnappedGuide;
+            guideSeen.Clear();
+            foreach (var h in guideHits)
+            {
+                if (guideSeen.Count >= MaxGuideRoads) break;
+                var s = h.Segment;
+                if (guideSeen.Contains(s.Id)) continue;
+                guideSeen.Add(s.Id);
+
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    ZoneBand(s, side, ZoneGrid.Depth, ZoneBandColor, ZoneRowColor, width);
+                    bool active = snapped.HasValue && snapped.Value.Segment == s && snapped.Value.Side == side;
+                    GuideRangeOf(s, h, out float t0, out float t1);
+                    DashedOffset(s, t0, t1, side * h.Offset, active ? ParallelActiveColor : ParallelColor, width * (active ? 1.8f : 1.1f));
+                }
+            }
+        }
+
+        /// <summary>Gerade Straßen: Linie ±150 m um den Cursor, auch über die Enden hinaus (Verlängerung). Kurven: ganz.</summary>
+        static void GuideRangeOf(RoadSegment s, GuideHit h, out float t0, out float t1)
+        {
+            if (!h.Straight || s.Length < 1f) { t0 = 0f; t1 = 1f; return; }
+            float ext = ParallelGuides.Extension / s.Length, range = GuideRange / s.Length;
+            t0 = Mathf.Max(-ext, h.T - range);
+            t1 = Mathf.Min(1f + ext, h.T + range);
+        }
+
+        void DashedOffset(RoadSegment s, float t0, float t1, float signedOffset, Color color, float width)
+        {
+            float length = Mathf.Abs(t1 - t0) * s.Length * (1f + Mathf.Abs(signedOffset) / Mathf.Max(50f, s.Length) * 0.5f);
+            float step = DashLength + DashGap;
+            int dashes = Mathf.Clamp(Mathf.CeilToInt(length / step), 1, 60);
+            step = length / dashes;
+            float dash = step * DashLength / (DashLength + DashGap);
+            for (int i = 0; i < dashes; i++)
+            {
+                float a = t0 + (t1 - t0) * (i * step) / length;
+                float b = t0 + (t1 - t0) * (i * step + dash) / length;
+                var lr = Next(color, width);
+                lr.positionCount = 2;
+                lr.SetPosition(0, OnGround(ParallelGuides.OffsetPoint(s, a, signedOffset)));
+                lr.SetPosition(1, OnGround(ParallelGuides.OffsetPoint(s, b, signedOffset)));
+            }
+        }
+
+        /// <summary>Zonenstreifen einer Straßenseite: flache Fläche + Linien an den Reihengrenzen.</summary>
+        void ZoneBand(RoadSegment s, int side, int rows, Color fill, Color rowLine, float width)
+        {
+            float depth = ParallelGuides.ZoneDepth(rows);
+            const int n = 24;
+            var band = NextFlat(fill, depth);
+            band.positionCount = n + 1;
+            for (int i = 0; i <= n; i++)
+                band.SetPosition(i, OnGround(ParallelGuides.OffsetPoint(s, i / (float)n, side * (s.Type.HalfWidth + depth * 0.5f)), 0.05f));
+            for (int r = 1; r <= rows; r++)
+            {
+                var lr = Next(rowLine, width * 0.7f);
+                lr.positionCount = n + 1;
+                for (int i = 0; i <= n; i++)
+                    lr.SetPosition(i, OnGround(ParallelGuides.OffsetPoint(s, i / (float)n, side * (s.Type.HalfWidth + r * ZoneGrid.CellSize))));
+            }
+        }
+
+        /// <summary>Vorschau: eigene Zonentiefe der gerade gezogenen Straße beidseitig (halbtransparent).</summary>
+        void DrawOwnZones(RoadTool.GuideState g, float width)
+        {
+            if (g.Length < 1f) return;
+            float depth = ParallelGuides.ZoneDepth(ZoneGrid.Depth);
+            const int n = 24;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var band = NextFlat(OwnZoneColor, depth);
+                band.positionCount = n + 1;
+                var edge = Next(OwnZoneEdgeColor, width);
+                edge.positionCount = n + 1;
+                for (int i = 0; i <= n; i++)
+                {
+                    float t = i / (float)n;
+                    var p = Bezier.Evaluate(g.Start, g.Control, g.End, t);
+                    var d = SafeDir(Bezier.Derivative(g.Start, g.Control, g.End, t));
+                    var right = new SimVector2(d.Y, -d.X) * side;
+                    band.SetPosition(i, OnGround(p + right * (g.Type.HalfWidth + depth * 0.5f), 0.08f));
+                    edge.SetPosition(i, OnGround(p + right * (g.Type.HalfWidth + depth)));
+                }
+            }
+        }
+
+        /// <summary>Blockraster (F4): Querlinien dort, wo eine Querstraße gleichen Typs den Block ab dem Start ohne Rest
+        /// füllt (8-m-Takt hinter der Kreuzungsfläche).</summary>
+        void DrawBlockTicks(RoadTool.GuideState g, float width)
+        {
+            if (g.Length < 1f) return;
+            const int n = 64;
+            var cumulative = new float[n + 1];
+            for (int i = 1; i <= n; i++)
+                cumulative[i] = cumulative[i - 1] + SimVector2.Distance(Bezier.Evaluate(g.Start, g.Control, g.End, (i - 1) / (float)n),
+                                                                        Bezier.Evaluate(g.Start, g.Control, g.End, i / (float)n));
+            float reach = g.Type.HalfWidth + ParallelGuides.ZoneDepth(ZoneGrid.Depth);
+            int drawn = 0;
+            for (int k = 1; drawn < 60; k++)
+            {
+                float at = ParallelGuides.BlockLength(g.Type, g.Type, k);
+                if (at > cumulative[n] + 0.5f) break;
+                int i = 1;
+                while (i < n && cumulative[i] < at) i++;
+                float f = Mathf.InverseLerp(cumulative[i - 1], cumulative[i], at);
+                float t = (i - 1 + f) / n;
+                var p = Bezier.Evaluate(g.Start, g.Control, g.End, t);
+                var d = SafeDir(Bezier.Derivative(g.Start, g.Control, g.End, t));
+                var right = new SimVector2(d.Y, -d.X);
+                bool atEnd = Mathf.Abs(at - g.Length) < 0.6f;
+                Line3(OnGround(p - right * reach), OnGround(p + right * reach), atEnd ? ParallelActiveColor : BlockTickColor, width * (atEnd ? 1.6f : 0.9f));
+                drawn++;
+            }
+        }
+
+        Vector3 OnGround(SimVector2 p, float lift = 0.15f)
+        {
+            var ground = tool.Runner.World.Roads.Ground;
+            return SimConvert.ToWorld(p, ground.HeightAt(p) + LineOffset + lift);
+        }
+
+        void Line3(Vector3 a, Vector3 b, Color color, float width)
+        {
+            var lr = Next(color, width);
+            lr.positionCount = 2;
+            lr.SetPosition(0, a);
+            lr.SetPosition(1, b);
+        }
+
+        /// <summary>Flach liegendes Band (Breite in Metern, nicht zur Kamera gedreht).</summary>
+        LineRenderer NextFlat(Color color, float width)
+        {
+            var lr = Next(color, width);
+            lr.alignment = LineAlignment.TransformZ;
+            lr.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            lr.numCapVertices = 0;
+            return lr;
+        }
+
+        // --- Ende Bauhilfe Parallelabstand
+
         // ------------------------------------------------------------ Primitive
 
         static string Compass(float bearing)
@@ -246,6 +424,8 @@ namespace CityBuilder.Game.Roads
             var lr = pool[used++];
             lr.enabled = true;
             lr.loop = false;
+            lr.alignment = LineAlignment.View;   // NextFlat stellt auf flach um
+            lr.numCapVertices = 2;
             lr.startColor = lr.endColor = color;
             lr.widthMultiplier = width;
             return lr;

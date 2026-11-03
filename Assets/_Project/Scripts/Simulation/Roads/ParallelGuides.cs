@@ -142,20 +142,21 @@ namespace CityBuilder.Simulation.Roads
         public static string Describe(ParallelGapInfo info)
         {
             string rows = $"{info.ExistingRows} + {info.PlannedRows} Reihen";
-            string unused = info.Unused > Tolerance ? $", {Meters(info.Unused)} ungenutzt" : "";
+            string unused = info.Unused > Tolerance ? $", {FormatMeters(info.Unused)} ungenutzt" : "";
             switch (info.Fit)
             {
                 case ParallelFit.Optimal:
-                    return $"Abstand {Meters(info.AxisDistance)} · optimal ({rows})";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · optimal ({rows})";
                 case ParallelFit.Gap:
-                    return $"Abstand {Meters(info.AxisDistance)} · {Meters(info.Delta)} Lücke ({rows}{unused})";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · {FormatMeters(info.Delta)} Lücke ({rows}{unused})";
                 default:
-                    string what = info.Overlap > Tolerance ? $"{Meters(-info.Delta)} Überlappung" : $"{Meters(-info.Delta)} zu nah";
-                    return $"Abstand {Meters(info.AxisDistance)} · zu eng: {what} ({rows}{unused})";
+                    string what = info.Overlap > Tolerance ? $"{FormatMeters(-info.Delta)} Überlappung" : $"{FormatMeters(-info.Delta)} zu nah";
+                    return $"Abstand {FormatMeters(info.AxisDistance)} · zu eng: {what} ({rows}{unused})";
             }
         }
 
-        static string Meters(float m) => m.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',') + " m";
+        /// <summary>Meterangabe mit einer Nachkommastelle und deutschem Komma.</summary>
+        public static string FormatMeters(float m) => m.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',') + " m";
 
         // ------------------------------------------------------------------ Hilfslinien
 
