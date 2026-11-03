@@ -8,6 +8,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 ## Vision (vom Spieler formuliert, Leitlinie für alle Etappen)
 - **Fiktive Erde:** Man erschafft sein eigenes Land, baut eine Stadt, später weitere Städte (selbst oder durch NPCs).
   Jedes Land hat andere natürliche Vorkommen und Stärken (Tourismus, Rohstoffe, Technik …).
+- **Spielstart (2026-11-03, Spieler):** Statt einer Karte (Cities: Skylines) sucht man sich aus, **wo** man beginnt – nach
+  Vorlieben (Klima, Küste/Fluss, Gelände, Schwerpunkt wie Agrar/Erze/Tourismus …), wobei eine Wahl andere unmöglich machen
+  kann (Erze meist in Bergen, selten am Meer). Keine echten Ländernamen. Der Spieler gründet seine Stadt in **freiem,
+  unbesiedeltem Land** als **freie Stadt (Stadtstaat)**; mit weiteren Städten wird daraus später ein eigenes Land mit selbst
+  gewähltem Namen (Etappe 7). Umgesetzt: s. „Spielstart & Startregion“.
 - **Handel intern und extern:** zwischen eigenen Städten und zwischen Ländern; Regierungen können gebildet werden.
   **Freunde einladen** (Multiplayer, asynchron): eigene Städte im eigenen Land oder als fremdes Land, Handel untereinander.
 - **Zwei Bauarten:** (1) **Gebiete** markieren, Leute kommen und bebauen selbst – Wohnen (gering/mittel/dicht),
@@ -49,6 +54,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Spiegel der Standortqualität und Steuerbasis.
 - **Welt (Etappe 5):** fiktive Erde mit Regionen (Klima, Relief, Böden, Bodenschätze) → **komparative Vorteile**:
   Länder spezialisieren sich (Tourismus, Rohstoffe, Technik). Jede Stadtkarte ist ein Ausschnitt einer Region.
+  Ein knappes Drittel des Landes ist **frei** (zwischen den Ländern, Randlagen); dort startet der Spieler als Stadtstaat und
+  wächst durch weitere Städte zum Land.
 - **Detailstufen (LOD-Simulation):** die eigene, betrachtete Stadt läuft voll (einzelne Bürger, Fahrzeuge, Lager);
   andere Städte und Länder laufen **aggregiert** (Volkswirtschaft je Stadt: Bevölkerung, Produktion je Gut,
   Bedarf, Lager, Preise) – so bleibt eine ganze Welt rechenbar. Wechselt man in eine Stadt, wird sie detailliert.
@@ -347,7 +354,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Resources/UI/CityTheme.tss` (importiert nur `unity-theme://default` → Standardschrift) und `Resources/UI/CityHud.uss`
   (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
-- Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
+- Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
   (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
@@ -835,7 +842,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Regionen** (~360): Saatpunkte mit Mindestabstand, Mehrquellen-Dijkstra über Land (Höhenunterschied teuer → Grenzen auf
   Kämmen), Inseln ab 6 Zellen eigene Region; Mittelwerte (Klima, Relief, Vorkommen inkl. halbem Schelf-Öl), Fluss, Küste +
   Richtung zum Meer, Nachbarn. **Länder** (~36): Hauptstadt-Regionen mit Mindestabstand, Dijkstra über den Regionsgraph
-  (Land, Gebirge teurer; Seewege zu den 3 nächsten Regionen ×2,5). Namen aus dem Silbengenerator (eindeutig), Hauptstadt =
+  (Land, Gebirge teurer; Seewege zu den 3 nächsten Regionen ×2,5); danach bleibt **freies Land** übrig (`PlanetSettings.FreeLandShare`
+  32 %, `Region.IsFree`/`Country == null`, s. „Spielstart & Startregion“). Namen aus dem Silbengenerator (eindeutig), Hauptstadt =
   beste Zelle (Boden, Fluss, Küste, Klima). **Profil** (`CountryProfile`): `Raw` 0..1 aus Natur/Lage für Tourismus
   (Küste, Wärme, Berge, Vielfalt), Landwirtschaft (Boden × Wachstum × Wasser), Rohstoffe (Erz/Kohle/Öl/Wald), Industrie
   (Kohle+Erz, Wasser, Flüsse, Ebene, Küste), Technik (gemäßigt, Küste, Flüsse, „Kultur“-Zufall); `Rank` = Rang unter allen
@@ -846,8 +854,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
   Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
-  produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
-  vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
+  produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`): seit
+  „Spielstart“ der **Stadtstaat** in einer freien Region (eigene kleine Volkswirtschaft, 5 000 Einwohner Umland); in alten
+  Spielständen das NPC-Land der Startregion (läuft aggregiert als „Rest des Landes neben der Stadt“).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
   0,35–2,2 aus der Zerklüftung, Fluss ja/nein + Breite nach Abfluss, Küste in Meeresrichtung mit 12–30 % Meer, Mitte bleibt
   frei), Geländeseed = `TerrainSeed + Region.Id·7919`. `TerrainParams.Default` = bitgleich zum alten Gelände.
@@ -873,9 +882,69 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
-- Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
+- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
   Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
   Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
+
+## Spielstart & Startregion
+- **Politisches Modell** (`PlanetGenerator.Political`, `FreeLand`): Nach der Länderverteilung bleiben ~32 % der Regionen
+  **frei** (`PlanetSettings.FreeLandShare`, `Region.IsFree`, `Region.CountryId == -1`, `Region.Country == null`): Schlüssel =
+  0,5 × Abstand zur eigenen Hauptstadt (relativ) + 0,25 × Abstand weltweit + 0,2 Grenzregion + 0,1 Insel + 0,35 Hash-Rauschen →
+  freies Land liegt zwischen den Ländern und in Randlagen, in allen Klimazonen und auf mehreren Kontinenten; Hauptstädte bleiben,
+  was danach nicht mehr über eigene Regionen (Land/See) mit der Hauptstadt verbunden ist, wird ebenfalls frei. NPC-Länder behalten
+  Namen/Ids/Reihenfolge; Profile und Volkswirtschaften rechnen nur über eigenes Land. **`FreeLandShare = 0` = altes Modell
+  bitgleich** (Prüfsumme in `StartFinderTests`, zusätzlich 60 Tage Handel gegen den alten Code verglichen).
+- **Spieler als Stadtstaat:** `Planet.SetStartRegion(freie Region)` legt ein `Country` mit `IsPlayer` + `IsCityState` **hinten**
+  an `Countries` an (Id = Anzahl NPC-Länder), Hauptstadtzelle wie bei Ländern, Profil aus der Region (Rang gegen die NPC-Länder,
+  deren Ränge bleiben), Volkswirtschaft `WorldEconomy.PlaceCityState` (5 000 Einwohner Umland, dieselben Kalibrierfaktoren, keine
+  Neukalibrierung). Erneuter Aufruf mit einer freien Region verlegt ihn; Wechsel in ein NPC-Land → Ausnahme. Startregion in einem
+  NPC-Land (alte Stände, Tests) = altes Verhalten (dieses Land wird Spieler-Land). `SuggestStartRegion` wählt nur freie Regionen,
+  wenn es welche gibt. Dazu `Planet.IsStartable(r)`, `FreeRegionCount`, `PlayerCityState`, `AssignRegion` (hält Id, Objekt und
+  Listen gleich). **API kompatibel:** `Region.CountryId`/`Country.Regions`/`PlayerCountry` bleiben; neu sind nur Felder
+  (`Region.Country`, `IsFree`, `Country.IsCityState`). `CountryOfCell` liefert für freies Land **null** – Leser müssen das abfangen.
+  **Handel/LOD:** Der Stadtstaat ist eine normale Handelspartei (`TradeSystem.PlayerId` = seine Id, Handelsort = Mitte der
+  Startregion, Grundzoll 0); die Stadt-Seite läuft wie bisher über das Grenzlager. Am Handel musste nichts geändert werden
+  (geprüft: Lieferungen/Bezahlung laufen für `IsPlayer` über `City`, Lagebild/Weltpreis rechnen mit seiner kleinen
+  Volkswirtschaft, Beziehungen/Nachbarschaft über `CountryId >= 0`).
+- **`PlayerRealm`** (`world.Realm`, immer gesetzt, Abschnitt „realm“ v1): `CityName` (aus `WorldSettings.CityName`, Standard
+  „Neustadt“, `RenameCity`), `DisplayName` = `NationName` ?? „Freie Stadt {Stadtname}“ (Name des Stadtstaats auf Weltkarte und
+  im Handel), vorbereitet für Etappe 7: `NationName` (null), `FlagColor`, `CityRegions`, `MinCitiesForNation` 3, `CanFoundNation`.
+  Speichert zusätzlich den **Besitz aller Regionen** (Land-Id je Region) und stellt Abweichungen beim Laden wieder her.
+- **Startsuche** `Simulation/World/StartFinder` (rein, getestet in `StartFinderTests`) mit Katalog `StartCriteria` (Regeln +
+  Erklärtexte als Daten): `RegionFacts` je freier Region (≥ 4 Zellen) aus den echten Planet-Daten – Klimazone
+  (`ClimateOf`: polar < −6 °C/Eis, trocken = Wüste oder < 250 mm, subpolar = Tundra/Taiga/< 4 °C, gemäßigt < 14 °C,
+  subtropisch < 21 °C, sonst tropisch), Relief-Index max(Zerklüftung/150 m, Höhe/600 m) (< 1 flach, 1–3 hügelig, ≥ 3 gebirgig),
+  Küstenanteil, Flussgröße (Abfluss/Flussschwelle), Landwirtschaft (Boden × Wasser × Wachstum), Tourismus (warme trockene Küste
+  oder Berge), Lebensfreundlichkeit, Entfernung zum nächsten NPC-Land (Dijkstra über alle Zellen, km).
+  **Gruppen:** Klima (eine), Lage (mehrere: Meeresküste, großer Fluss, Binnenland – Seen gibt es im Weltmodell nicht),
+  Gelände (eine), Schwerpunkt (mehrere: Landwirtschaft, Forst, Erze, Kohle, Öl/Gas, Baustoffe, Tourismus, Hafen & Handel),
+  Schwierigkeit (leicht/normal/schwer), Nachbarn (nahe ≤ ~320 km / abgelegen ≥ ~500 km). Score 0..1 je Option, passt ab 0,5;
+  Schwellen so, dass eine Vorliebe etwa das obere Fünftel bis Drittel trifft (Seeds 2024/7/99).
+  **Ausschluss aus der Welt:** `Evaluate(auswahl)` zählt je Option die freien Regionen mit Auswahl + Option (exklusive Gruppe:
+  statt der bisherigen); 0 → `Unavailable` (Tooltip: „keine passende Region zu deiner übrigen Auswahl – {Erklärtext}“), ≤ 3 →
+  `Rare`. Beispiele Seed 2024: Küste → Binnenland gesperrt; Küste + Erze → subpolar gesperrt, gemäßigt selten (2);
+  Polar + großer Fluss = 0. `Suggest` = beste 5 (Summe der Scores + 0,6 × Lebensfreundlichkeit, bei „schwer“ umgekehrt) mit
+  Begründung, z. B. „gemäßigt, hügelig, Küste, großer Fluss, fruchtbar, Kohle im Flachland im Westen, nächstes Land Boumavien
+  250 km“ (Lage der Vorkommen = Schwerpunkt der ergiebigen Zellen + Relief dort) und 8 Balkenwerten. `Describe(regionId)` für die
+  freie Wahl auf der Karte.
+  **Erz und Küste:** Auf Zellebene liegt an Küsten halb so viel Erz wie im Bergland (Test); auf Regionsebene (~700 km) enthalten
+  Küstenregionen oft auch Gebirge (wie die Anden), daher ist „Küste + Erze“ nicht automatisch leer – selten ist Erz an **flacher**
+  Küste (5–24 % der Erzregionen), Erzregionen sind überwiegend hügelig/gebirgig (55–95 %).
+- **Neues-Spiel-Fenster** `Game/Persistence/NewGameWindow` (Baukasten, mittig breit, 4 Schritte): (1) Welt-Seed / „Neu würfeln“,
+  Kartenvorschau (Planet + StartFinder im Hintergrund-Task; freies Land hell, Länder getönt), Zahlen; (2) Vorlieben als
+  `Ui.ChoiceChip` (Treffer als Zahl, „selten · n“ mit Akzentrand, gesperrt ausgegraut mit Erklärung, Meldung „n freie Regionen
+  passen“); (3) Vorschläge als Liste mit Begründung, Goldpunkte auf der Karte, Klick wählt, Klick auf freies Land wählt frei,
+  Balkenwerte der Auswahl; (4) Stadtname (`Ui.TextInput`) → „Stadt gründen“ = `SaveManager.StartNewGame` →
+  `SimulationRunner.NewGame(WorldSettings)` (Seed, `StartRegion`, `CityName`). Gleicher Seed + Einstellungen → gleiche Regions-Ids.
+  Esc geht einen Schritt zurück. **Erster Programmstart ohne Spielstand** (`SaveManager.HasAnySave`): Runner erzeugt nur eine
+  schnelle Platzhalterwelt ohne Weltkarte (angehalten, `AwaitingNewGame`), das Fenster öffnet sich und lässt sich erst nach dem
+  Gründen schließen („Schnellstart“ = beste Region ohne Vorlieben). Mit Spielständen startet das Spiel wie bisher mit der
+  Standardwelt; Spielmenü (Esc) → „Neues Spiel einrichten …“. Optik ungetestet (Unity nicht gestartet).
+- **Spielstand:** Weltabschnitt **v2** = v1 + `FreeLandShare` + Stadtname der Einstellungen; Abschnitt „realm“ (s. o.).
+  **Migration (Entscheidung): alte Stände behalten ihr Spieler-Land.** v1 lädt mit `FreeLandShare = 0` → exakt die alte Welt
+  (alle Regionen NPC, Spieler = Land der Startregion), weil Länder-Volkswirtschaften („planet“) und Handel („trade“) nach
+  Länder-Ids gespeichert sind – eine neu verteilte Welt würde nicht mehr zu Verträgen, Beziehungen und Lagern passen.
+  Fehlt „realm“, heißt die Stadt „Neustadt“ (wie der alte Platzhalter).
 
 ## Handel (Etappe 8)
 - `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
@@ -1093,7 +1162,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   `Application.persistentDataPath/Saves/*.cbsave`, Schreiben im Hintergrund (atomar), Autosave alle N Spielminuten
   (PlayerPrefs, Ringpuffer 3), **Strg+S** Schnellspeichern, **Strg+L** Schnellladen. `SaveMenuWindow` (mittig, **Esc**
   wenn Esc sonst nichts tat; pausiert): Speichern/Speichern unter/Laden (Liste mit Spielzeit, Einwohner, Kontostand,
-  Größe)/Neues Spiel (Seed, Startregion)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
+  Größe)/Neues Spiel (öffnet das Neues-Spiel-Fenster, s. „Spielstart & Startregion“)/Autosave. Tastenkürzel lesen `GameKeyboard.Current` (null während `Ui.TextInput`).
   Im Editor noch nicht visuell abgenommen.
 
 ## Roadmap
@@ -1161,9 +1230,15 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
-   im Editor noch nicht visuell abgenommen). Später: Startregion wählen, Klima auf Gelände-Optik, Handel (8)
+   im Editor noch nicht visuell abgenommen). ✅ Startregion nach Vorlieben wählen (Spielstart, freies Land, Stadtstaat).
+   Später: Klima auf Gelände-Optik, Handel (8)
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
+   - Vorbereitet (Spielstart): Spieler startet als Stadtstaat „Freie Stadt {Stadtname}“ in freiem Land; `PlayerRealm` hat
+     `CityRegions`, `NationName`/`FlagColor` (null/Gold), `MinCitiesForNation` = 3, `CanFoundNation`; Regionsbesitz im Spielstand.
+   - Offen: **weitere Städte gründen** (freie Nachbarregionen beanspruchen → `Planet.AssignRegion`, Stadt wechseln = LOD),
+     **Land gründen** (ab 3 Städten: Name + Flagge wählen → `NationName`, Stadtstaat wird Land, Handel/Medien zeigen den Namen),
+     Anspruch auf freies Land durch NPC-Länder (Wettlauf), Grenzen/Gebietsstreit.
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
    - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
      Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
