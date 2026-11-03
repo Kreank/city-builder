@@ -78,7 +78,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -203,7 +203,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Household`, `CitizenSystem` (jeden Tick Tagesablauf, alle 5 Ticks Zuzug/Jobsuche/Statistik, täglich Altern),
   `RoadComponents` (zusammenhängende Netzteile = Vorprüfung „erreichbar“).
 - Zuzug: wie G1 ein Haushalt je Gebäude und Durchlauf, solange `MoveInPull > 5` (Single/Paar/Familie/Alleinerziehend/
-  Senioren). Kein Außenanschluss nötig (Start). Jobsuche: nächster freier passender Job im selben Netzteil (Büro braucht
+  Senioren). **Im Spiel nur über einen Anschluss** (`WorldSettings.RequireGatewayForMoveIn`, ersetzt die alte Regel „kein
+  Außenanschluss nötig“; s. „Außenanbindungen (Gateways)“): Wohnung muss im selben Netzteil wie die Einfahrt eines befahrbaren
+  Gateways liegen, ein Erwachsener fährt vom Gateway zur neuen Wohnung (normale Verkehrsmittelwahl). Tests ohne Schalter wie
+  früher (sofort in der Wohnung). Jobsuche: nächster freier passender Job im selben Netzteil (Büro braucht
   mittleren Abschluss, Gebildete bevorzugen Büro). Ohne Job hier → Auspendler über den nächsten Außenanschluss;
   Auspendler wechseln zu freien Jobs hier. Freie Jobs ohne einheimische Bewerber → Einpendler (Bürger ohne Haushalt);
   Einwohner verdrängen Einpendler. Altern am Geburtstag, 18 = Abschluss, 65 = Rente, ab 80 Sterbewahrscheinlichkeit,
@@ -758,8 +761,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
   Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage); mit Weltkarte stattdessen der Weltpreis der Länder (Etappe 8).
 - **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
-  Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
-  Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
+  Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab Außenanschluss – mit Gateways der
+  Anschluss Richtung Partnerland, s. „Außenanbindungen (Gateways)“). Ohne jeden Außenanschluss: **Umland** (Fracht 15 %,
+  Platzhalter, 1,5 km) – nur noch in Tests; im Spiel entfällt es (`WorldSettings.RequireGatewayForTrade`). Export
   ab 50 % Ausgangslager, wenn Welt − Fracht ≥ 90 % des lokalen Preises, ab 90 % Füllung immer (bis 30 % herunter). Firmen
   dürfen bis 10 Tage Lohn überziehen, darüber kaufen sie nichts.
 - **Lieferverkehr:** eine Lieferung = eine Ladung. Anteil 0,35 × `TrafficSystem.Demand` als echter Lkw (`VehicleClass.Truck`,
@@ -999,7 +1003,72 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Fahrten: Bürgerfahrten aus Gebäuden (s. Bürger G2) und Durchgangsverkehr zwischen **Außenanschlüssen**
   (Straßenenden am Kartenrand, `ExternalConnections`). Sackgassen in der Stadt erzeugen keinen Verkehr mehr – außer mit
   `DeadEndsAreExternal` (Testszenarien). Ziele mitten auf Segmenten (`FindPathToSegment`) wandern beim Zerteilen mit.
-  Hängende Fahrzeuge verschwinden nach 90 s.
+  Hängende Fahrzeuge verschwinden nach 90 s. Hook `ThroughTrafficWeight` (Gateways): Gewicht je Start/Ziel statt Gleichverteilung
+  (null = wie bisher).
+
+## Außenanbindungen (Gateways)
+Wunsch des Spielers: Fernstraße, Bahn, Wasserstraße sind wie in Cities: Skylines **schon da**; man muss die Stadt an die Autobahn
+anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spieler als Ziel: bewusst später.)
+- `Simulation/Gateways` (Namespace `CityBuilder.Simulation.Gateways`): `Gateway` (Art `GatewayKind` Highway/Road/Rail/Water/Air,
+  `GatewayStatus` Operational/Planned, Lage am Kartenrand + Richtung nach außen, **Ziel** `TargetKind/TargetName/TargetCountryId/
+  TargetRegionId` + `Importance`, `Capacity`, Einfahrt/Ausfahrt `EntryNodeId`/`ExitNodeId`, `PartnerId` = anderes Ende, Wasser:
+  Breite/Tiefe/`Navigable`, Zähler `Today`/`Yesterday`/`TotalMoveIns`), `GatewayRules` (alle Zahlen), `GatewayGenerator`,
+  `GatewaySystem` (`world.Gateways`, läuft zuletzt, ISaveable „gateways“, + `.Trade.cs`, `.Save.cs`).
+- **Schalter** in `WorldSettings` (Standard aus → Tests/Standardwelt wie bisher; `SimulationRunner` schaltet alle ein):
+  `PrebuiltConnections` (Kartenstart baut die Anbindung), `RequireGatewayForMoveIn`, `RequireGatewayForTrade`. Weltabschnitt des
+  Spielstands v2 (v1 = alles aus). `CreateDefault(settings, seed, newGame)`: erzeugt nur bei `newGame` (Laden: false – Straßen und
+  Gateways kommen aus dem Stand, nichts wird doppelt gebaut).
+- **Ziele** (`GatewayGenerator.Targets`): Nachbarregionen der Startregion (fremdes Land +1,5, Hauptstadt-Region +1,5, Bevölkerung),
+  die 6 wichtigsten fremden Hauptstädte (Bevölkerung × Nähe), die eigene Hauptstadt; Peilung Ost/Nord aus Länge/Breite. Ohne Welt:
+  vier „Umland“-Richtungen. Gateway-Ziel = bestes Ziel in seiner Richtung (Gewicht × cos, ab cos 0,35), Wichtigkeit = Σ w·cos².
+- **Autobahn** (`BuildHighway`, deterministisch): Achse = Winkel (15°-Schritte) mit dem besten Bezug zu den Zielen; Anschlussstelle
+  (Vorlage Raute, 400 m) bevorzugt ±300 m seitlich der Mitte (Mitte bleibt für die Stadt), sonst weitere Lagen; Richtungsfahrbahnen
+  `Highway2` von den Vorlagen-Enden bis 6 m vor den Kartenrand in Stücken à ~260 m (≤ 900 m, Grenzen ≥ 150 m vom Wasser), Höhen der
+  Stückgrenzen auf einer geglätteten, auf 4,5 % begrenzten Gradiente, je Stück automatische Trassierung (Tunnel/Brücke/Damm, Brücke
+  über den Fluss). Alles wird erst komplett geplant (Kandidat verworfen bei ungültigem Stück, Ende im Meer, zu wenig lichter Höhe der
+  Rauten-Brücke am Hang), dann mit abgehängter Stadtkasse gebaut (**Kosten trägt die Welt**). Autobahn, Rampen und Brücke bekommen
+  `RoadSegmentFlags.Locked`; die beiden äußeren Querstraßen-Stücke der Raute sind der **Zubringer** (Stadtstraße, frei, dort schließt
+  der Spieler an; `FeederEnds`). Name „A {Nr} Richtung {Ziel}“ (Nummer aus Hash von Region/Geländeseed).
+- **Gesperrte Straßen** (`RoadSegment.IsLocked`): `RoadBuilder.Demolish` → false, `CheckReplace` → `RoadBuildError.Locked`,
+  `RoadBuilder.Reverse` → null, `LockedReason(seg)` für den Hinweis; Kreisverkehr entfernt sie nicht; kein Unterhalt
+  (`EconomySystem`); Flag bleibt beim Zerteilen (Rampen an die Autobahn anschließen geht weiter).
+- **Bahn** (vorbereitet): gerader Korridor quer durch die Karte (≥ 45° zur Autobahn, ≥ 480 m von der Anschlussstelle, Enden auf Land,
+  ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways „noch nicht befahrbar (Züge folgen)“. Freigehalten über den verketteten
+  `CitySystem.LotBlocker` (`InRailCorridor`). Gelände wird nicht gesperrt.
+- **Wasser** (vorbereitet): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
+  → Water-Gateways mit Breite, Tiefe, schiffbar ab 40 m/2,5 m (Meer immer), Name „Fluss stromab-/stromaufwärts Richtung …“ bzw.
+  „Seeweg · Küste“. **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
+- **Zuzug** (Hook `CitizenSystem.MoveInGateway`, nur mit `RequireGatewayForMoveIn`): `MoveInEntry(home, Netzteil)` = Einfahrt eines
+  befahrbaren Straßen-Gateways im Netzteil (mehrere: wer gemessen an der Wichtigkeit am wenigsten Zuzügler brachte); gibt es gar
+  keine Gateways, zählt jeder befahrbare Außenanschluss (Testwelten). Sonst null → kein Zuzug (`BlockedMoveInsToday`). Zuzug startet
+  die erste Fahrt (`StartMoveInTrip`: ein Erwachsener von `Place.Outside(Einfahrt)` heim, Rest ist schon da); `MovedInVia` zählt je
+  Gateway. `ConnectionHint` („Stadt an die A 7 (Zubringer an der Anschlussstelle) anschließen, damit Leute kommen.“) solange ein
+  Wohngebäude ohne Anschluss ist (Stundenprüfung).
+- **Handel** (Hook `GoodsSystem.PreferredGateway`, `RequireGatewayForTrade`): `TradeNode(gut, import, vertrag, netzteil)` – Vertrag →
+  Partner des laufenden Vertrags (`ContractPartner`), Weltmarkt → günstigstes Lieferland (Preis + Fracht) bzw. bester Abnehmer
+  (`SpotPartner`, täglich); `GatewayToward(land)`: Landweg → Gateway Richtung Handelsort des Landes, Seeweg → Gateway Richtung Hafen
+  des Spielerlandes (`TradeRouteText`: „Seeweg: Lkw über … zum Hafen außerhalb (bis Wasserstraße/Hafen fertig)“). Import = Einfahrt,
+  Export = Ausfahrt; Lkw fahren über die Autobahn. Ohne Welt/Treffer: nächster Außenanschluss wie bisher.
+- **Durchgangsverkehr** (Hook `TrafficSystem.ThroughTrafficWeight`, mit `PrebuiltConnections`): Autobahn-Einfahrt Gewicht
+  1 + 0,4 × Wichtigkeit (≤ 5; Spielerstraßen am Rand 1), Ausfahrten sind kein Start, keine Wende am selben Gateway – läuft auch
+  ohne angeschlossene Stadt.
+- **Zählung**: Fahrzeuge rein/raus je Straßen-Gateway (Fahrzeug-Ids auf dem ersten/letzten Stück, alle 4 Ticks, gespeichert),
+  Zuzüge, Import/Export-Ladungen + Wert (neue `Shipment`s mit `ConnectionNodeId`).
+- **Darstellung**: `Game/Gateways/GatewayView` (Begleiter am RoadTool): Schilder „A 7 · Richtung …“ (90 m innerhalb des Rands,
+  `WorldLabels`), Bahntrasse als gestrichelte Doppellinie mit „Bahntrasse · Züge folgen“, Wasserwege beschriftet, „Zubringer · hier
+  anschließen“ + Meldung (Schlüssel „gateway-connect“) solange `ConnectionHint`; HUD-Warnchip „Nicht angeschlossen“ (Klick →
+  `CameraController.FocusOn` Zubringer). Inspektor: Gateways anklickbar (`SelectionKind.Gateway`, Art, Ziel inkl. Handelsweg, Zustand,
+  Verkehr/Zuzug/Handel heute/gestern), Liste in der Stadtübersicht, Lkw/Orte außerhalb zeigen den Gateway. Weltkarte: Strahlen je
+  Anschluss ab der Startregion (rot Autobahn, braun Bahn, hellblau Wasser) + Liste beim Spielerland. RoadTool: gesperrte Segmente
+  zeigen den Hinweis statt Abriss/Umdrehen/Ausbau. Hilfe (F1) Abschnitt „Start“. Im Editor noch nicht visuell abgenommen.
+- Tests: `GatewayTests` (Autobahn durchgehend in beide Richtungen, Raute + Zubringer, Brücke über den Fluss, gesperrt/Zubringer
+  abreißbar, Unterhalt, Zuzug erst nach Anschluss + Zuzügler-Auto auf der Einfahrt, Durchgangsverkehr ohne Anschluss/ohne Wende,
+  Bahnkorridor frei, Wasser-Gateways, Import über den Gateway Richtung Partnerland + Vertrag, kein Umland, Speichern/Laden ohne
+  Neubau + bitgleich, Erzeugung deterministisch; volle Erde Seeds 2024/74/333/592).
+- Später: Stufe 2 Bahn (Gleise, Bahnhof, Güter-/Personenzüge auf dem Korridor), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über
+  den Wasser-Gateway, Klappbrücken), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
+  Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
+  andere echte Städte als Ziel.
 
 ## ÖPNV (Stufe 1: Buslinien)
 - `Simulation/Transit`: `TransitTypes.cs` (`TransitRules` alle Zahlen, `TransitCatalog.BusDepot`, `BusStop`, `TransitLine`, `Bus`,
@@ -1077,7 +1146,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
-  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege. **Gespeichert, obwohl „abgeleitet“**, weil sie
+  `linesAtStop`, Wassermaske, Gelände-Caches des Bodenwerts, Handelswege, Handelspartner der Gateways. Weltabschnitt v2 trägt die
+  Gateway-Schalter; Laden ruft `CreateDefault(…, newGame: false)` (keine vorgebaute Autobahn, sie steht im Abschnitt „roads“ mit
+  `Locked`-Flag, die Gateways in „gateways“). **Gespeichert, obwohl „abgeleitet“**, weil sie
   bewusst nur bei Änderungen neu gerechnet werden und dazwischen eine Momentaufnahme sind: Zonenraster (Geländehöhen beim
   Aufbau), Versorgungsnetze, Dienst-Zuordnung, Grobraster des Bodenwerts, Umfeld-Cache und Gebäudelisten der Bürger,
   ÖPNV-Routen, KI-Lagebild des Handels.
@@ -1120,7 +1191,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
      ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
-     Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
+     ✅ Zuzug nur über Außenanschlüsse (s. Gateways), Lieferverkehr (G5), Zufriedenheit (G6)
      ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
      Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
      (im Editor noch nicht visuell abgenommen). Später: Fußwege in Verkehrszeit (echtes Gehtempo), Abkürzungen durch Parks,
@@ -1146,6 +1217,13 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
+   - Außenanbindungen (Gateways, s. dort):
+     - ✅ Stufe 1: vorhandene Autobahn beim Kartenstart (Raute + Zubringer, gehört der Welt, Brücke über den Fluss), Ziele aus der
+       Weltkarte, Zuzug nur über Anschlüsse (Zuzügler fahren vom Gateway), Handel über den Gateway Richtung Partnerland (Seeweg
+       vorerst per Lkw zum Hafen außerhalb), Durchgangsverkehr nach Wichtigkeit, Bahnkorridor + Wasserstraßen vorbereitet,
+       Schilder/Inspektor/HUD-Hinweis/Weltkarte (im Editor noch nicht visuell abgenommen)
+     - Stufe 2 Bahn (Gleise auf dem Korridor, Bahnhof, Güter-/Personenzüge), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über den
+       Wasser-Gateway), Stufe 4 Flughafen
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
