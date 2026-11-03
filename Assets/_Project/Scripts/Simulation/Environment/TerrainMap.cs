@@ -12,6 +12,8 @@ namespace CityBuilder.Simulation.Environment
     {
         readonly float[] natural;
         readonly float[] current;
+        /// <summary>0..1: wie stark der Boden bearbeitet wurde (Straßenböschung, Terraforming) → Erde/Kies statt Gras.</summary>
+        readonly float[] worked;
 
         /// <summary>Gitterpunkte je Seite.</summary>
         public int Resolution { get; }
@@ -30,11 +32,14 @@ namespace CityBuilder.Simulation.Environment
             Resolution = (int)MathF.Ceiling(sizeMeters / cellSize) + 1;
             natural = new float[Resolution * Resolution];
             current = new float[Resolution * Resolution];
+            worked = new float[Resolution * Resolution];
             WaterLevel = -1000f;
         }
 
         public float this[int x, int y] => current[y * Resolution + x];
         public float NaturalAt(int x, int y) => natural[y * Resolution + x];
+        /// <summary>0..1: bearbeiteter Boden (Böschung/Terraforming) – für die Darstellung (Erde/Kies).</summary>
+        public float WorkedAt(int x, int y) => worked[y * Resolution + x];
         public Vector2 PointAt(int x, int y) => Origin + new Vector2(x * CellSize, y * CellSize);
 
         // ------------------------------------------------------------ Erzeugen
@@ -176,6 +181,7 @@ namespace CityBuilder.Simulation.Environment
                 }
                 float target = ApplyRoadRule(kv.Key, Lerp(current[kv.Key], road, kv.Value.w));
                 if (MathF.Abs(target - current[kv.Key]) < 0.005f) continue;
+                worked[kv.Key] = MathF.Max(worked[kv.Key], MathF.Min(1f, MathF.Abs(target - current[kv.Key]) / 1.5f) * kv.Value.w);
                 current[kv.Key] = target;
                 changed = true;
             }
@@ -219,11 +225,124 @@ namespace CityBuilder.Simulation.Environment
             Changed?.Invoke(center - new Vector2(reach), center + new Vector2(reach));
         }
 
+        // ------------------------------------------------------------ Terraforming (Spieler)
+
+        /// <summary>Grenzen fürs Terraforming (absolute Höhe).</summary>
+        public const float MinTerraformHeight = -12f, MaxTerraformHeight = 150f;
+
+        /// <summary>
+        /// Sperrmaske fürs Terraforming: (min, max) des Pinsels → Abfrage Punkt → 0 (frei) … 1 (gesperrt).
+        /// Die Welt setzt sie (Straßen und Gebäude, weich überblendet, siehe <c>TerrainLocks</c>).
+        /// Die Abfrage wird je Pinsel einmal erzeugt, damit sie nur Objekte in der Nähe prüfen muss.
+        /// </summary>
+        public Func<Vector2, Vector2, Func<Vector2, float>> LockQuery { get; set; }
+
+        /// <summary>
+        /// Wendet einen Pinsel einmal an (Anheben, Absenken, Glätten, Einebnen). Gesperrte Punkte (unter Straßen
+        /// und Gebäuden) bleiben, am Rand der Sperre wird die Wirkung weich ausgeblendet. Ändert aktuelle und
+        /// natürliche Höhe gleich (Terraforming ist eine gewollte Änderung des Grundgeländes; Straßen bleiben
+        /// dadurch „ebenerdig“). Löst <see cref="Changed"/> mit dem geänderten Rechteck aus.
+        /// </summary>
+        public TerraformResult Terraform(TerraformBrush brush)
+        {
+            var result = new TerraformResult();
+            if (!(brush.Radius > 0f) || !(brush.Strength > 0f)) return result;
+
+            float r = brush.Radius;
+            float inner = r * (1f - Math.Clamp(brush.Softness, 0f, 1f));
+            var c = brush.Center;
+            int x0 = Math.Max(0, (int)MathF.Floor((c.X - r - Origin.X) / CellSize));
+            int x1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((c.X + r - Origin.X) / CellSize));
+            int y0 = Math.Max(0, (int)MathF.Floor((c.Y - r - Origin.Y) / CellSize));
+            int y1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((c.Y + r - Origin.Y) / CellSize));
+            if (x0 > x1 || y0 > y1) return result;
+
+            // Schnappschuss (mit einem Punkt Rand), damit Glätten nicht von der eigenen Reihenfolge abhängt
+            int sx0 = Math.Max(0, x0 - 1), sy0 = Math.Max(0, y0 - 1);
+            int sx1 = Math.Min(Resolution - 1, x1 + 1), sy1 = Math.Min(Resolution - 1, y1 + 1);
+            int sw = sx1 - sx0 + 1;
+            var snap = new float[sw * (sy1 - sy0 + 1)];
+            for (int y = sy0; y <= sy1; y++)
+                Array.Copy(current, y * Resolution + sx0, snap, (y - sy0) * sw, sw);
+            Func<int, int, float> Old = (px, py) => snap[(py - sy0) * sw + (px - sx0)];
+
+            var lockAt = LockQuery?.Invoke(c - new Vector2(r), c + new Vector2(r));
+            Vector2 min = new Vector2(float.MaxValue), max = new Vector2(float.MinValue);
+            float cellArea = CellSize * CellSize;
+
+            for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                var p = PointAt(x, y);
+                float dist = Vector2.Distance(p, c);
+                if (dist > r) continue;
+                float w = dist <= inner ? 1f : 1f - SmoothStep(inner, r, dist);
+                if (lockAt != null)
+                {
+                    float l = Math.Clamp(lockAt(p), 0f, 1f);
+                    if (l >= 0.999f) { result.LockedPoints++; continue; }
+                    w *= 1f - l;
+                }
+                if (w <= 0.001f) continue;
+
+                float old = Old(x, y);
+                float step = brush.Strength * w;
+                float target;
+                switch (brush.Mode)
+                {
+                    case TerraformMode.Raise: target = old + step; break;
+                    case TerraformMode.Lower: target = old - step; break;
+                    case TerraformMode.Smooth: target = MoveTowards(old, Neighbourhood(x, y, sx0, sy0, sx1, sy1, Old), step); break;
+                    default: target = MoveTowards(old, brush.TargetHeight, step); break;
+                }
+                target = Math.Clamp(target, MinTerraformHeight, MaxTerraformHeight);
+                int idx = y * Resolution + x;
+                // Sicherheitsnetz: nie über eine ebenerdige Straße
+                target = ApplyRoadRule(idx, target);
+                float delta = target - current[idx];
+                if (MathF.Abs(delta) < 0.001f) continue;
+
+                current[idx] = target;
+                natural[idx] += delta;
+                worked[idx] = MathF.Min(1f, worked[idx] + MathF.Abs(delta) * 0.35f);
+                result.ChangedPoints++;
+                result.Volume += MathF.Abs(delta) * cellArea;
+                min = Vector2.Min(min, p);
+                max = Vector2.Max(max, p);
+            }
+
+            if (result.ChangedPoints == 0) return result;
+            result.Min = min - new Vector2(CellSize);
+            result.Max = max + new Vector2(CellSize);
+            Version++;
+            Changed?.Invoke(result.Min, result.Max);
+            return result;
+        }
+
+        /// <summary>Mittel der 3×3-Nachbarschaft (aus dem Schnappschuss).</summary>
+        static float Neighbourhood(int x, int y, int sx0, int sy0, int sx1, int sy1, Func<int, int, float> old)
+        {
+            float sum = 0f;
+            int n = 0;
+            for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                int nx = x + dx, ny = y + dy;
+                if (nx < sx0 || ny < sy0 || nx > sx1 || ny > sy1) continue;
+                sum += old(nx, ny);
+                n++;
+            }
+            return sum / n;
+        }
+
+        static float MoveTowards(float from, float to, float maxStep) =>
+            MathF.Abs(to - from) <= maxStep ? to : from + MathF.Sign(to - from) * maxStep;
+
         // ------------------------------------------------------------ Rauschen
 
         static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
-        static float SmoothStep(float e0, float e1, float x)
+        internal static float SmoothStep(float e0, float e1, float x)
         {
             float t = Math.Clamp((x - e0) / (e1 - e0), 0f, 1f);
             return t * t * (3f - 2f * t);

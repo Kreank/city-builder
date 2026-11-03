@@ -38,6 +38,8 @@ namespace CityBuilder.Simulation.Core
             Roads.Ground = Terrain;
             Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
+            // Terraforming: Gelände unter Straßen und Gebäuden ist gesperrt (weich überblendet)
+            Terrain.LockQuery = (min, max) => TerrainLocks.Query(Roads, City?.Buildings, Terrain, min, max);
         }
 
         /// <summary>
