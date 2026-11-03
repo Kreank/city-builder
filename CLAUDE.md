@@ -19,7 +19,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Alles, was es wirklich gibt:** Schiffe, Flugzeuge, Züge, Autobahnen, Straßen, Tunnel, Brücken, Zugbrücken,
   Solarparks, Kohle- und Atomkraftwerke … – Schritt für Schritt. **Tiefgang ist sehr wichtig** (lieber tief als breit).
 
-## Entscheidung: Bürgerverhalten (Konzept, noch nicht umgesetzt)
+## Entscheidung: Bürgerverhalten (umgesetzt – s. „Bürgerverhalten (Bedürfnisse)“)
 - **Spiel-KI im Kern, keine Sprach-KI zur Laufzeit** (bewusst entschieden: keine LLM-„Hauptfiguren“, kein LLM-Erzähler).
 - **Utility AI** mit Bedürfnissen (Wohnen, Arbeit/Einkommen, Versorgung, Gesundheit, Sicherheit, Bildung, Freizeit,
   Umwelt): Bürger bewerten Optionen und wählen, was ihre Bedürfnisse am meisten verbessert.
@@ -134,10 +134,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   mittleren Abschluss, Gebildete bevorzugen Büro). Ohne Job hier → Auspendler über den nächsten Außenanschluss;
   Auspendler wechseln zu freien Jobs hier. Freie Jobs ohne einheimische Bewerber → Einpendler (Bürger ohne Haushalt);
   Einwohner verdrängen Einpendler. Altern am Geburtstag, 18 = Abschluss, 65 = Rente, ab 80 Sterbewahrscheinlichkeit,
-  Wegzug bei langer Arbeitslosigkeit des ganzen Haushalts, bei Abriss Umzug in freie Wohnung oder Wegzug.
+  Wegzug/Umzug/Jobwechsel entscheidet seit dem Bedürfnismodell die Utility AI (s. u.); bei Abriss Umzug in freie Wohnung oder Wegzug.
 - Tagesablauf: Arbeitsbeginn je Bürger 6:00–9:30, 8 h Arbeit; danach (bzw. tagsüber ohne Job) einkaufen in
   Einzelhandel/Mischgebiet 10–20 Uhr, wenn das Bedürfnis ≥ 1 ist (ein Einkauf versorgt den Haushalt); dann heim.
-  Kinder/Schüler bleiben vorerst zu Hause.
+  Kinder/Schüler bleiben vorerst zu Hause (ab 12 Jahren Freizeit im Viertel, s. Bedürfnismodell).
 - Fahrten: Anteil `CarShare` (35 %, Einpendler 60 %) × `TrafficSystem.Demand` fährt als echtes Auto
   (`TrafficSystem.RequestTrip` von Zufahrt/Außenanschluss zu Zufahrt/Außenanschluss), höchstens 70 % von `MaxVehicles`.
   Rest = Platzhalter (zu Fuß/ÖPNV, Fahrzeit aus Luftlinie, 15 km/h). Ankunft meldet `TrafficSystem.TripEnded`
@@ -146,9 +146,66 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
 - Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
 - Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
-  Mitglieder abgeleitet, nicht gespeichert. Einen Familienstand je Bürger gibt es noch nicht.
+  Mitglieder abgeleitet, nicht gespeichert. Familienstand je Bürger: `Citizen.Relationship`/`PartnerId` (Bedürfnismodell).
 - Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
   `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
+
+## Bürgerverhalten (Bedürfnisse)
+- Dateien in `Simulation/Citizens`: `Needs.cs` (Bedürfnisse, Gewichte je Lebensphase, `ServiceIds`), `Personality.cs`,
+  `Memory.cs`, `UtilityChoice.cs` (Softmax), `SimRandom.cs` (eigener geseedeter RNG, ersetzt `System.Random` im
+  Bürgersystem), `CitizenSystem.Needs.cs` / `.Decisions.cs` / `.Life.cs` (partial), Inhalte in `Citizens/Content/`.
+- **Bedürfnisse** (`NeedKind`, Erfüllung 0..1, 1 = gut): Wohnen (Platz: Personen vs. bequem je Bauart 5/4/3,5; Zustand
+  0,55 + 0,12 × Stufe, −0,25 ohne Versorgung), Arbeit (Job 0,8 ± Passung Bildung/Ehrgeiz, Auspendler 0,65, arbeitslos
+  0,45 − 0,04/Tag), Versorgung (`Utilities.IsSatisfied` → 1 / 0,05), Einkaufen (1 − ShoppingNeed/1,5), Gesundheit
+  (0,65 × `Citizen.Health` + 0,35 × Dienst „health“), Sicherheit (0,15 + 0,85 × (0,6 police + 0,4 fire)), Bildung (Kinder:
+  education; Erwachsene: library/education), Freizeit (sinkt ~0,35/Tag, steigt durch Freizeit), Ruhe/Umwelt
+  (1 − (1,1 × Lärm + 1,6 × Abgas) ± Müll), Mobilität (Pendel-Luftlinie 0,5–4 km, Stau-/Pendel-Erinnerungen).
+  Werte laufen exponentiell zum Zielwert (Rate 0,25–0,6 je Bewertung).
+- **Gestaffelt:** je Tick 1/`NeedsSpreadTicks` (24) der Bürger → jeder 10× am Tag. Umfeld je Wohngebäude
+  (`HomeContext`: Lärm, Abgas, Versorgung, 7 Dienste) einmal je Runde berechnet und von allen Bewohnern geteilt.
+  Leistung (Testprojekt, Info): 20 000 Bürger ≈ 2,5–3 ms/Tick für alle Systeme, Bedürfnis-Staffel ≈ 0,25 ms/Tick.
+- **Dienste (G4) nur über Delegat:** `CitizenSystem.ServiceCoverage(id, building)` → 0..1, Standard 0,5 (neutral).
+  Ids „police“, „fire“, „health“, „education“, „library“, „park“, „garbage“. Wird beim Mergen mit dem Dienste-System verbunden.
+- **Persönlichkeit** (`Personality`, 8 Züge 0..1: gesellig, sparsam, ehrgeizig, ängstlich, naturverbunden,
+  lärmempfindlich, familienorientiert, abenteuerlustig): Zuzügler aus einem von 16 Archetypen (± 0,15), Kinder = Mischung
+  der Eltern (± 0,18). `NeedWeight(k)` multipliziert die Lebensphasen-Gewichte (bei 0,5 überall ≈ 1).
+  `Temperature` = 0,06 + 0,22 × abenteuerlustig + 0,06 × (1 − ängstlich).
+- **Zufriedenheit** = Σ (Phase × Persönlichkeit × Erfüllung) / Σ Gewichte. **Gemüt** = 0,5 + 0,5·tanh(0,8·Σ Valenz×Stärke
+  der Erinnerungen) + 0,2·(Zufriedenheit − 0,6) − 0,1 krank, geglättet. Je Gebäude: `ResidentSatisfaction(id)`,
+  `WorkerSatisfaction(id)` (0,6 Arbeit + 0,4 Mobilität der Beschäftigten), je Haushalt `Household.Satisfaction`.
+- **Utility AI** (`UtilityChoice.Choose`, Softmax, Temperatur aus der Persönlichkeit, Zufall nur aus `SimRandom`):
+  Freizeit 15–21 Uhr (zu Hause / Park = `Activity.Leisure` an der Wohnung, bis G4 Parkorte liefert / Bummeln = Ladenfahrt),
+  Verkehrsmittel (`CarProbability`: Grundanteil × Demand × 2 × logistisch(Nutzen Auto) – neutral = alter Anteil; sparsam,
+  naturverbunden, Stau-Erinnerung senken), Umzug (alle 5 Tage je Haushalt bei Leidensdruck: bleiben mit Trägheit und
+  Abzug für Lärm-/Ausfall-/Unsicher-Erinnerungen vs. bis 6 zufällige freie Wohnungen, `HomeScore`, halbe Temperatur),
+  Wegzug (`LeaveProbability` = 0,25 × logistisch(Wegzug − Bleiben); Bleiben aus Zufriedenheit, Gemüt, Jahren in der
+  Stadt; Wegzug aus Abenteuerlust, Ausfällen, +0,7 wenn alle Erwerbsfähigen > 10 Tage arbeitslos – ersetzt die alte
+  8-%-Regel), Jobwechsel (alle 10 Tage bei schlechter Arbeit/Mobilität, `JobUtility` = Weg + Passung), Jobsuche
+  Arbeitsloser = bester `JobUtility` (ohne Würfeln).
+- **Gedächtnis** (`MemoryList`, max. 6, gleiche Art + Bezug wird aufgefrischt, schwächste ersetzt; tägliches Abklingen
+  je Art, Ängstliche vergessen Schlechtes langsamer): Stau (Autofahrt > 2,2 × freie Fahrzeit oder abgebrochen),
+  Strom-/Wasserausfall, Lärm, Abgas, Unsicherheit, schöner Park, Bummel, kein Laden, Lebensereignisse u. a.
+- **Lebensereignisse** (Vorlagen in `Content/LifeEvents.cs`: Tageschance, Alter, Zug-Einfluss, Erinnerungen, Meldungen):
+  Partnersuche (Singles werden täglich gepaart, kleinerer Haushalt zieht um), Hochzeit, Geburt (Paar mit Frau 20–44,
+  ≤ 4 Kinder, Platz zählt), Auszug erwachsener Kinder (18–35, eigene Wohnung per `HomeScore`), Trennung (häufiger bei
+  Unzufriedenheit; einer zieht aus oder weg), Krankheit/Genesung (Alter, Abgas, Dienst „health“; krank ab 70 kann tödlich
+  sein), Jobverlust, Rente, Tod (Partner verwitwet). `LifeEventRate` skaliert alle Chancen. Ticker: `RecentEvents`.
+- **Inhalte als Daten** (`Content/`, keine KI zur Laufzeit): Vornamen w/m je 90, 130 Nachnamen (deutsch gemischt),
+  16 Archetypen, 25 Erinnerungsarten × 4–5 Gedankensätze mit Platzhaltern {Name} {Partner} {Kind} {Straße} {Firma}
+  {Park}, 13 Ereignisvorlagen × 3 Meldungen, Straßen-/Park-/Firmennamen aus stabilen Hashes (Straßen haben noch keine
+  echten Namen). Vorlage wird beim Entstehen deterministisch gewählt; nicht auflösbare Platzhalter → nächste Vorlage.
+- **Stadt-Hook:** `PopulationInfo.AverageSatisfaction` → `CitySystem.MoveInPull` ± (Zufriedenheit − 0,6) × 40 (wirkt auch
+  auf die Wohn-Nachfrage); Zuzügler meiden Häuser mit Bewohner-Zufriedenheit < 0,45. `Household.Income` (Lohn/Rente je
+  Tag, ohne Steuern) für die Wirtschaft.
+- **Abfragen für den Inspektor** (Platzhalter dort beim Mergen ersetzen): `c.Need(k)` + `Needs.DisplayName/Describe`,
+  `c.Personality` (`Describe(gender)`, Indexer je `Trait`), `MemoryTexts(c, list)` / `MemoryText(c, m)`, `c.Satisfaction`
+  + `SatisfactionText`, `Concerns(c)`, `c.Mood` + `MoodText`, `c.Health`/`IsIll` + `HealthText`, `FamilyStatusText(c)`,
+  `PartnerOf(c)`, `c.FullName`, `ResidentSatisfaction/WorkerSatisfaction(buildingId)`, `Stats.AverageNeeds` u. a.
+  Hinweis: neuer Wert `Activity.Leisure` – der bisherige Inspektor zeigt ihn als „außerhalb“ (Default-Zweig).
+- Später: echte Parkziele/Freizeitorte (G4), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
+  aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter (Stau → „eher ÖPNV“ wirkt bisher
+  auf den Platzhalter „zu Fuß/ÖPNV“). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
+  für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
 
 ## Inspektor (Info-Modus, Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
@@ -273,7 +330,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    Mischgebiet, Einzelhandel, Büro, Industrie; Dienste/Versorger einzeln baubar, Reichweite übers Straßennetz.
    - ✅ G1 Zonenraster entlang Straßen + Malwerkzeug, Grundstücke, wachsende Gebäude (Store-Modelle), Nachfrage
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
-     Später: Geburten/Auszug erwachsener Kinder, Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
+     ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
+     Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht. Später: Abwasser, schwankende Erzeugung, Kosten abbuchen
@@ -285,7 +343,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
-   - G6 Bodenwert, Zufriedenheit, Ausbaustufen
+   - G6 Bodenwert, Zufriedenheit, Ausbaustufen (Zufriedenheit je Bürger/Gebäude liefert schon das Bedürfnismodell)
 5. Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
