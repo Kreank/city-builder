@@ -6,11 +6,11 @@ namespace CityBuilder.Game.Environment
 {
     /// <summary>
     /// Blendet ein Umwelt-Raster als farbige Fläche über der Karte ein (wie die Info-Ansichten
-    /// in Cities: Skylines). N = Lärm, P = Abgas, nochmal drücken = aus.
+    /// in Cities: Skylines). N = Lärm, P = Abgas, F2 = Bodenwert (G6), nochmal drücken = aus.
     /// </summary>
     public sealed class EnvironmentOverlayView : MonoBehaviour
     {
-        public enum Overlay { None, Noise, AirPollution }
+        public enum Overlay { None, Noise, AirPollution, LandValue }
 
         [SerializeField] SimulationRunner runner;
         [SerializeField] Material overlayMaterial;
@@ -101,16 +101,41 @@ namespace CityBuilder.Game.Environment
             {
                 if (kb.nKey.wasPressedThisFrame) Toggle(Overlay.Noise);
                 if (kb.pKey.wasPressedThisFrame) Toggle(Overlay.AirPollution);
+                if (kb.f2Key.wasPressedThisFrame) Toggle(Overlay.LandValue); // G6
             }
 
             if (Current == Overlay.None) return;
 
             var env = runner.World.Environment;
+            // --- G6 Bodenwert: eigenes Raster im selben Gitter, Farbverlauf rot (niedrig) → gelb → grün (hoch)
+            if (Current == Overlay.LandValue)
+            {
+                var lv = runner.World.LandValue?.Layer;
+                if (lv == null || (lv == shownLayer && lv.Version == shownVersion)) return;
+                if (landValueGradient == null) landValueGradient = LandValueGradient();
+                RefreshTexture(lv, landValueGradient, opaqueLow: true);
+                return;
+            }
+            // --- Ende G6
             var layer = Current == Overlay.Noise ? env.Noise : env.AirPollution;
             if (layer == shownLayer && layer.Version == shownVersion) return;
 
             RefreshTexture(layer, Current == Overlay.Noise ? noiseGradient : pollutionGradient);
         }
+
+        // --- G6 Bodenwert
+        Gradient landValueGradient;
+
+        static Gradient LandValueGradient()
+        {
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(new Color(0.85f, 0.2f, 0.15f), 0f), new GradientColorKey(new Color(0.95f, 0.85f, 0.25f), 0.45f),
+                        new GradientColorKey(new Color(0.2f, 0.75f, 0.3f), 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+            return g;
+        }
+        // --- Ende G6
 
         public void Toggle(Overlay overlay)
         {
@@ -119,7 +144,7 @@ namespace CityBuilder.Game.Environment
             shownLayer = null;
         }
 
-        void RefreshTexture(GridLayer layer, Gradient gradient)
+        void RefreshTexture(GridLayer layer, Gradient gradient, bool opaqueLow = false)
         {
             var values = layer.RawValues;
             for (int i = 0; i < values.Length; i++)
@@ -127,7 +152,8 @@ namespace CityBuilder.Game.Environment
                 float v = Mathf.Clamp01(values[i]);
                 if (v <= 0.001f) { pixels[i] = new Color32(0, 0, 0, 0); continue; }
                 Color c = gradient.Evaluate(v);
-                c.a = Mathf.Lerp(0.25f, 0.75f, v);
+                // Bodenwert (G6): niedrige Werte sind die Aussage → gleichmäßig deckend statt nach Wert
+                c.a = opaqueLow ? 0.6f : Mathf.Lerp(0.25f, 0.75f, v);
                 pixels[i] = c;
             }
             texture.SetPixels32(pixels);

@@ -54,16 +54,19 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(week.Amount(BudgetCategory.ResidentialTax) > 0, "Grundsteuer erwartet");
             Assert.True(week.Amount(BudgetCategory.IndustryTax) > 0, "Gewerbesteuer Industrie erwartet");
 
-            // Formel: bewohnte Haushalte × 40 € × Satz, besetzte Jobs × Basis × Satz
-            int households = w.City.Buildings.Where(b => b.IsConstructed).Sum(b => b.OccupiedHouseholds);
+            // Formel: bewohnte Haushalte × 40 € × Bodenwert-Faktor (G6) × Satz, besetzte Jobs × Basis × Satz.
+            // G6: Die Grundsteuer hängt seit G6 am Bodenwert des Grundstücks (EconomyRules.PropertyTaxFactor) – die
+            // erwartete Summe wird deshalb je Gebäude mit dessen Faktor gebildet statt pauschal je Haushalt.
+            var houses = w.City.Buildings.Where(b => b.IsConstructed).ToList();
+            double propertyBase = houses.Sum(b => b.OccupiedHouseholds * EconomyRules.HouseholdTaxBase * w.LandValue.PropertyTaxFactor(b));
             int industryWorkers = w.City.Buildings.Where(b => b.IsConstructed && b.Zone == ZoneType.Industry).Sum(b => b.Workers);
             var day = e.EstimateDay();
-            Assert.Equal(households * EconomyRules.HouseholdTaxBase * 0.10, day.Amount(BudgetCategory.ResidentialTax), 2);
+            Assert.Equal(propertyBase * 0.10, day.Amount(BudgetCategory.ResidentialTax), 2);
             Assert.Equal(industryWorkers * EconomyRules.IndustryJobTaxBase * 0.10, day.Amount(BudgetCategory.IndustryTax), 2);
 
             // Höherer Satz → mehr Einnahmen bei gleicher Belegung
             e.SetTaxRate(TaxKind.Residential, 0.20f);
-            Assert.Equal(households * EconomyRules.HouseholdTaxBase * 0.20, e.EstimateDay().Amount(BudgetCategory.ResidentialTax), 3);
+            Assert.Equal(propertyBase * 0.20, e.EstimateDay().Amount(BudgetCategory.ResidentialTax), 3);
         }
 
         [Fact]

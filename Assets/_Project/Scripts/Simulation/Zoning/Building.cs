@@ -37,6 +37,11 @@ namespace CityBuilder.Simulation.Zoning
         public float Construction { get; internal set; }
         public bool IsConstructed => Construction >= 1f;
 
+        // --- G6 Bodenwert & Ausbaustufen: physischer Zustand 0..1 (1 = neu). Gesetzt vom LandValue.LandValueSystem
+        // (Alterung, Verfall ohne Versorgung/bei Müll, Instandhaltung); 0 → Gebäude verfällt und wird abgerissen.
+        public float Condition { get; internal set; } = 1f;
+        // --- Ende G6
+
         public float Width => WidthCells * ZoneGrid.CellSize;
         public float Depth => DepthCells * ZoneGrid.CellSize;
         /// <summary>Richtung entlang der Straße.</summary>
