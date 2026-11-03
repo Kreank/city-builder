@@ -46,6 +46,9 @@ namespace CityBuilder.Simulation.Citizens
 
         public int RecentEventCount => recentCount;
 
+        /// <summary>Dienstfahrzeuge: Bürger ist erkrankt (im täglichen Durchlauf; Empfänger merken sich nur den Einsatz).</summary>
+        public event Action<Citizen> BecameIll;
+
         void Log(LifeEventKind kind, Citizen subject, Citizen other, Building place)
         {
             var t = LifeEvents.Get(kind);
@@ -134,6 +137,7 @@ namespace CityBuilder.Simulation.Citizens
             else if (Roll(LifeEventKind.Illness, c, (1f + (c.Age > 60 ? (c.Age - 60) * 0.05f : 0f)) * (1f + 2f * air) * (1.5f - healthCov)))
             {
                 c.IsIll = true;
+                BecameIll?.Invoke(c); // Dienstfahrzeuge: Rettungswagen bei schwerer Erkrankung (nur Zustand merken, keine Fahrt im Handler)
                 Remember(c, MemoryKind.Illness, Strength(LifeEventKind.Illness, false));
                 var partner = PartnerOf(c);
                 if (partner != null) Remember(partner, MemoryKind.Illness, Strength(LifeEventKind.Illness, true), other: c);

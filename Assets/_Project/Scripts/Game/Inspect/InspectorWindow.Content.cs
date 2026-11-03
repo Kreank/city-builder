@@ -574,6 +574,18 @@ namespace CityBuilder.Game.Inspect
                         () => Go(SelectionKind.Citizen, c.Id));
                     ui.Field("Unterwegs seit", $"{Duration(world.Clock.Tick - c.TripStartTick)} Spielzeit");
                 }
+                // --- Eigene Assets 2: Dienstfahrzeug (Müllwagen, Streife, Feuerwehr, Rettung)
+                else if (world.ServiceVehicles?.UnitForTrip(v.TripId) is Simulation.Services.ServiceUnit unit)
+                {
+                    var depot = world.Services.GetFacility(unit.DepotId);
+                    ui.Field("Fahrzeug", $"{Simulation.Services.ServiceVehicleRules.DisplayName(unit.Kind)} · {Simulation.Services.ServiceVehicleRules.MissionText(unit.Mission)}");
+                    if (depot != null) ui.FieldLink("Dienst", depot.Type.DisplayName, () => Go(SelectionKind.Service, depot.Id));
+                    var stop = unit.TargetBuildingId != 0 ? world.City.GetBuilding(unit.TargetBuildingId) : null;
+                    ui.Field("Ziel", stop != null ? BuildingName(stop) : "zurück zum Dienstgebäude");
+                    ui.Field("Tour", $"Halt {unit.Visits + 1}, noch {unit.RemainingStops} weitere" +
+                        (unit.Kind == Simulation.Services.ServiceVehicleKind.GarbageTruck ? $" · geladen {unit.Load:0.00} t von {Simulation.Services.ServiceVehicleRules.GarbageTruckCapacity:0} t" : ""));
+                }
+                // --- Ende Eigene Assets 2
                 else if (v.TripId < 0 && world.Goods?.ShipmentForTrip(v.TripId) != null)
                     ui.Field("Fahrer", "Lieferfahrt (Lkw des Warensystems, s. Ladung)"); // G5
                 else
@@ -603,14 +615,15 @@ namespace CityBuilder.Game.Inspect
             using (ui.Grid(3))
             {
                 ui.Stat("Leistung", BuildLabels.Number(f.Output), unit);
-                ui.Stat("Auslastung", t.Capacity > 0f ? $"{f.Output / t.Capacity * 100f:0} %" : "–");
+                ui.Stat("Auslastung", f.Rated > 0f ? $"{f.Output / f.Rated * 100f:0} %" : "–"); // Energie erweitert: Nennleistung je Standort
                 ui.Stat("Unterhalt", BuildLabels.Number(t.UpkeepPerDay), "€/Tag");
             }
 
             ui.Section("Leistung");
             using (ui.Fields())
             {
-                ui.Field("Aktuell", $"{f.Output:0.#} {unit} von {t.Capacity:0.#} {unit}");
+                ui.Field("Aktuell", $"{f.Output:0.#} {unit} von {f.Rated:0.#} {unit}");
+                EnergyFields(ui, world, f); // Energie erweitert
                 var net = world.Utilities.NetworkOf(f);
                 if (net != null && (net.Lines > 0 || net.Buildings > 0))
                 {
@@ -664,6 +677,38 @@ namespace CityBuilder.Game.Inspect
                         utilityOverlay.Current == overlay, true, "Info-Ansicht Strom/Wasser (O)");
             }
         }
+
+        // --- Energie erweitert: Speicher, Wasserkraft, Offshore-Wind, Biogas
+        static void EnergyFields(Ui ui, SimulationWorld world, UtilityFacility f)
+        {
+            var t = f.Type;
+            var u = world.Utilities;
+            if (t.IsStorage)
+            {
+                ui.Field("Ladestand", $"{f.StoredKwh / 1000f:0.0} von {t.StorageKwh / 1000f:0} MWh ({f.StateOfCharge * 100f:0} %)",
+                    f.StateOfCharge < 0.1f ? Tone.Warn : Tone.Good);
+                ui.Field("Betrieb", f.Output > 0f ? $"liefert {f.Output / 1000f:0.##} MW (Unterdeckung im Netz)"
+                    : f.Charging > 0f ? $"lädt {f.Charging / 1000f:0.##} MW aus dem Überschuss" : "wartet (kein Überschuss, keine Unterdeckung)");
+                ui.Field("Regel", $"liefert erst, wenn die Kraftwerke nicht reichen · Wirkungsgrad {UtilitySystem.StorageEfficiency * 100f:0} % je Richtung", Tone.Muted);
+                return;
+            }
+            switch (t.Output)
+            {
+                case OutputModel.Hydro:
+                    ui.Field("Standort", $"Abfluss {f.SiteFlow:0} m³/s (heute ×{u.RiverFlowFactor:0.00}, Ausbau {UtilitySystem.HydroDesignFlow:0} m³/s) · Fallhöhe {f.SiteHead:0.0} m");
+                    ui.Field("Fluss", "bleibt durchgängig (Wehr mit Schleuse/Fischtreppe, Gelände unverändert)", Tone.Muted);
+                    break;
+                case OutputModel.OffshoreWind:
+                    ui.Field("Wind", $"{f.Availability * 100f:0} % der Nennleistung (schwankt stündlich, im Mittel ≈ 50 %)");
+                    ui.Field("Anschluss", "nur Hochspannung – Hochspannungs-Seekabel zum Umspannwerk an Land", Tone.Muted);
+                    break;
+                case OutputModel.Biogas:
+                    ui.Field("Rohstoff", $"{f.Availability * 100f:0} % · Höfe im Umkreis {UtilitySystem.BiogasFeedRadius / 1000f:0} km: {f.FeedWorkers:0} von {UtilitySystem.BiogasFullFeedWorkers:0} Beschäftigten" +
+                        $" (Grundlast {UtilitySystem.BiogasBaseShare * 100f:0} % aus Bioabfall)", f.Availability < 0.6f ? Tone.Warn : Tone.Good);
+                    break;
+            }
+        }
+        // --- Ende Energie erweitert
 
         /// <summary>Umspannwerk (Netze selbst verlegt): Last/Kapazität, Hochspannungsnetz oben, Ortsnetz unten.</summary>
         void SubstationBody(Ui ui, SimulationWorld world, UtilityFacility f)

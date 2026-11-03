@@ -93,8 +93,21 @@ namespace CityBuilder.Game.Traffic
                 if (d.LengthSquared() < 1e-6f) d = v.Direction;
                 var rot = Quaternion.LookRotation(new Vector3(d.X, 0f, d.Y));
 
+                // --- Eigene Assets 2: Dienstfahrzeuge (eigene Modelle bzw. farbige Platzhalter), kleine Lieferwagen im Einzelhandel
+                var service = runner.World.ServiceVehicles?.UnitForTrip(v.TripId);
+                ModelEntry special = catalog != null ? SpecialModel(catalog, v, service) : null;
+                if (service != null && special == null)
+                {
+                    var ss = Size(v.Class);
+                    var sp = SimConvert.ToWorld(p, h + RoadMeshBuilder.RoadHeight + ss.y * 0.5f);
+                    var sm = ServiceMaterial(service.Kind);
+                    if (!batches.TryGetValue(sm, out var sb)) batches[sm] = sb = new List<Matrix4x4>();
+                    sb.Add(Matrix4x4.TRS(sp, rot, ss));
+                    continue;
+                }
+                // --- Ende Eigene Assets 2
                 // Echtes Modell aus dem Katalog (Unterkante auf Fahrbahn, Front +Z)
-                var model = catalog != null ? AssetCatalog.Pick(ModelsFor(catalog, v.Class), v.Variant) : null;
+                var model = special ?? (catalog != null ? AssetCatalog.Pick(ModelsFor(catalog, v.Class), v.Variant) : null);
                 if (model != null)
                 {
                     var center = SimConvert.ToWorld(p, h + RoadMeshBuilder.RoadHeight);
@@ -115,6 +128,8 @@ namespace CityBuilder.Game.Traffic
                 if (!batches.TryGetValue(mat, out var batch)) batches[mat] = batch = new List<Matrix4x4>();
                 batch.Add(Matrix4x4.TRS(pos, rot, size));
             }
+
+            DrawParked(catalog); // Eigene Assets 2: Dienstfahrzeuge am Halt
 
             foreach (var kv in batches)
             {
@@ -143,6 +158,65 @@ namespace CityBuilder.Game.Traffic
                 default: return c.Cars;
             }
         }
+
+        // --- Eigene Assets 2: Dienstfahrzeuge (Models/Vehicles), Lieferwagen, geparkte Fahrzeuge am Halt
+        /// <summary>Lieferung gilt als „klein“ (Transporter statt Lkw): Einzelhandel und höchstens dieser Anteil einer Lkw-Ladung.</summary>
+        const float VanLoadShare = 0.35f;
+
+        ModelEntry SpecialModel(AssetCatalog catalog, Vehicle v, CityBuilder.Simulation.Services.ServiceUnit service)
+        {
+            if (service != null) return catalog.ServiceVehicle(CityBuilder.Simulation.Services.ServiceVehicleRules.ModelName(service.Kind));
+            if (v.TripId >= 0 || !AssetCatalog.Has(catalog.Vans)) return null;
+            var goods = runner.World.Goods;
+            var s = goods?.ShipmentForTrip(v.TripId);
+            if (s == null || s.Good == null || s.Amount > s.Good.LoadUnits * VanLoadShare) return null;
+            var firm = goods.FirmAt(s.ToBuildingId);
+            return firm != null && firm.Role == CityBuilder.Simulation.Goods.FirmRole.Retail ? AssetCatalog.Pick(catalog.Vans, v.Variant) : null;
+        }
+
+        readonly Dictionary<CityBuilder.Simulation.Services.ServiceVehicleKind, Material> serviceMaterials =
+            new Dictionary<CityBuilder.Simulation.Services.ServiceVehicleKind, Material>();
+
+        Material ServiceMaterial(CityBuilder.Simulation.Services.ServiceVehicleKind kind)
+        {
+            if (serviceMaterials.TryGetValue(kind, out var m) && m != null) return m;
+            Color c;
+            switch (kind)
+            {
+                case CityBuilder.Simulation.Services.ServiceVehicleKind.GarbageTruck: c = new Color(0.95f, 0.55f, 0.1f); break;
+                case CityBuilder.Simulation.Services.ServiceVehicleKind.PoliceCar: c = new Color(0.2f, 0.35f, 0.75f); break;
+                case CityBuilder.Simulation.Services.ServiceVehicleKind.FireTruck: c = new Color(0.85f, 0.1f, 0.08f); break;
+                default: c = new Color(0.97f, 0.97f, 0.92f); break;
+            }
+            m = new Material(baseMaterial) { name = $"Service_{kind}", enableInstancing = true };
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c); else m.color = c;
+            serviceMaterials[kind] = m;
+            materials[(VehicleClass.None, 100 + (int)kind)] = m; // wird in OnDestroy mit aufgeräumt
+            return m;
+        }
+
+        /// <summary>Dienstfahrzeuge, die gerade am Halt stehen (Müll laden, Einsatz) – die Simulation hat dann kein Fahrzeug im Verkehr.</summary>
+        void DrawParked(AssetCatalog catalog)
+        {
+            var fleet = runner.World.ServiceVehicles;
+            if (fleet == null) return;
+            foreach (var u in fleet.ParkedUnits)
+            {
+                var d = u.ParkDirection.LengthSquared() > 1e-6f ? u.ParkDirection : new System.Numerics.Vector2(0f, 1f);
+                var rot = Quaternion.LookRotation(new Vector3(d.X, 0f, d.Y));
+                var model = catalog != null ? catalog.ServiceVehicle(CityBuilder.Simulation.Services.ServiceVehicleRules.ModelName(u.Kind)) : null;
+                if (model != null)
+                {
+                    models.Add(model, Matrix4x4.TRS(SimConvert.ToWorld(u.ParkPosition, u.ParkHeight + RoadMeshBuilder.RoadHeight), rot, Vector3.one));
+                    continue;
+                }
+                var size = Size(CityBuilder.Simulation.Services.ServiceVehicleRules.ClassOf(u.Kind));
+                var mat = ServiceMaterial(u.Kind);
+                if (!batches.TryGetValue(mat, out var batch)) batches[mat] = batch = new List<Matrix4x4>();
+                batch.Add(Matrix4x4.TRS(SimConvert.ToWorld(u.ParkPosition, u.ParkHeight + RoadMeshBuilder.RoadHeight + size.y * 0.5f), rot, size));
+            }
+        }
+        // --- Ende Eigene Assets 2
 
         public void Init(SimulationRunner r, Material mat)
         {

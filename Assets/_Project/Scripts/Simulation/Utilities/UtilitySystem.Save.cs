@@ -18,7 +18,8 @@ namespace CityBuilder.Simulation.Utilities
         /// Netze werden beim ersten Durchlauf nach den neuen Regeln neu berechnet, und es gilt eine Übergangsfrist
         /// (<see cref="MigrationGraceTicks"/>), damit der Spieler mit „Entlang Straßen verlegen“ nachrüsten kann.
         /// </summary>
-        public int SaveVersion => 2;
+        // v3 (Energie erweitert): Nennleistung/Standort/Ladestand je Bauwerk, Speicher je Netz, Abflusslage (v2 → Katalogwerte, leere Speicher).
+        public int SaveVersion => 3;
 
         public void Write(SaveWriter w)
         {
@@ -31,6 +32,7 @@ namespace CityBuilder.Simulation.Utilities
             w.Bool(IncidentsEnabled); w.Float(IncidentChancePerDay); w.Int(Incidents); w.Int(incidentCheckedDay);
             w.IntDictionary(offlineUntilDay, w.Int);
             w.Int(MigrationGraceTicks); // v2
+            w.Float(riverFlowIndex); w.Int(flowIndexDay); w.Long(energyTick); // v3 Energie erweitert
 
             facilities.WriteLayout(w, (id, f) =>
             {
@@ -43,6 +45,8 @@ namespace CityBuilder.Simulation.Utilities
                 w.Int(f.NetworkId);
                 w.Int(f.UpstreamNetworkId); // v2
                 w.Float(f.Load);            // v2
+                w.Float(f.Rated); w.Float(f.StoredKwh); w.Float(f.Charging); w.Float(f.SiteFlow); w.Float(f.SiteHead); // v3
+                w.Float(f.Availability); w.Float(f.FeedWorkers); // v3
             });
             lines.WriteLayout(w, (id, l) =>
             {
@@ -79,6 +83,7 @@ namespace CityBuilder.Simulation.Utilities
                     w.Int(n.Facilities); w.Int(n.Buildings); w.Int(n.SuppliedBuildings); w.Int(n.Lines);
                     // v2: Ebene und Umspannwerte
                     w.Name(n.Level); w.Float(n.Generation); w.Float(n.Imported); w.Float(n.TransformerCapacity); w.Int(n.Substations);
+                    w.Float(n.StorageDischarge); w.Float(n.StorageCharge); w.Int(n.Storages); // v3
                     var members = networkBuildings[k][i];
                     w.Int(members.Count);
                     foreach (var b in members) w.Int(b.Id);
@@ -97,6 +102,8 @@ namespace CityBuilder.Simulation.Utilities
             IncidentsEnabled = r.Bool(); IncidentChancePerDay = r.Float(); Incidents = r.Int(); incidentCheckedDay = r.Int();
             r.IntDictionaryInto(offlineUntilDay, r.Int, 4);
             MigrationGraceTicks = version >= 2 ? r.Int() : MigrationGraceAfterV1;
+            if (version >= 3) { riverFlowIndex = r.Float(); flowIndexDay = r.Int(); energyTick = r.Long(); }
+            else { riverFlowIndex = 1f; flowIndexDay = -1; energyTick = 0; }
 
             facilities.ReadLayout(r, () =>
             {
@@ -110,6 +117,12 @@ namespace CityBuilder.Simulation.Utilities
                     Id = id, Type = type, Position = r.Vector2(), Front = r.Vector2(), Height = r.Float(), Output = r.Float(), NetworkId = r.Int(),
                 };
                 if (version >= 2) { f.UpstreamNetworkId = r.Int(); f.Load = r.Float(); }
+                if (version >= 3)
+                {
+                    f.Rated = r.Float(); f.StoredKwh = r.Float(); f.Charging = r.Float(); f.SiteFlow = r.Float(); f.SiteHead = r.Float();
+                    f.Availability = r.Float(); f.FeedWorkers = r.Float();
+                }
+                else f.Rated = type.Capacity; // v2: alle Bauwerke mit Katalogleistung (Wasserkraft/Speicher gab es nicht)
                 return new KeyValuePair<int, UtilityFacility>(id, f);
             });
             lines.ReadLayout(r, () =>
@@ -159,6 +172,7 @@ namespace CityBuilder.Simulation.Utilities
                     {
                         n.Level = r.Name<GridLevel>(); n.Generation = r.Float(); n.Imported = r.Float();
                         n.TransformerCapacity = r.Float(); n.Substations = r.Int();
+                        if (version >= 3) { n.StorageDischarge = r.Float(); n.StorageCharge = r.Float(); n.Storages = r.Int(); }
                     }
                     else n.Generation = n.Production;
                     int m = r.Count(4);

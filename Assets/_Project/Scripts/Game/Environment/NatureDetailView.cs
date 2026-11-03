@@ -25,7 +25,7 @@ namespace CityBuilder.Game.Environment
         Camera cam;
         RoadNetwork boundRoads;
 
-        struct Spot { public SimVector2 Pos; public float Scale, Yaw, Roll, Slope; public int Variant; public bool Rock, Alive; }
+        struct Spot { public SimVector2 Pos; public float Scale, Yaw, Roll, Slope; public int Variant; public bool Rock, Alive; public bool Cliff; /* Eigene Assets 2 */ }
         Spot[] spots;
         bool dirty = true;
         int terrainVersion = -1, woodVersion = -1, cityVersion = -1, serviceVersion = -1;
@@ -86,9 +86,44 @@ namespace CityBuilder.Game.Environment
                     Scale = 0.7f + H01(x, y, 4) * 0.7f, Yaw = H01(x, y, 5) * 360f, Variant = (int)(H01(x, y, 6) * 1000f), Alive = true,
                 });
             }
+            ScatterCliffs(list); // Eigene Assets 2: Felsklippen an sehr steilen Hängen
             spots = list.ToArray();
             dirty = true;
         }
+
+        // --- Eigene Assets 2: Felsklippen (Models/Terrain/Cliff_Straight, 16 × 16 m, 18 m hoch, Felswand an der Vorderseite +Z,
+        // ebene Oberkante). Das Gelände ist eine stetige Höhenkarte ohne Kanten – Klippen stehen deshalb nur dort, wo der Hang
+        // auf 16 m so viel fällt, wie die Wand hoch ist (ab ~40°): Wand zeigt talwärts, Unterkante am Hangfuß, Höhe auf den Hang
+        // gestaucht. Keine Klippen an Küste/Fluss (dort ist das Ufer flach).
+        const float CliffCell = 16f, CliffMinSlope = 0.8f, CliffHeight = 18.3f;
+
+        void ScatterCliffs(List<Spot> list)
+        {
+            var w = runner.World;
+            var terrain = w.Terrain;
+            int n = Mathf.CeilToInt(w.Settings.SizeMeters / CliffCell);
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                var p = w.Min + new SimVector2((x + 0.5f) * CliffCell, (y + 0.5f) * CliffCell);
+                if (terrain.HeightAt(p) < terrain.WaterLevel + 2f) continue;
+                float dx = terrain.HeightAt(p + new SimVector2(4f, 0f)) - terrain.HeightAt(p - new SimVector2(4f, 0f));
+                float dy = terrain.HeightAt(p + new SimVector2(0f, 4f)) - terrain.HeightAt(p - new SimVector2(0f, 4f));
+                float slope = Mathf.Sqrt(dx * dx + dy * dy) / 8f;
+                if (slope < CliffMinSlope || H01(x, y, 21) > 0.55f) continue;
+                // talwärts = gegen den Gradienten
+                float yaw = Mathf.Atan2(-dx, -dy) * Mathf.Rad2Deg;
+                list.Add(new Spot { Pos = p, Cliff = true, Slope = slope, Yaw = yaw, Scale = 1f, Variant = (int)(H01(x, y, 22) * 1000f), Alive = true });
+            }
+        }
+
+        static IReadOnlyList<OwnModelCatalog.Entry> Filter(IReadOnlyList<OwnModelCatalog.Entry> list, bool cliffs)
+        {
+            var r = new List<OwnModelCatalog.Entry>();
+            foreach (var e in list) if (string.Equals(e.Use, "cliff", System.StringComparison.OrdinalIgnoreCase) == cliffs) r.Add(e);
+            return r;
+        }
+        // --- Ende Eigene Assets 2
 
         void ClearAround(RoadSegment s)
         {
@@ -127,12 +162,28 @@ namespace CityBuilder.Game.Environment
             bushes.Clear();
             rocks.Clear();
             var bushList = catalog.WithRole(OwnModelRoles.Bush);
-            var rockList = catalog.WithRole(OwnModelRoles.Rock);
+            var allRocks = catalog.WithRole(OwnModelRoles.Rock);
+            var rockList = Filter(allRocks, cliffs: false);   // Eigene Assets 2: Klippen getrennt
+            var cliffList = Filter(allRocks, cliffs: true);
             var wood = Wood;
             var terrain = w.Terrain;
             foreach (var s in spots)
             {
                 if (!s.Alive) continue;
+                // --- Eigene Assets 2: Felsklippe – Unterkante am Hangfuß, Höhe auf den Hang gestaucht
+                if (s.Cliff)
+                {
+                    if (cliffList.Count == 0) continue;
+                    if (w.City.BuildingAt(s.Pos) != null || w.Services.FacilityAt(s.Pos, 8f) != null || w.Utilities.FacilityAt(s.Pos, 8f) != null) continue;
+                    var down = new SimVector2(Mathf.Sin(s.Yaw * Mathf.Deg2Rad), Mathf.Cos(s.Yaw * Mathf.Deg2Rad));
+                    float low = terrain.HeightAt(s.Pos + down * (CliffCell * 0.5f)), high = terrain.HeightAt(s.Pos - down * (CliffCell * 0.5f));
+                    if (high - low < 4f || low < terrain.WaterLevel + 0.5f) continue; // Hang inzwischen abgetragen (Terraforming) bzw. am Wasser
+                    float sy = Mathf.Clamp((high - low + 1f) / CliffHeight, 0.3f, 1.4f);
+                    rocks.Add(Pick(cliffList, s.Variant, false),
+                        Matrix4x4.TRS(SimConvert.ToWorld(s.Pos, low - 0.5f), Quaternion.Euler(0f, s.Yaw, 0f), new Vector3(1f, sy, 1f)));
+                    continue;
+                }
+                // --- Ende Eigene Assets 2
                 float h = terrain.HeightAt(s.Pos);
                 if (h < terrain.WaterLevel + 0.3f) continue;
                 if (w.City.BuildingAt(s.Pos) != null || w.Services.FacilityAt(s.Pos, 2f) != null) continue;

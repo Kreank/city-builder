@@ -194,7 +194,10 @@ namespace CityBuilder.Editor
                         break;
                     case OwnModelRoles.Prop: usedBy = $"Straßen-/Parkausstattung ({d.Placement}) – StreetFurnitureView"; break;
                     case OwnModelRoles.Bush: usedBy = "Büsche (Waldrand, Parks) – NatureDetailView"; break;
-                    case OwnModelRoles.Rock: usedBy = "Felsen (Hänge, Gebirge) – NatureDetailView"; break;
+                    case OwnModelRoles.Rock:
+                        usedBy = d.Use == OwnModelDescriptions.CliffUse ? "Felsklippen (sehr steile Hänge, zum Tal gedreht) – NatureDetailView" // Eigene Assets 2
+                            : "Felsen (Hänge, Gebirge) – NatureDetailView";
+                        break;
                     default: continue;
                 }
                 if (usedBy == null) continue;
@@ -217,6 +220,12 @@ namespace CityBuilder.Editor
                 }
                 else if (d.Role == OwnModelRoles.Tree) Use(d, "Bäume (AssetCatalog, ScenicPropsView)");
                 else if (d.Role == OwnModelRoles.StreetLamp) Use(d, "Straßenlaternen (AssetCatalog, ScenicPropsView)");
+                // --- Eigene Assets 2: Fahrzeuge (AssetCatalog: Linienbusse, Lieferwagen, Dienstfahrzeuge – VehicleView)
+                else if (d.Role == OwnModelRoles.Vehicle)
+                {
+                    if (OwnModelDescriptions.VehicleUses.Contains(d.Use ?? "")) Use(d, $"Fahrzeug {d.Use} (AssetCatalog, VehicleView)");
+                    else if (d.WaitsFor == null) d.WaitsFor = $"Fahrzeug: Verwendung '{d.Use}' ohne Funktion";
+                }
                 else if (d.UsedBy == null && d.WaitsFor == null) d.WaitsFor = $"Rolle '{d.Role}' ohne Verwendung";
             }
             OwnModelDescriptions.WriteReport(all);

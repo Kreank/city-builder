@@ -147,6 +147,8 @@ namespace CityBuilder.Game.Assets
     {
         public const string Building = "building", Tree = "tree", StreetLamp = "streetlamp", Prop = "prop", Bush = "bush", Rock = "rock",
             Service = "service", Facility = "facility", Transport = "transport", Person = "person", Agriculture = "agriculture",
-            Infrastructure = "infrastructure", Waiting = "waiting";
+            Infrastructure = "infrastructure", Waiting = "waiting",
+            // Eigene Assets 2: Fahrzeuge (Linienbus, Lieferwagen, Dienstfahrzeuge) – Verwendung in <c>use</c>, Modell im AssetCatalog
+            Vehicle = "vehicle";
     }
 }
