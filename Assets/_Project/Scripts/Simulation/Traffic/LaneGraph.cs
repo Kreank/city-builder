@@ -10,7 +10,7 @@ namespace CityBuilder.Simulation.Traffic
     /// Wird automatisch aus dem Straßennetz abgeleitet und bei Änderungen knotenweise neu aufgebaut.
     /// Abbiegeregel (Rechtsverkehr): linke Spuren biegen links ab, rechte rechts, geradeaus von allen.
     /// </summary>
-    public sealed class LaneGraph
+    public sealed partial class LaneGraph
     {
         const float StraightAngle = 35f;
 
@@ -34,6 +34,7 @@ namespace CityBuilder.Simulation.Traffic
             network.SegmentAdded += OnSegmentAdded;
             network.SegmentRemoved += OnSegmentRemoved;
             network.NodeRemoved += OnNodeRemoved;
+            network.Reloaded += RebuildAll; // Spielstand geladen → komplett neu aufbauen
             foreach (var s in network.Segments) OnSegmentAdded(s);
             Update();
         }

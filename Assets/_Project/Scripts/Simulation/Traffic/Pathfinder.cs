@@ -9,7 +9,7 @@ namespace CityBuilder.Simulation.Traffic
     /// A*-Wegfindung über gerichtete Segmente. Kosten = Fahrzeit (Tempolimit × Stau) + Abbiegezeit
     /// + Wartezeit an Ampeln/Schildern. Beachtet Sperrungen, Fahrverbote und Abbiegeverbote.
     /// </summary>
-    public sealed class Pathfinder
+    public sealed partial class Pathfinder
     {
         const int MaxExpansions = 30000;
         const float HeuristicSpeed = 140f / 3.6f;

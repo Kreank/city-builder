@@ -8,14 +8,15 @@ namespace CityBuilder.Simulation.Roads
     /// Das Straßennetz als Graph (Knoten + Segmente) mit den Grundoperationen.
     /// Das eigentliche Bauen mit Prüfungen, Kreuzungen, Kreisverkehren und Vorlagen macht <see cref="RoadBuilder"/>.
     /// </summary>
-    public sealed class RoadNetwork
+    public sealed partial class RoadNetwork
     {
         public const float MinSegmentLength = 4f;
         /// <summary>Höhenunterschied, bis zu dem zwei Straßen als „gleiche Ebene“ gelten.</summary>
         public const float SameLevelTolerance = 1.5f;
 
-        readonly Dictionary<int, RoadNode> nodes = new Dictionary<int, RoadNode>();
-        readonly Dictionary<int, RoadSegment> segments = new Dictionary<int, RoadSegment>();
+        // StableMap: Durchlauf-Reihenfolge wie Dictionary, aber speicherbar (Spielstand, Determinismus)
+        readonly Core.StableMap<int, RoadNode> nodes = new Core.StableMap<int, RoadNode>();
+        readonly Core.StableMap<int, RoadSegment> segments = new Core.StableMap<int, RoadSegment>();
         int nextNodeId = 1;
         int nextSegmentId = 1;
 

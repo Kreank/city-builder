@@ -26,7 +26,7 @@ namespace CityBuilder.Simulation.Economy
     /// </para>
     /// Rein deterministisch: kein Zufall, Summen in fester Reihenfolge.
     /// </summary>
-    public sealed class EconomySystem : ISimulationSystem, IConstructionBudget
+    public sealed partial class EconomySystem : ISimulationSystem, IConstructionBudget
     {
         public int TickInterval => SimulationClock.TicksPerDay;
 

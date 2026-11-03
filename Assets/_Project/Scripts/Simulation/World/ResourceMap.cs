@@ -96,7 +96,7 @@ namespace CityBuilder.Simulation.World
     /// (Wald, Boden, Grundwasser) – täglich über <see cref="WorldSystem"/>.
     /// <para><b>Verbindliche API</b> (Warenketten docken per Delegat an): <see cref="DepositAt"/> und <see cref="Extract"/>.</para>
     /// </summary>
-    public sealed class ResourceMap
+    public sealed partial class ResourceMap
     {
         readonly Dictionary<string, int> index = new Dictionary<string, int>();
         readonly GridLayer[] layers;

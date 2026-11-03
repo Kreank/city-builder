@@ -58,7 +58,7 @@ namespace CityBuilder.Simulation.Zoning
     /// Einzug, Jobs und Pendeln übernimmt seit G2 das Bürgersystem (<c>Citizens.CitizenSystem</c>);
     /// die Nachfrage kommt aus dessen <see cref="Population"/>.
     /// </summary>
-    public sealed class CitySystem : ISimulationSystem
+    public sealed partial class CitySystem : ISimulationSystem
     {
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten.</summary>
         public int TickInterval => 5;
@@ -66,8 +66,8 @@ namespace CityBuilder.Simulation.Zoning
 
         readonly RoadNetwork network;
         readonly TerrainMap terrain;
-        readonly Random rng;
-        readonly Dictionary<int, Building> buildings = new Dictionary<int, Building>();
+        readonly CompatRandom rng; // wie System.Random (gleiche Folge), aber speicherbar
+        readonly StableMap<int, Building> buildings = new StableMap<int, Building>();
         readonly Dictionary<long, List<Building>> buildingBuckets = new Dictionary<long, List<Building>>();
         int nextId = 1;
 
@@ -115,7 +115,7 @@ namespace CityBuilder.Simulation.Zoning
         {
             this.network = network;
             this.terrain = terrain;
-            rng = new Random(seed);
+            rng = new CompatRandom(seed);
             Grid = new ZoneGrid(network);
             ZoneMap = new ZoneMap(origin, sizeMeters);
             network.SegmentAdded += OnSegmentAdded;

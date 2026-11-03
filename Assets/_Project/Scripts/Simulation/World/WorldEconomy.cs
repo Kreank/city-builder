@@ -41,7 +41,7 @@ namespace CityBuilder.Simulation.World
     /// begrenzen die Produktion. Preis passt sich träge an (Lager gegen Zielbestand). Grundlage der späteren Handels-KI:
     /// <see cref="Balance"/> = Überschuss (+) bzw. Defizit (−) je Tag.
     /// </summary>
-    public sealed class NationEconomy
+    public sealed partial class NationEconomy
     {
         public const int TargetStockDays = 20;
         public const int MaxStockDays = 120;
@@ -176,7 +176,7 @@ namespace CityBuilder.Simulation.World
     }
 
     /// <summary>Alle Länder-Volkswirtschaften der Welt (LOD „aggregiert“), täglicher Schritt über <see cref="WorldSystem"/>.</summary>
-    public sealed class WorldEconomy
+    public sealed partial class WorldEconomy
     {
         public IReadOnlyList<NationEconomy> Nations => nations;
         readonly List<NationEconomy> nations = new List<NationEconomy>();

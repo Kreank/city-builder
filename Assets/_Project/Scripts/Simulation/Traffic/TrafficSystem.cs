@@ -32,7 +32,7 @@ namespace CityBuilder.Simulation.Traffic
     /// (Fahrzeugfolgemodell IDM), wählt Spuren/Spurwechsel, beachtet Vorfahrt, Schilder und Ampeln.
     /// Verkehrszeit ist von der Kalenderzeit entkoppelt: 1 Tick = <see cref="Dt"/> Sekunden Fahrzeit.
     /// </summary>
-    public sealed class TrafficSystem : ISimulationSystem
+    public sealed partial class TrafficSystem : ISimulationSystem
     {
         public const float Dt = 0.25f;
         const float MinGap = 2f;
@@ -43,7 +43,7 @@ namespace CityBuilder.Simulation.Traffic
 
         readonly RoadNetwork network;
         readonly Vector2 worldMin, worldMax;
-        readonly Random rng;
+        readonly CompatRandom rng; // wie System.Random (gleiche Folge), aber speicherbar
 
         public LaneGraph Lanes { get; }
         public TrafficRules Rules { get; }
@@ -97,7 +97,7 @@ namespace CityBuilder.Simulation.Traffic
             this.network = network;
             this.worldMin = worldMin;
             this.worldMax = worldMax;
-            rng = new Random(seed);
+            rng = new CompatRandom(seed);
             Lanes = new LaneGraph(network);
             Rules = new TrafficRules(network);
             Junctions = new JunctionController(network, Lanes, Rules);
