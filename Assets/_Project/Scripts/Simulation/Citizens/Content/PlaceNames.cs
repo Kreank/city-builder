@@ -56,6 +56,9 @@ namespace CityBuilder.Simulation.Citizens.Content
             return StreetStems[h % (uint)StreetStems.Length] + StreetSuffixes[(h >> 12) % (uint)StreetSuffixes.Length];
         }
 
+        /// <summary>Name eines echten Parks (Dienstgebäude-Id).</summary>
+        public static string ParkFacility(int facilityId) => Park(facilityId * 7919 + 104729);
+
         public static string Park(int homeBuildingId)
         {
             uint h = SimRandom.Hash(homeBuildingId, 313);

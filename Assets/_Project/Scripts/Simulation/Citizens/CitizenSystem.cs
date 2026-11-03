@@ -71,6 +71,8 @@ namespace CityBuilder.Simulation.Citizens
         public int JobsLost;
         public int LeisureHome;
         public int LeisurePark;
+        /// <summary>Davon in einem echten Park (G4).</summary>
+        public int LeisureRealPark;
         public int LeisureStroll;
     }
 
@@ -647,6 +649,7 @@ namespace CityBuilder.Simulation.Citizens
                         break;
                     case Activity.Leisure:
                         c.Activity = Activity.Home;
+                        c.LeisureParkId = 0;
                         c.BusyUntil = now + 2;
                         break;
                     case Activity.Work:
@@ -815,6 +818,7 @@ namespace CityBuilder.Simulation.Citizens
             c.Activity = c.IsCommuterIn ? Activity.Outside : Activity.Home;
             c.BusyUntil = 0;
             c.LeisureTrip = false;
+            c.LeisureParkId = 0;
         }
 
         // ------------------------------------------------------------ Orte

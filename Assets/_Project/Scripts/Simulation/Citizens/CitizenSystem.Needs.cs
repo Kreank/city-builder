@@ -23,6 +23,15 @@ namespace CityBuilder.Simulation.Citizens
         /// </summary>
         public Func<string, Building, float> ServiceCoverage { get; set; } = (id, b) => 0.5f;
 
+        /// <summary>Liegender Müll am Gebäude 0..1 (G4, <c>ServiceSystem.GarbageLevel</c>); null = keiner. Senkt Ruhe/Umwelt.</summary>
+        public Func<Building, float> GarbageLevel { get; set; }
+
+        /// <summary>
+        /// Nächster/bester echter Park für ein Wohngebäude (G4); null bzw. Id 0 = keiner in Reichweite →
+        /// Freizeit „Park“ bleibt ein Spaziergang im Viertel.
+        /// </summary>
+        public Func<Building, ParkSpot> ParkFinder { get; set; }
+
         /// <summary>Multiplikator auf alle gewürfelten Lebensereignisse (Tests/Balancing).</summary>
         public float LifeEventRate = 1f;
 
@@ -35,7 +44,7 @@ namespace CityBuilder.Simulation.Citizens
         {
             public int Cycle;
             public float Noise, Air;
-            public float Police, Fire, Health, Education, Library, Park, Garbage;
+            public float Police, Fire, Health, Education, EducationPrimary, EducationSecondary, Library, Park, Garbage, GarbageLevel;
             public bool Supplied, PowerOut, WaterOut;
         }
 
@@ -65,9 +74,12 @@ namespace CityBuilder.Simulation.Citizens
             ctx.Fire = Coverage(cov, ServiceIds.Fire, b);
             ctx.Health = Coverage(cov, ServiceIds.Health, b);
             ctx.Education = Coverage(cov, ServiceIds.Education, b);
+            ctx.EducationPrimary = Coverage(cov, ServiceIds.EducationPrimary, b);
+            ctx.EducationSecondary = Coverage(cov, ServiceIds.EducationSecondary, b);
             ctx.Library = Coverage(cov, ServiceIds.Library, b);
             ctx.Park = Coverage(cov, ServiceIds.Park, b);
             ctx.Garbage = Coverage(cov, ServiceIds.Garbage, b);
+            ctx.GarbageLevel = GarbageLevel == null ? 0f : Math.Clamp(GarbageLevel(b), 0f, 1f);
             contexts[b.Id] = ctx;
             return ctx;
         }
@@ -152,12 +164,15 @@ namespace CityBuilder.Simulation.Citizens
         }
 
         static float CalmTarget(in HomeContext ctx) =>
-            Math.Clamp(1f - Math.Clamp(ctx.Noise * 1.1f + ctx.Air * 1.6f, 0f, 1f) + (ctx.Garbage - 0.5f) * 0.2f, 0f, 1f);
+            Math.Clamp(1f - Math.Clamp(ctx.Noise * 1.1f + ctx.Air * 1.6f, 0f, 1f) + (ctx.Garbage - 0.5f) * 0.2f - 0.3f * ctx.GarbageLevel, 0f, 1f);
 
         static float SafetyTarget(in HomeContext ctx) => 0.15f + 0.85f * (0.6f * ctx.Police + 0.4f * ctx.Fire);
 
         static float EducationTarget(Citizen c, in HomeContext ctx) =>
-            c.Age < Citizen.AdultAge ? 0.1f + 0.9f * ctx.Education : 0.2f + 0.8f * (0.6f * ctx.Library + 0.4f * ctx.Education);
+            c.Age < 6 ? 0.5f + 0.5f * ctx.EducationPrimary          // Vorschulkind: Grundschule in der Nähe beruhigt die Eltern
+            : c.Age < 12 ? 0.1f + 0.9f * ctx.EducationPrimary
+            : c.Age < Citizen.AdultAge ? 0.1f + 0.9f * ctx.EducationSecondary
+            : 0.2f + 0.8f * (0.6f * ctx.Library + 0.4f * ctx.Education);
 
         float WorkTarget(Citizen c, Building job)
         {
@@ -232,7 +247,7 @@ namespace CityBuilder.Simulation.Citizens
         // ------------------------------------------------------------ Erinnerungen
 
         /// <summary>Erinnerung anlegen/auffrischen. Textvorlage per stabilem Hash (verbraucht keinen Zufall).</summary>
-        internal void Remember(Citizen c, MemoryKind kind, float strength, int street = 0, int building = 0, Citizen other = null)
+        internal void Remember(Citizen c, MemoryKind kind, float strength, int street = 0, int building = 0, Citizen other = null, int facility = 0)
         {
             if (c == null || strength <= 0f) return;
             if (Memories.Valence(kind) < 0f) strength *= 0.75f + 0.5f * c.Personality.Anxious;
@@ -245,6 +260,7 @@ namespace CityBuilder.Simulation.Citizens
                 Day = clock.Day,
                 Street = street,
                 Building = building,
+                Facility = facility,
                 Zone = b?.Zone ?? ZoneType.None,
                 OtherId = other?.Id ?? 0,
                 OtherName = other == null ? 0 : NameKey(other),
@@ -322,12 +338,46 @@ namespace CityBuilder.Simulation.Citizens
                     var job = c.WorkplaceId != 0 ? city.GetBuilding(c.WorkplaceId) : null;
                     return job != null ? PlaceNames.Company(job.Id, job.Zone) : c.WorksOutside ? "der Firma außerhalb" : null;
                 case "Park":
+                    if (m.Facility > 0) return PlaceNames.ParkFacility(m.Facility);
                     return c.Household != null ? PlaceNames.Park(c.Household.HomeId) : null;
                 default: return null;
             }
         }
 
         // ------------------------------------------------------------ Abfragen für den Inspektor
+
+        /// <summary>Zustand eines Gebäudes 0..1 wie im Wohnbedürfnis (Stufe, −0,25 ohne Versorgung). Noch ohne Verfall/Alter.</summary>
+        public float BuildingCondition(Building b)
+        {
+            if (b == null) return 0f;
+            bool supplied = world?.Utilities == null || world.Utilities.IsSatisfied(b);
+            return Math.Clamp(0.55f + 0.12f * b.Level, 0f, 1f) - (supplied ? 0f : 0.25f);
+        }
+
+        /// <summary>
+        /// Umfeld eines Gebäudes 0..1 (für alle gleich gewichtet): Mittel aus Ruhe/Umwelt, Sicherheit, Gesundheitsdienst,
+        /// Bildung (Erwachsenensicht) und Park. Stand der aktuellen Bewertungsrunde.
+        /// </summary>
+        public float SurroundingsScore(Building b)
+        {
+            if (b == null) return 0f;
+            var ctx = Context(b);
+            return (CalmTarget(ctx) + SafetyTarget(ctx) + ctx.Health + (0.6f * ctx.Library + 0.4f * ctx.Education) + ctx.Park) / 5f;
+        }
+
+        /// <summary>Einwohner eines Gebäudes im Alter [minAge, maxAge] (z. B. Schüler für den Dienste-Bedarf).</summary>
+        public int CountResidents(int buildingId, int minAge, int maxAge)
+        {
+            int n = 0;
+            foreach (var h in HouseholdsIn(buildingId))
+                foreach (var m in h.MemberList)
+                    if (m.Age >= minAge && m.Age <= maxAge) n++;
+            return n;
+        }
+
+        /// <summary>Wo verbringt der Bürger die Freizeit? „im Park ‹Name›“ bzw. „Spaziergang im Viertel“.</summary>
+        public static string LeisurePlaceText(Citizen c) =>
+            c == null ? "–" : c.LeisureParkId > 0 ? $"im {PlaceNames.ParkFacility(c.LeisureParkId)}" : "Spaziergang im Viertel";
 
         /// <summary>Partner (null = keiner bzw. weggezogen).</summary>
         public Citizen PartnerOf(Citizen c) => c == null || c.PartnerId == 0 ? null : Get(c.PartnerId);

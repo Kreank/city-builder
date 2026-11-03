@@ -355,7 +355,7 @@ namespace CityBuilder.Simulation.Citizens
             to.MemberList.Add(c);
             if (c.Activity != Activity.Travelling && from != null && c.Location.BuildingId == from.HomeId) c.Location = Place.Building(to.HomeId);
             if (c.Activity == Activity.Travelling && c.Purpose == TripPurpose.ToHome) c.Destination = Place.Building(to.HomeId);
-            if (c.Activity == Activity.Leisure) { c.Activity = Activity.Home; c.Location = Place.Building(to.HomeId); }
+            if (c.Activity == Activity.Leisure) { c.Activity = Activity.Home; c.LeisureParkId = 0; c.Location = Place.Building(to.HomeId); }
             RefreshCommute(c);
         }
 

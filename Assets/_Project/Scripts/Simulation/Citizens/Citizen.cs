@@ -178,6 +178,8 @@ namespace CityBuilder.Simulation.Citizens
         internal int LastLeisureDay = -1;
         /// <summary>Laufende Fahrt zum Laden ist ein Freizeitbummel.</summary>
         internal bool LeisureTrip;
+        /// <summary>Besuchter Park (Dienstgebäude-Id aus G4) während <see cref="Activity.Leisure"/>, 0 = Spaziergang im Viertel.</summary>
+        public int LeisureParkId { get; internal set; }
         /// <summary>Tag der Ankunft in der Stadt/Geburt.</summary>
         public int ArrivedDay { get; internal set; }
 

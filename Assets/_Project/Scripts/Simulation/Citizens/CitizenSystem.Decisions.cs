@@ -60,12 +60,22 @@ namespace CityBuilder.Simulation.Citizens
                 case LeisureChoice.Park:
                 {
                     float park = home != null ? Context(home).Park : 0.5f;
+                    // Echter Park aus G4 in Reichweite? Dann dorthin (Fußweg hin und zurück), sonst Spaziergang im Viertel
+                    var spot = home != null && ParkFinder != null ? ParkFinder(home) : default;
+                    int walk = 0;
+                    if (spot.IsValid)
+                    {
+                        park = MathF.Max(park, spot.Quality);
+                        walk = 2 * Math.Max(1, (int)MathF.Ceiling(Vector2.Distance(home.Entrance, spot.Position) / OtherMetersPerTick));
+                    }
                     c.Activity = Activity.Leisure;
-                    c.BusyUntil = now + 10 + rng.Next(11);
+                    c.LeisureParkId = spot.IsValid ? spot.FacilityId : 0;
+                    c.BusyUntil = now + 10 + rng.Next(11) + walk;
                     n[(int)NeedKind.Leisure] = MathF.Min(1f, n[(int)NeedKind.Leisure] + 0.25f + 0.5f * park);
                     if (park >= 0.6f && rng.Chance(0.35f + 0.3f * c.Personality.NatureLoving))
-                        Remember(c, MemoryKind.NicePark, 0.3f + 0.4f * park, building: home?.Id ?? 0);
+                        Remember(c, MemoryKind.NicePark, 0.3f + 0.4f * park, building: home?.Id ?? 0, facility: c.LeisureParkId);
                     Stats.LeisurePark++;
+                    if (spot.IsValid) Stats.LeisureRealPark++;
                     return true;
                 }
                 case LeisureChoice.Stroll:

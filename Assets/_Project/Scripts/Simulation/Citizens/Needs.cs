@@ -74,6 +74,23 @@ namespace CityBuilder.Simulation.Citizens
             value >= 0.8f ? "sehr gut" : value >= 0.6f ? "gut" : value >= 0.4f ? "mittel" : value >= 0.2f ? "schlecht" : "sehr schlecht";
     }
 
+    /// <summary>Ein echter Park als Freizeitziel: Dienstgebäude-Id, Position, Qualität 0..1 (Entfernung × Auslastung).</summary>
+    public readonly struct ParkSpot
+    {
+        public readonly int FacilityId;
+        public readonly System.Numerics.Vector2 Position;
+        public readonly float Quality;
+
+        public ParkSpot(int facilityId, System.Numerics.Vector2 position, float quality)
+        {
+            FacilityId = facilityId;
+            Position = position;
+            Quality = quality;
+        }
+
+        public bool IsValid => FacilityId > 0;
+    }
+
     /// <summary>
     /// Ids der Dienste (G4) für <see cref="CitizenSystem.ServiceCoverage"/>. Der Dienst-Agent liefert die Abdeckung
     /// eines Gebäudes je Dienst 0..1 (0,5 = neutral/unbekannt).
@@ -87,6 +104,9 @@ namespace CityBuilder.Simulation.Citizens
         public const string Library = "library";
         public const string Park = "park";
         public const string Garbage = "garbage";
+        /// <summary>Teilkanäle der Bildung (Kinder 6–11 bzw. 12–17).</summary>
+        public const string EducationPrimary = "education_primary";
+        public const string EducationSecondary = "education_secondary";
 
         public static readonly string[] All = { Police, Fire, Health, Education, Library, Park, Garbage };
     }

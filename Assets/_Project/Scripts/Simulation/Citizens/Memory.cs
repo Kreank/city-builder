@@ -50,6 +50,8 @@ namespace CityBuilder.Simulation.Citizens
         public int Street;
         /// <summary>Gebäude (Arbeitgeber, Wohnung), 0 = keins.</summary>
         public int Building;
+        /// <summary>Dienstgebäude (G4, z. B. besuchter Park), 0 = keins.</summary>
+        public int Facility;
         /// <summary>Beteiligte Person (Partner, Kind), 0 = keine.</summary>
         public int OtherId;
         /// <summary>Vorname der beteiligten Person als Schlüssel (Geschlecht × 10000 + Index + 1), 0 = keine.</summary>

@@ -123,7 +123,38 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(safeHigh > 0.9f && c.Need(NeedKind.Safety) < 0.25f);
             Assert.True(eduHigh > 0.9f && c.Need(NeedKind.Education) < 0.3f);
             Assert.True(healthHigh > c.Need(NeedKind.Health) + 0.25f);
-            Assert.Equal(ServiceIds.All.OrderBy(s => s), seen.OrderBy(s => s));
+            Assert.All(ServiceIds.All, id => Assert.Contains(id, seen));
+        }
+
+        [Fact]
+        public void Services_AreBound_NeutralUntilBuilt_ThenRealCoverage_ParksAndPupils()
+        {
+            var w = Town();
+            var c = AnyResident(w);
+            var home = HomeOf(w, c);
+            Assert.Equal(0.5f, w.Citizens.ServiceCoverage(ServiceIds.Police, home)); // noch keine Polizei: neutral
+
+            var police = w.Services.TryBuild(Services.ServiceCatalog.PoliceStation, new Vector2(-220, -24));
+            Assert.NotNull(police);
+            var park = w.Services.TryBuild(Services.ServiceCatalog.ParkSmall, new Vector2(-90, -32));
+            Assert.NotNull(park);
+            w.Services.ForceTick();
+            float real = w.Services.Coverage(ServiceIds.Police, home);
+            Assert.Equal(real, w.Citizens.ServiceCoverage(ServiceIds.Police, home));
+            Assert.Equal(0.5f, w.Citizens.ServiceCoverage(ServiceIds.Health, home)); // Gesundheit weiter neutral
+
+            // Echte Schülerzahlen für die Schulen
+            var withKids = w.City.Buildings.First(b => w.Citizens.CountResidents(b.Id, 6, 11) > 0);
+            Assert.Equal(w.Citizens.CountResidents(withKids.Id, 6, 11), w.Services.DemandOf(withKids, Services.ServiceKinds.EducationPrimary));
+
+            // Park als echtes Freizeitziel
+            var near = w.City.Buildings.Where(b => w.Citizens.HouseholdsIn(b.Id).Count > 0)
+                .OrderBy(b => Vector2.Distance(b.Entrance, park.Position)).First();
+            var spot = w.Citizens.ParkFinder(near);
+            Assert.True(spot.IsValid && spot.FacilityId == park.Id, $"Park für {near} erwartet");
+            Run(w, SimulationClock.TicksPerDay * 3);
+            output.WriteLine($"Polizei-Abdeckung {real:0.00}, Parkbesuche {w.Citizens.Stats.LeisureRealPark} von {w.Citizens.Stats.LeisurePark}");
+            Assert.True(w.Citizens.Stats.LeisureRealPark > 0, "Bürger müssen den echten Park besuchen");
         }
 
         // ------------------------------------------------------------ Persönlichkeit und Entscheidungen
