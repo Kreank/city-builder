@@ -8,7 +8,7 @@ using SimVector2 = System.Numerics.Vector2;
 namespace CityBuilder.Game.Utilities
 {
     /// <summary>
-    /// Versorgungs-Werkzeug (L): Kraftwerke/Pumpen platzieren (, und . drehen), Stromleitungen und Wasserrohre
+    /// Versorgungs-Werkzeug (J): Kraftwerke/Pumpen platzieren (, und . drehen), Stromleitungen und Wasserrohre
     /// Punkt für Punkt verlegen (Klick Start → Klick Ende, weiter in Kette, RMB beendet), Abriss.
     /// Aktiv, wenn das RoadTool im Modus <see cref="RoadTool.Mode.Utility"/> ist – das RoadTool liefert den Cursor.
     /// Alle Prüfungen und das Bauen macht die Simulation (<see cref="UtilitySystem"/>).
@@ -100,7 +100,7 @@ namespace CityBuilder.Game.Utilities
             if (tool == null) return;
             var kb = Keyboard.current;
             if (kb == null) return;
-            if (kb.lKey.wasPressedThisFrame) tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Utility);
+            if (kb.jKey.wasPressedThisFrame) tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Utility);
             if (!Active) return;
             if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
             if (kb.periodKey.wasPressedThisFrame) Rotate(15f);

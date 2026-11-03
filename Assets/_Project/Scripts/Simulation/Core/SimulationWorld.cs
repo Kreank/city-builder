@@ -39,6 +39,23 @@ namespace CityBuilder.Simulation.Core
             Roads.Ground = Terrain;
             Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
+            // Terraforming: Gelände unter Straßen, Gebäuden und Versorgungsbauwerken ist gesperrt (weich überblendet)
+            Terrain.LockQuery = (min, max) =>
+            {
+                var locks = TerrainLocks.Query(Roads, City?.Buildings, Terrain, min, max);
+                if (Utilities == null) return locks;
+                var facilities = new List<UtilityFacility>();
+                foreach (var f in Utilities.Facilities)
+                    if (f.Contains(Vector2.Clamp(f.Position, min, max), TerrainLocks.Band + Terrain.CellSize + MathF.Max(f.Type.Width, f.Type.Depth)))
+                        facilities.Add(f);
+                if (facilities.Count == 0) return locks;
+                return p =>
+                {
+                    foreach (var f in facilities)
+                        if (f.Contains(p, Terrain.CellSize)) return 1f;
+                    return locks?.Invoke(p) ?? 0f;
+                };
+            };
         }
 
         /// <summary>
