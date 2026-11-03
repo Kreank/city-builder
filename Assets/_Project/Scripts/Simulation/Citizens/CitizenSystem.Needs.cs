@@ -159,9 +159,14 @@ namespace CityBuilder.Simulation.Citizens
         static float HousingTarget(Building home, in HomeContext ctx, int members)
         {
             float space = Math.Clamp(1f - MathF.Max(0f, members - ComfortableMembers(home.Zone)) * 0.18f, 0.1f, 1f);
-            float condition = Math.Clamp(0.55f + 0.12f * home.Level, 0f, 1f) - (ctx.Supplied ? 0f : 0.25f);
-            return Math.Clamp(0.55f * space + 0.45f * condition, 0f, 1f);
+            return Math.Clamp(0.55f * space + 0.45f * HousingCondition(home, ctx.Supplied), 0f, 1f);
         }
+
+        // --- G6: Wohnqualität aus Stufe, physischem Zustand (Building.Condition, LandValueSystem) und Versorgung.
+        // Eine Formel für Wohnbedürfnis und Inspektor; bei neuem Gebäude (Zustand 1) wie vor G6.
+        static float HousingCondition(Building b, bool supplied) =>
+            Math.Clamp((0.55f + 0.12f * b.Level) * (0.5f + 0.5f * b.Condition), 0f, 1f) - (supplied ? 0f : 0.25f);
+        // --- Ende G6
 
         static float CalmTarget(in HomeContext ctx) =>
             Math.Clamp(1f - Math.Clamp(ctx.Noise * 1.1f + ctx.Air * 1.6f, 0f, 1f) + (ctx.Garbage - 0.5f) * 0.2f - 0.3f * ctx.GarbageLevel, 0f, 1f);
@@ -346,12 +351,15 @@ namespace CityBuilder.Simulation.Citizens
 
         // ------------------------------------------------------------ Abfragen für den Inspektor
 
-        /// <summary>Zustand eines Gebäudes 0..1 wie im Wohnbedürfnis (Stufe, −0,25 ohne Versorgung). Noch ohne Verfall/Alter.</summary>
+        /// <summary>
+        /// Wohnqualität eines Gebäudes 0..1 wie im Wohnbedürfnis: Stufe × physischer Zustand (G6, <see cref="Building.Condition"/>),
+        /// −0,25 ohne Versorgung. Den reinen Bauzustand liefert <c>Building.Condition</c> bzw. <c>LandValueSystem.LevelInfo</c>.
+        /// </summary>
         public float BuildingCondition(Building b)
         {
             if (b == null) return 0f;
             bool supplied = world?.Utilities == null || world.Utilities.IsSatisfied(b);
-            return Math.Clamp(0.55f + 0.12f * b.Level, 0f, 1f) - (supplied ? 0f : 0.25f);
+            return HousingCondition(b, supplied);
         }
 
         /// <summary>
