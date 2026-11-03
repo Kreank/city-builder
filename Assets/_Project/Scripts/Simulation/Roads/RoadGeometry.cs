@@ -87,5 +87,25 @@ namespace CityBuilder.Simulation.Roads
 
             return origin + dir * length;
         }
+
+        /// <summary>
+        /// Ergänzung zu <see cref="Snap"/>: Parallel-Einrasten. Weicht die Richtung origin → target höchstens
+        /// <paramref name="maxAngle"/> Grad von ±<paramref name="direction"/> ab, wird target exakt auf die Gerade durch
+        /// origin in dieser Richtung gelegt (Länge optional in Schritten von <paramref name="lengthStep"/>).
+        /// </summary>
+        public static bool SnapParallel(Vector2 origin, Vector2 target, Vector2 direction, float maxAngle, float lengthStep,
+            out Vector2 snapped)
+        {
+            snapped = target;
+            Vector2 delta = target - origin;
+            if (delta.LengthSquared() < 1e-6f || direction.LengthSquared() < 1e-8f) return false;
+            var dir = Vector2.Normalize(direction);
+            float along = Vector2.Dot(delta, dir);
+            if (along < 0f) { dir = -dir; along = -along; }
+            if (Angle(dir, delta) > maxAngle) return false;
+            if (lengthStep > 0f) along = MathF.Max(lengthStep, MathF.Round(along / lengthStep) * lengthStep);
+            snapped = origin + dir * along;
+            return true;
+        }
     }
 }
