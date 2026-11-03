@@ -13,7 +13,7 @@ namespace CityBuilder.Game.UI
     /// </summary>
     public sealed class RoadToolbar : MonoBehaviour
     {
-        enum Group { City, Highway, Interchanges, Traffic, Zones, Terrain, Utilities }
+        enum Group { City, Highway, Interchanges, Traffic, Zones, Terrain, Utilities, Services }
 
         static readonly Color Selected = new Color(0.45f, 0.75f, 1f);
 
@@ -38,11 +38,12 @@ namespace CityBuilder.Game.UI
                 else if (tool.CurrentMode == RoadTool.Mode.Zone) group = Group.Zones;
                 else if (tool.CurrentMode == RoadTool.Mode.Terraform) group = Group.Terrain;
                 else if (tool.CurrentMode == RoadTool.Mode.Utility) group = Group.Utilities; // G3
+                else if (tool.CurrentMode == RoadTool.Mode.Service) group = Group.Services; // G4
                 else if (group != Group.Traffic && group != Group.Interchanges && group != Group.Zones) group = GroupOf(tool.SelectedType);
                 else if (tool.IsBuildMode) group = GroupOf(tool.SelectedType);
             }
 
-            const float width = 980f, height = 132f;
+            const float width = 1090f, height = 132f; // G4: +110 für „Dienste (4)“
             var area = new Rect((Screen.width - width) * 0.5f, Screen.height - height - 10f, width, height);
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
@@ -56,6 +57,7 @@ namespace CityBuilder.Game.UI
             if (Button("Zonen (Z)", group == Group.Zones, 100f)) SelectGroup(Group.Zones);
             if (Button("Gelände (L)", group == Group.Terrain, 100f)) SelectGroup(Group.Terrain);
             if (Button("Versorgung (J)", group == Group.Utilities, 120f)) SelectGroup(Group.Utilities); // G3
+            if (Button("Dienste (4)", group == Group.Services, 100f)) SelectGroup(Group.Services); // G4
             GUILayout.FlexibleSpace();
             GUILayout.Label(tool.SnapEnabled ? "Einrasten: an (G)" : "Einrasten: aus (G)", GUILayout.Width(125f));
             GUILayout.EndHorizontal();
@@ -72,6 +74,7 @@ namespace CityBuilder.Game.UI
                     if (terraform != null) terraform.ToolbarRows(infoStyle);
                     break;
                 case Group.Utilities: { var ut = GetComponent<CityBuilder.Game.Utilities.UtilityTool>(); if (ut != null) ut.DrawToolbarRows(); break; } // G3
+                case Group.Services: { var st = GetComponent<CityBuilder.Game.Services.ServiceTool>(); if (st != null) st.DrawToolbarRows(); break; } // G4
             }
             GUILayout.EndArea();
         }
@@ -86,6 +89,7 @@ namespace CityBuilder.Game.UI
                 case Group.Traffic: tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Group.Terrain: tool.SetMode(RoadTool.Mode.Terraform); break;
                 case Group.Utilities: tool.SetMode(RoadTool.Mode.Utility); break; // G3
+                case Group.Services: tool.SetMode(RoadTool.Mode.Service); break; // G4
                 default:
                     var first = TypesOf(g).FirstOrDefault();
                     if (first != null && GroupOf(tool.SelectedType) != g) tool.SelectType(first);
