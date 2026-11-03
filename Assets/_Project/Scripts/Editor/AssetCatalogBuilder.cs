@@ -104,6 +104,11 @@ namespace CityBuilder.Editor
         const string Toon = "Toon City Pack";
         const string SimpleCars = "Simple Vehicle Pack/Prefabs";
         const string Modern = "ThirdParty/Buildings";
+        const string Awb = "Mobile Optimize-Free Low Poly Cars/Prefabs";
+        const string FreeCars = "Pack_FREE_Cars/Prefabs";
+        const string UnityCars = "CarsAssetPack/Prefabs/FBX";
+        const string StreetPack = "LowpolyStreetPack/Prefabs";
+        const string ParkPack = "ThirdParty/Park/Prefabs";
 
         static Spec[] Names(string hint, float size, params string[] names) => names.Select(n => B(hint, n, size)).ToArray();
 
@@ -118,6 +123,12 @@ namespace CityBuilder.Editor
             V(SimplePoly, "Vehicle_Taxi", 4.5f),
             V(SimplePoly, "Vehicle_Pick up Truck_color01", 5.2f), V(SimplePoly, "Vehicle_Pick up Truck_color02", 5.2f),
             V(Nebula, "Minivan", 4.8f), V(Nebula, "Muscle", 4.6f),
+            V(Awb, "Classic Car_9", 4.5f), V(Awb, "Hatchback Car_15", 4.1f), V(Awb, "N_Muscle Car_10", 4.7f),
+            V(Awb, "Sport Car_39", 4.5f), V(Awb, "N Van_10", 4.9f, 2.2f), V(Awb, "Pick Up_11", 5.3f), V(Awb, "Police Car N_4", 4.8f),
+            V(UnityCars, "Car1", 4.4f), V(UnityCars, "Car2", 4.2f), V(UnityCars, "Car3", 4.2f), V(UnityCars, "Car4", 4.3f),
+            V(UnityCars, "Car5", 4.3f), V(UnityCars, "Car6", 4.4f), V(UnityCars, "Car7", 4.0f), V(UnityCars, "Car8", 4.6f),
+            V(FreeCars, "Hatchback", 4.0f), V(FreeCars, "Pickup", 5.1f), V(FreeCars, "Police", 4.8f), V(FreeCars, "Taxi", 4.5f),
+            V(FreeCars, "Van", 4.9f, 2.2f),
         };
         // SimplePoly-Lkw sind sehr gedrungen → werden auf Spurbreite begrenzt und damit kürzer (Lieferwagen-Größe)
         static readonly Spec[] Trucks =
@@ -125,20 +136,29 @@ namespace CityBuilder.Editor
             V(Nebula, "LorryCargo", 10f, 2.6f), V(Nebula, "LorryCargo", 10f, 2.6f),
             V(SimplePoly, "Vehicle_Truck_color01", 9f, 2.6f), V(SimplePoly, "Vehicle_Truck_color02", 9f, 2.6f),
             V(Toon, "civil-truck-A", 9f, 2.6f), V(Toon, "civil-truck-B", 10f, 2.6f),
+            V(FreeCars, "Truck", 8.5f, 2.6f), V(FreeCars, "VanBig", 7.5f, 2.5f),
         };
         static readonly Spec[] Buses =
         {
-            V(Vlad, "Autobus_Mesh", 12f, 2.6f), V(Toon, "city-bus", 12f, 2.6f),
+            V(Vlad, "Autobus_Mesh", 12f, 2.6f), V(Vlad, "SmallAutobus_Mesh", 9f, 2.5f), V(Toon, "city-bus", 12f, 2.6f),
             V(SimpleCars, "Bus_1", 12f, 2.6f), V(SimpleCars, "Bus_2", 12f, 2.6f),
         };
         static readonly Spec[] Trams = { V(Vlad, "Tram_Mesh", 29f, 2.65f) };
-        static readonly Spec[] Lamps = { P(Colorful, "StreetLamp2_a_Single_LP_0", 7f), P(Colorful, "StreetLamp1_d_Single_LP_0", 7f) };
+        static readonly Spec[] Lamps =
+        {
+            P(Colorful, "StreetLamp2_a_Single_LP_0", 7f), P(Colorful, "StreetLamp1_d_Single_LP_0", 7f),
+            P(StreetPack + "/StreetProps/TraficLights", "LampPost_B", 7f), P(StreetPack + "/StreetProps/TraficLights", "LampPost_F", 7f),
+        };
         static readonly Spec[] Lights = { P(Modular, "Pole_traffic_light", 4.8f), P(Modular, "Traffic_light", 4.8f) };
         static readonly Spec[] Trees =
         {
             P(Nature, "tree 1", 9f), P(Nature, "tree 2", 8f), P(Nature, "tree 3", 10f), P(Nature, "tree 4", 7f), P(Nature, "tree 5", 9f),
             P(Nature, "tree 6", 11f), P(Nature, "tree 7", 8f), P(Nature, "tree 8", 9f), P(Nature, "tree 9", 10f), P(Nature, "tree 10", 8f),
             P(Colorful, "Tree5_a_Pine_LP_0", 12f), P(Colorful, "Tree2_a_Spherical_LP_0", 8f), P(Colorful, "Tree9_a_SquarePine_LP_0", 11f),
+            P(StreetPack + "/Foliage/Trees", "Tree_A_V01", 8f), P(StreetPack + "/Foliage/Trees", "Tree_B_V01_Leaves02", 9f),
+            P(StreetPack + "/Foliage/Trees", "Tree_C_V01_Leaves02", 7.5f), P(StreetPack + "/Foliage/Trees", "Tree_D_V01", 8.5f),
+            P(StreetPack + "/Foliage/Trees", "Tree_E_V01", 9f),
+            P(ParkPack, "Tree_1", 7f), P(ParkPack, "Tree_2", 8f), P(ParkPack, "Tree_3", 9f), P(ParkPack, "Tree_4", 9f),
         };
 
         [MenuItem("City Builder/Third Party/Build Asset Catalog")]
@@ -205,8 +225,9 @@ namespace CityBuilder.Editor
             var inst = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             try
             {
+                // Position auf 0, aber Drehung/Skalierung der Prefab-Wurzel behalten: manche Pakete (Z-up-Exporte,
+                // z. B. Low Poly Street Pack, Low-Poly Park) richten ihre Modelle erst über die Wurzel auf.
                 inst.transform.position = Vector3.zero;
-                inst.transform.rotation = Quaternion.identity;
 
                 // Nur die höchste Detailstufe verwenden
                 IEnumerable<Renderer> renderers = inst.GetComponentsInChildren<MeshRenderer>(false);
@@ -215,7 +236,7 @@ namespace CityBuilder.Editor
 
                 var byMaterial = new Dictionary<Material, List<CombineInstance>>();
                 var temporary = new List<Mesh>();
-                var toLocal = inst.transform.worldToLocalMatrix;
+                var toLocal = Matrix4x4.identity; // Weltraum der Instanz bei Position 0 (inkl. Wurzel-Drehung)
                 foreach (var r in renderers)
                 {
                     var mf = r.GetComponent<MeshFilter>();
