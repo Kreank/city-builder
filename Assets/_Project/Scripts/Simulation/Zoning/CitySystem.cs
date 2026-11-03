@@ -57,6 +57,9 @@ namespace CityBuilder.Simulation.Zoning
         public event Action<Building> BuildingAdded;
         public event Action<Building> BuildingRemoved;
 
+        // --- G3 Strom & Wasser (Hook): Punkte, auf denen nichts wachsen darf (Versorger-Bauwerke). Gesetzt vom UtilitySystem.
+        public Func<Vector2, bool> LotBlocker { get; set; }
+
         public CitySystem(RoadNetwork network, TerrainMap terrain, Vector2 origin, float sizeMeters, int seed = 1)
         {
             this.network = network;
@@ -274,6 +277,7 @@ namespace CityBuilder.Simulation.Zoning
             {
                 var cell = b[c, r];
                 if (!cell.Valid || ZoneMap.Get(cell.Center) != zone || BuildingAt(cell.Center) != null) return false;
+                if (LotBlocker != null && LotBlocker(cell.Center)) return false; // G3-Hook
                 minH = MathF.Min(minH, cell.Height);
                 maxH = MathF.Max(maxH, cell.Height);
             }

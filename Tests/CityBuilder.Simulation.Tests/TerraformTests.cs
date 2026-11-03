@@ -23,6 +23,19 @@ namespace CityBuilder.Simulation.Tests
         }
 
         [Fact]
+        public void Terraform_IsLockedUnderUtilityFacilities()
+        {
+            var w = FlatWorld();
+            var plant = w.Utilities.TryBuildFacility(CityBuilder.Simulation.Utilities.UtilityCatalog.WindTurbine, new Vector2(200, 200));
+            Assert.NotNull(plant);
+            float before = w.Terrain.HeightAt(plant.Position);
+            var r = w.Terrain.Terraform(Brush(TerraformMode.Raise, plant.Position, 40f, 2f));
+            Assert.True(r.Changed);                                             // außerhalb wird angehoben …
+            Assert.Equal(before, w.Terrain.HeightAt(plant.Position), 3);        // … unter dem Bauwerk nicht
+            Assert.True(w.Terrain.HeightAt(plant.Position + new Vector2(38, 0)) > before + 0.5f);
+        }
+
+        [Fact]
         public void Raise_And_Lower_ChangeHeightInsideRadiusOnly_WithSoftEdge()
         {
             var w = FlatWorld();

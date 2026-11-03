@@ -13,7 +13,7 @@ namespace CityBuilder.Game.UI
     /// </summary>
     public sealed class RoadToolbar : MonoBehaviour
     {
-        enum Group { City, Highway, Interchanges, Traffic, Zones, Terrain }
+        enum Group { City, Highway, Interchanges, Traffic, Zones, Terrain, Utilities }
 
         static readonly Color Selected = new Color(0.45f, 0.75f, 1f);
 
@@ -37,6 +37,7 @@ namespace CityBuilder.Game.UI
                 else if (tool.CurrentMode == RoadTool.Mode.Template) group = Group.Interchanges;
                 else if (tool.CurrentMode == RoadTool.Mode.Zone) group = Group.Zones;
                 else if (tool.CurrentMode == RoadTool.Mode.Terraform) group = Group.Terrain;
+                else if (tool.CurrentMode == RoadTool.Mode.Utility) group = Group.Utilities; // G3
                 else if (group != Group.Traffic && group != Group.Interchanges && group != Group.Zones) group = GroupOf(tool.SelectedType);
                 else if (tool.IsBuildMode) group = GroupOf(tool.SelectedType);
             }
@@ -54,6 +55,7 @@ namespace CityBuilder.Game.UI
             if (Button("Verkehr (T)", group == Group.Traffic, 110f)) SelectGroup(Group.Traffic);
             if (Button("Zonen (Z)", group == Group.Zones, 100f)) SelectGroup(Group.Zones);
             if (Button("Gelände (L)", group == Group.Terrain, 100f)) SelectGroup(Group.Terrain);
+            if (Button("Versorgung (J)", group == Group.Utilities, 120f)) SelectGroup(Group.Utilities); // G3
             GUILayout.FlexibleSpace();
             GUILayout.Label(tool.SnapEnabled ? "Einrasten: an (G)" : "Einrasten: aus (G)", GUILayout.Width(125f));
             GUILayout.EndHorizontal();
@@ -69,6 +71,7 @@ namespace CityBuilder.Game.UI
                     var terraform = GetComponent<CityBuilder.Game.Terrain.TerraformTool>();
                     if (terraform != null) terraform.ToolbarRows(infoStyle);
                     break;
+                case Group.Utilities: { var ut = GetComponent<CityBuilder.Game.Utilities.UtilityTool>(); if (ut != null) ut.DrawToolbarRows(); break; } // G3
             }
             GUILayout.EndArea();
         }
@@ -82,6 +85,7 @@ namespace CityBuilder.Game.UI
                 case Group.Zones: tool.SelectZone(tool.SelectedZone); break;
                 case Group.Traffic: tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Group.Terrain: tool.SetMode(RoadTool.Mode.Terraform); break;
+                case Group.Utilities: tool.SetMode(RoadTool.Mode.Utility); break; // G3
                 default:
                     var first = TypesOf(g).FirstOrDefault();
                     if (first != null && GroupOf(tool.SelectedType) != g) tool.SelectType(first);
