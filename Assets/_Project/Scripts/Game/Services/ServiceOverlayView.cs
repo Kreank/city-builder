@@ -81,12 +81,17 @@ namespace CityBuilder.Game.Services
 
         public void Toggle(string kind) => Selected = Selected == kind ? null : kind;
 
+        /// <summary>Nächste Ansicht: aus → Polizei → … → Müll → aus (⇧4, HUD-Knopf „Dienste-Abdeckung“).</summary>
+        public void Cycle()
+        {
+            int i = Selected == null ? -1 : System.Array.IndexOf(ServiceKinds.All, Selected);
+            Selected = i + 1 < ServiceKinds.All.Length ? ServiceKinds.All[i + 1] : null;
+        }
+
         void Update()
         {
             var kb = Keyboard.current;
-            if (kb == null || !kb.digit4Key.wasPressedThisFrame || !kb.shiftKey.isPressed) return;
-            int i = Selected == null ? -1 : System.Array.IndexOf(ServiceKinds.All, Selected);
-            Selected = i + 1 < ServiceKinds.All.Length ? ServiceKinds.All[i + 1] : null;
+            if (kb != null && kb.digit4Key.wasPressedThisFrame && kb.shiftKey.isPressed) Cycle();
         }
 
         void LateUpdate()

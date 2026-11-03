@@ -7,6 +7,8 @@ namespace CityBuilder.Game.UI.Hud
     {
         Logo, Pause, Play, Fast, Faster, People, Briefcase, Info, Car, Noise, Air, Power, Water, Underground,
         Road, Highway, Zones, Terrain, TrafficLight, Bulldoze, Warning, Check, Pipe, Brush, Coins,
+        /// <summary>G4 Dienste: Wappen/Schild mit Kreuz.</summary>
+        Service,
     }
 
     /// <summary>
@@ -147,6 +149,9 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Coins: // Münzstapel (Stadtkasse)
                     Poly(true, 5, 6, 19, 6, 19, 9, 5, 9); Poly(true, 5, 11, 19, 11, 19, 14, 5, 14); Poly(true, 5, 16, 19, 16, 19, 19, 5, 19);
+                    break;
+                case HudIconKind.Service: // Schild mit Kreuz (Dienste G4)
+                    Poly(true, 12, 3, 20, 6, 19, 14, 12, 21, 5, 14, 4, 6); Line(12, 8, 12, 16); Line(8, 12, 16, 12);
                     break;
             }
         }

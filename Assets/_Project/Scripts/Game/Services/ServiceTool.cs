@@ -324,7 +324,7 @@ namespace CityBuilder.Game.Services
                 infoStyle);
         }
 
-        static string ShortName(ServiceType t)
+        public static string ShortName(ServiceType t)
         {
             switch (t.Id)
             {

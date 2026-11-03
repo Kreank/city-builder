@@ -1,5 +1,6 @@
 using CityBuilder.Game.Roads;
 using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
 using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
@@ -7,7 +8,7 @@ using UnityEngine;
 
 namespace CityBuilder.Game.Inspect
 {
-    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen }
+    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service }
 
     /// <summary>Was im Inspektor ausgewählt ist (nur Art + Id – das Objekt wird jedes Frame neu nachgeschlagen).</summary>
     public readonly struct Selection
@@ -60,6 +61,15 @@ namespace CityBuilder.Game.Inspect
                     result = new Selection(SelectionKind.Facility, f.Id);
                 }
             }
+            if (world.Services != null) // G4 Dienstgebäude
+                foreach (var f in world.Services.Facilities)
+                {
+                    if (RayBox(ray, f.Position, f.Front, f.Type.Width, f.Type.Depth, f.Height, ServiceHeight(f), out float t) && t < best)
+                    {
+                        best = t;
+                        result = new Selection(SelectionKind.Service, f.Id);
+                    }
+                }
 
             float bestVehicle = best + VehicleBias;
             foreach (var v in world.Traffic.Vehicles)
@@ -96,6 +106,22 @@ namespace CityBuilder.Game.Inspect
                 case "water_tower": return 24f;
                 case "water_pump": return 7f;
                 default: return 10f;
+            }
+        }
+
+        /// <summary>Grobe sichtbare Höhe der Platzhalter aus <c>ServiceView</c> (G4).</summary>
+        public static float ServiceHeight(ServiceFacility f)
+        {
+            switch (f.Type.Id)
+            {
+                case "hospital": return 22f;
+                case "fire_station": return 18f;
+                case "incinerator": return 40f;
+                case "school_high": return 12f;
+                case "landfill": return 6f;
+                case "park_small":
+                case "park_large": return 6f;
+                default: return 9f;
             }
         }
 

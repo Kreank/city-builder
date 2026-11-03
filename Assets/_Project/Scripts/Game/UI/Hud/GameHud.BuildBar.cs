@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CityBuilder.Game.Roads;
+using CityBuilder.Game.Services;
+using CityBuilder.Simulation.Services;
 using CityBuilder.Game.Utilities;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
@@ -19,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Terrain, Traffic, Bulldoze }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -29,6 +31,7 @@ namespace CityBuilder.Game.UI.Hud
         static readonly Color TerrainSwatch = BuildLabels.Hex(0xA07850);
         static readonly Color TrafficSwatch = BuildLabels.Hex(0x2BB3A3);
         static readonly Color DangerSwatch = BuildLabels.Hex(0xF08A4B);
+        static readonly Color ServiceSwatch = BuildLabels.Hex(0x7A6FD6); // G4
 
         VisualElement buildBar, hint, buildPanel, panelBody;
         Label hintText, panelTitle, panelHint;
@@ -68,6 +71,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Strom und Wasser (J): Kraftwerke, Pumpen, Leitungen, Rohre");
+            CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll · ⇧4 Abdeckungs-Ansicht");
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
             CategoryButton(cats, Category.Traffic, HudIconKind.TrafficLight, "Verkehr", "Verkehrsregeln (T), Stau-Ansicht (V), Verkehrsaufkommen");
             var bulldoze = CategoryButton(cats, Category.Bulldoze, HudIconKind.Bulldoze, "Abriss", "Abriss (B): Straßen, Leitungen und Bauwerke");
@@ -97,6 +101,8 @@ namespace CityBuilder.Game.UI.Hud
                 case RoadTool.Mode.Terraform: return Category.Terrain;
                 case RoadTool.Mode.Utility:
                     return utilityTool != null && utilityTool.Current == UtilityTool.UtilityAction.Remove ? Category.Bulldoze : Category.Utilities;
+                case RoadTool.Mode.Service:
+                    return serviceTool != null && serviceTool.Current == ServiceTool.ServiceAction.Remove ? Category.Bulldoze : Category.Services;
                 case RoadTool.Mode.Bulldoze: return Category.Bulldoze;
                 case RoadTool.Mode.Inspect: return null;
                 default: return tool.SelectedType.Category == RoadCategory.City ? Category.Roads : Category.Highway;
@@ -121,6 +127,10 @@ namespace CityBuilder.Game.UI.Hud
                     if (utilityTool != null)
                         utilityTool.Select(utilityTool.Current == UtilityTool.UtilityAction.Remove ? UtilityTool.UtilityAction.Facility : utilityTool.Current);
                     else tool.SetMode(RoadTool.Mode.Utility);
+                    break;
+                case Category.Services: // G4
+                    if (serviceTool != null) serviceTool.Select(ServiceTool.ServiceAction.Place);
+                    else tool.SetMode(RoadTool.Mode.Service);
                     break;
                 case Category.Terrain:
                     if (terraform != null) terraform.Activate(terraform.Mode);
@@ -198,6 +208,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Highway: BuildRoadPanel(highway: true); break;
                 case Category.Zones: BuildZonePanel(); break;
                 case Category.Utilities: BuildUtilityPanel(); break;
+                case Category.Services: BuildServicePanel(); break;
                 case Category.Terrain: BuildTerrainPanel(); break;
                 case Category.Traffic: BuildTrafficPanel(); break;
                 case Category.Bulldoze: BuildBulldozePanel(); break;
@@ -465,6 +476,53 @@ namespace CityBuilder.Game.UI.Hud
             return l;
         }
 
+        // ------------------------------------------------------------ Dienste (G4)
+
+        void BuildServicePanel()
+        {
+            Header("Dienste", ", und . drehen · Reichweite über das Straßennetz (Vorschau färbt erreichte Straßen) · Parks über Fußweg");
+            if (serviceTool == null) { panelBody.Add(Info(() => "Dienste-Werkzeug fehlt.")); return; }
+            var s = runner.World.Services;
+
+            var tools = Container("cb-tool-row");
+            tools.Add(PLabel("Drehung"));
+            tools.Add(PBtn("−15°", () => serviceTool.Rotate(-15f), null, "Gebäude drehen (,)"));
+            tools.Add(PValue(() => $"{serviceTool.Rotation:0}°"));
+            tools.Add(PBtn("+15°", () => serviceTool.Rotate(15f), null, "Gebäude drehen (.)"));
+            tools.Add(Container("cb-spacer"));
+            if (serviceOverlay != null)
+            {
+                tools.Add(PLabel("Ansicht"));
+                tools.Add(PValue(() => serviceOverlay.Selected != null ? ServiceKinds.DisplayName(serviceOverlay.Selected) : "aus"));
+                tools.Add(PBtn("Durchschalten", serviceOverlay.Cycle, () => serviceOverlay.Selected != null,
+                    "Abdeckungs-Ansicht: Polizei → Feuerwehr → … → Müll → aus (⇧4)"));
+            }
+            panelBody.Add(tools);
+
+            var tiles = Container("cb-tiles");
+            string lastKind = null;
+            foreach (var type in ServiceCatalog.All)
+            {
+                var t = type;
+                if (lastKind != null && t.Kind != lastKind) tiles.Add(Container("cb-tile-sep"));
+                lastKind = t.Kind;
+                string range = t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit";
+                tiles.Add(Tile(ServiceTool.ShortName(t), $"{BuildLabels.Number(t.Capacity)} {t.CapacityUnit}", ServiceSwatch, HudIconKind.Service,
+                    () => serviceTool.SelectType(t),
+                    () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t,
+                    $"{t.DisplayName} · {ServiceKinds.DisplayName(t.Kind)} · Kapazität {BuildLabels.Number(t.Capacity)} {t.CapacityUnit}/Tag · {range} · " +
+                    $"Fläche {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerWeek)}/Woche"));
+            }
+            panelBody.Add(tiles);
+
+            var info = Container("cb-info-row");
+            var summary = Text("", "cb-muted");
+            panelSlowRefresh.Add(() => summary.text =
+                $"{s.FacilityCount} Dienste · Unterhalt {BuildLabels.Money((float)s.WeeklyUpkeep())}/Woche · liegender Müll {s.TotalGarbage:0.#} t");
+            info.Add(summary);
+            panelBody.Add(info);
+        }
+
         // ------------------------------------------------------------ Gelände
 
         void BuildTerrainPanel()
@@ -580,6 +638,11 @@ namespace CityBuilder.Game.UI.Hud
                     () => utilityTool.Select(UtilityTool.UtilityAction.Remove),
                     () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Remove,
                     "Kraftwerk, Pumpe, Stromleitung oder Wasserrohr anklicken"));
+            if (serviceTool != null) // G4
+                tiles.Add(Tile("Dienstgebäude", "Dienste", DangerSwatch, HudIconKind.Service,
+                    () => serviceTool.Select(ServiceTool.ServiceAction.Remove),
+                    () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Remove,
+                    "Polizei, Schule, Park … anklicken – 25 % der Baukosten zurück"));
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt."));
         }

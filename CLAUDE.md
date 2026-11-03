@@ -158,7 +158,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
@@ -168,7 +168,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
-- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
+- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, ServicePanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
   Phase 2: Inspektor als rechtes Panel im neuen Stil (Entwurf `Panels.dc.html`).
 
 ## Inspektor (Info-Modus, Taste C)
@@ -187,9 +187,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Haushaltsart, Wohnung, Mitglieder) · Alltag (Arbeit/Pendeln/arbeitslos, Arbeitszeit, Tätigkeit, Ort, Fahrt mit
   Zweck/Ziel/Dauer, Auto anklickbar bzw. Platzhalter-Ankunft, Einkaufsbedürfnis) · Befinden. **Fahrzeug**: Klasse,
   Tempo, Fahrtdauer (Verkehrszeit), Ort, Ziel, Fahrer. **Versorgungsbauwerk**: Leistung, Netzbilanz, Kosten, Emissionen.
+  **Dienstgebäude** (G4, `SelectionKind.Service`): Dienstart, Kapazität, Auslastung/Überlastungsfaktor, versorgte Gebäude,
+  Reichweite/Zufahrt, Lager, Kosten/Unterhalt, Lärm. Gebäude-Reiter Umfeld: **Dienste in Reichweite** = Abdeckung je
+  Dienstart (Bildung mit Grund-/Oberschule), Müll am Gebäude, Brandrisiko.
 - **Platzhalter fürs Bedürfnismodell** (zeigen „— (kommt mit Bedürfnismodell)“, keine Zahlen): Bürger Gesundheit,
   Zufriedenheit, Gemüt, Familienstand; Gebäude Zustand, Zufriedenheit Bewohner/Mitarbeiter/Umfeld; Bodenwert (G6),
-  Dienste in Reichweite (G4), Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
+  Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
   Versorgung an der Wohnung, Arbeitslosigkeit, Einkaufsbedürfnis), die das Modell später bewerten kann.
   Neue Werte: dort statt `Pending` einsetzen.
 
@@ -268,19 +271,26 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   darunter werden abgerissen, Straße durchs Dienstgebäude reißt es ab. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
   G3) und Terraforming (`TerrainMap.LockQuery`, verkettet) sind auf Dienstflächen gesperrt. Versorger/Masten dürfen nicht
   auf Dienstflächen (Hooks `UtilitySystem.OtherStructureOverlaps/-At`).
-- **Kosten**: nur Katalogwerte + `WeeklyUpkeep()` / `UpkeepName` („Dienste“) – abbuchen macht die Stadtkasse.
+- **Kosten (Stadtkasse)**: `ServiceSystem` ist `IUpkeepSource` (`Name` „Dienste“, `WeeklyUpkeep()` = Summe der
+  Katalogwerte je Woche) und wird in `CreateDefault` per `world.Economy.RegisterUpkeep` angemeldet. Baukosten über
+  `Budget` (`IConstructionBudget`): `Plan` → `ServiceBuildError.InsufficientFunds` (nach den Geometrieregeln), `Build`
+  bucht unter `BudgetCategory.ServiceConstruction` („Bau Dienste“). Spieler-Abriss `Demolish` = 25 % zurück
+  (`EconomyRules.DemolitionRefundShare`); internes `Remove` (Straße durchs Gebäude) bringt nichts.
 - Darstellung (`Game/Services`, Begleiter des `RoadTool`, Modus `RoadTool.Mode.Service`): `ServiceTool` (**Taste 4** –
   einziger freier Buchstabe wäre Y, das Input System liest aber US-Lage, auf QWERTZ also die Taste „Z“; Bauleiste
   „Dienste (4)“ über `DrawToolbarRows`, `,`/`.` drehen, Vorschau färbt erreichte Straßen nach Wirkung grün→rot, Parks mit
   Ring), `ServiceView` (Platzhalter aus Grundkörpern, Müllsäcke an Gebäuden mit Müllstau), `ServiceOverlayView`
   (**⇧4** schaltet Polizei → … → Müll → aus; Abdeckung grün→rot über Gebäuden; im Werkzeug automatisch die gewählte Art),
-  `ServicePanel` (Abdeckung Ø je Art, Auslastung je Gebäude).
+  `ServicePanel` (IMGUI, Abdeckung Ø je Art, Auslastung je Gebäude). **Neue HUD**: Kategorie „Dienste“ (Taste 4) in
+  `GameHud.BuildBar` mit Kacheln aller `ServiceCatalog`-Gebäude, Werkzeugzeile (Drehen, Ansicht durchschalten ⇧4) und
+  Abriss-Kachel „Dienstgebäude“; linke Ansichtsleiste Knopf „Dienste-Abdeckung“ (`ServiceOverlayView.Cycle`),
+  Icon `HudIconKind.Service`. Die IMGUI-Zeilen `ServiceTool.DrawToolbarRows` bleiben für die Rückfall-`RoadToolbar`.
 - **Eigene Modelle**: FBX unter `Assets/_Project/Models/Services/<Name>.fbx` werden automatisch übernommen
   (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
 - Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
-  Inspektor-Feld „Dienste in Reichweite“, Ausbaustufen.
+  Budgetregler je Dienst, Ausbaustufen.
 
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`

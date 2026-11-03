@@ -40,7 +40,8 @@ namespace CityBuilder.Game.Services
             // Neben dem Versorgungsfenster, falls dessen Ansicht gleichzeitig an ist
             var utilityOverlay = GetComponent<CityBuilder.Game.Utilities.UtilityOverlayView>();
             bool besideUtility = utilityOverlay != null && utilityOverlay.Current != CityBuilder.Game.Utilities.UtilityOverlayView.Overlay.None;
-            var area = new Rect(Screen.width - (besideUtility ? 800f : 400f), 10f, 390f, Mathf.Min(Screen.height - 170f, 520f));
+            var area = new Rect(Screen.width - (besideUtility ? 800f : 400f), HudLayout.TopInset, 390f,
+                Mathf.Min(Screen.height - HudLayout.TopInset - HudLayout.BottomInset, 520f));
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
             GUILayout.BeginArea(new Rect(area.x + 10f, area.y + 8f, area.width - 20f, area.height - 16f));
