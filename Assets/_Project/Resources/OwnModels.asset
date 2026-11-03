@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d11c589fdb021e42985a3725e24159e, type: 3}
+  m_Name: OwnModels
+  m_EditorClassIdentifier: CityBuilder.Game::CityBuilder.Game.Assets.OwnModelCatalog
+  Facilities:
+  - Id: power_coal
+    Model: {fileID: 919132149155446097, guid: 6e0ed95daed7da44ba789315d3637116, type: 3}
+  - Id: power_gas
+    Model: {fileID: 919132149155446097, guid: bcac130cb6d230f4790f7ed923c5f613, type: 3}
+  - Id: power_wind
+    Model: {fileID: 919132149155446097, guid: a30d7ed730d31084ab630c65e1d0d5da, type: 3}
+  - Id: power_solar
+    Model: {fileID: 919132149155446097, guid: 3ec3ca9cb1110524c916466019c9f6e8, type: 3}
+  - Id: water_pump
+    Model: {fileID: 919132149155446097, guid: a66d5056e42328849beb8c5505b81bb0, type: 3}
+  - Id: water_tower
+    Model: {fileID: 919132149155446097, guid: dbad713e8908e264dbbde93cbd9dc6b7, type: 3}
+  Palette: {fileID: 2100000, guid: 30eaef96c71f7e145ab463ee8df76c51, type: 2}

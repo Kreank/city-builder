@@ -214,7 +214,7 @@ namespace CityBuilder.Game.Utilities
 
         /// <summary>
         /// Setzt das Blender-Modell des Bauwerks ein: gemeinsames Paletten-Material, Kindobjekt „Rotor“ dreht sich.
-        /// Weicht die Grundfläche des Modells deutlich vom Katalog ab (z. B. falsche Import-Einheit), wird es
+        /// Weicht die Grundfläche des Modells um mehr als Faktor 5 vom Katalog ab (falsche Import-Einheit), wird es
         /// gleichmäßig auf die Grundfläche skaliert.
         /// </summary>
         bool TryBuildModel(UtilityFacility f, Transform root)
@@ -252,8 +252,10 @@ namespace CityBuilder.Game.Utilities
             }
             if (any)
             {
+                // Nur grobe Einheitenfehler (cm statt m o. ä.) korrigieren – überstehende Teile wie Rotorblätter
+                // sind gewollt breiter als die Grundfläche (Windrad: 32 m Rotor auf 12 m Grundfläche).
                 float fit = Mathf.Min(f.Type.Width / Mathf.Max(0.01f, b.size.x), f.Type.Depth / Mathf.Max(0.01f, b.size.z));
-                if (fit < 0.8f || fit > 1.25f) go.transform.localScale = Vector3.one * fit;
+                if (fit < 0.2f || fit > 5f) go.transform.localScale = Vector3.one * fit;
             }
 
             var rotor = FindChild(go.transform, "Rotor");
