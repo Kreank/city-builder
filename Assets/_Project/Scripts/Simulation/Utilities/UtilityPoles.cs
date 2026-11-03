@@ -83,6 +83,7 @@ namespace CityBuilder.Simulation.Utilities
                 terrain.IsWater(p + new Vector2(h, -h)) || terrain.IsWater(p + new Vector2(-h, -h)))
                 return UtilityBuildError.PoleOnWater;
             if (FacilityAt(p, PoleFootprintHalf) != null) return UtilityBuildError.PoleOnFacility;
+            if (OtherStructureAt != null && OtherStructureAt(p, PoleFootprintHalf)) return UtilityBuildError.PoleOnFacility; // G4-Hook
             float m = PoleFootprintHalf;
             if (city.BuildingAt(p) != null || city.BuildingAt(p + new Vector2(m, m)) != null || city.BuildingAt(p + new Vector2(-m, m)) != null ||
                 city.BuildingAt(p + new Vector2(m, -m)) != null || city.BuildingAt(p + new Vector2(-m, -m)) != null)
