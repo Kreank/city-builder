@@ -53,6 +53,7 @@ namespace CityBuilder.Game.People
         public PedestrianPlanner Planner => planner;
 
         PedestrianPlanner planner;
+        TransitPedestrians transitPeople; // ÖPNV: wartend/im Bus/Fußweg zur und von der Haltestelle
         SimulationWorld plannerWorld;
         Dictionary<int, long> leisureSince = new Dictionary<int, long>();
         Dictionary<int, long> leisureNext = new Dictionary<int, long>();
@@ -189,11 +190,12 @@ namespace CityBuilder.Game.People
             if (planner == null || plannerWorld != world)
             {
                 planner = new PedestrianPlanner(world);
+                transitPeople = world.Transit != null ? new TransitPedestrians(world, planner) : null;
                 plannerWorld = world;
                 leisureSince.Clear();
                 lastTick = -1;
             }
-            planner.Transit = TransitHook;
+            planner.Transit = TransitHook ?? (transitPeople != null ? transitPeople.PoseOf : (Func<Citizen, double, TransitPose>)null);
             planner.RouteBudget = RouteBudgetPerFrame;
             if (!runner.IsPaused) animClock += Time.deltaTime;
 
@@ -245,12 +247,15 @@ namespace CityBuilder.Game.People
         {
             bool known = lastTick >= 0;
             leisureNext.Clear();
+            transitPeople?.BeginObserve();
             foreach (var c in world.Citizens.Citizens)
             {
+                if (c.Mode == TravelMode.Transit) transitPeople?.Observe(c); // ÖPNV-Fahrt merken (Fußweg nach dem Aussteigen)
                 if (c.Activity != Activity.Leisure) continue;
                 if (!leisureSince.TryGetValue(c.Id, out long since)) since = known ? Math.Min(tick, lastTick + 1) : long.MinValue;
                 leisureNext[c.Id] = since;
             }
+            transitPeople?.EndObserve();
             var swap = leisureSince;
             leisureSince = leisureNext;
             leisureNext = swap;
@@ -267,6 +272,7 @@ namespace CityBuilder.Game.People
                     var a = PositionOf(world, c.Location);
                     var b = PositionOf(world, c.Destination);
                     if (!a.HasValue || !b.HasValue) return false;
+                    if (c.Mode == TravelMode.Transit) reach += Simulation.Transit.TransitRules.MaxWalkMeters; // Haltestellen bis 600 m entfernt
                     return SegmentDistance(cam, a.Value, b.Value) <= reach + 0.3f * SimVector2.Distance(a.Value, b.Value);
                 case Activity.Shopping:
                     return c.BusyUntilTick - world.Clock.Tick <= PedestrianPlanner.ShopLingerTicks + 1 && Near(world, c.Location, cam, reach);

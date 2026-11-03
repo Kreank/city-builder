@@ -54,7 +54,7 @@ namespace CityBuilder.Game.Inspect
                 case Activity.Home: return "zu Hause";
                 case Activity.Work: return "bei der Arbeit";
                 case Activity.Shopping: return "einkaufen";
-                case Activity.Travelling: return c.Mode == TravelMode.Car ? "im Auto unterwegs" : "unterwegs";
+                case Activity.Travelling: return c.Mode == TravelMode.Car ? "im Auto unterwegs" : c.Mode == TravelMode.Transit ? "mit dem Bus unterwegs" : "unterwegs";
                 case Activity.Leisure: return c.LeisureParkId > 0 ? "im Park" : "Spaziergang im Viertel";
                 default: return "außerhalb";
             }

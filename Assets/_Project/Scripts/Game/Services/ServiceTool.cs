@@ -185,7 +185,7 @@ namespace CityBuilder.Game.Services
             }
             else ring.enabled = false;
 
-            string range = t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit";
+            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
             string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {Rotation:0}°";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
             SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 10f));
@@ -349,6 +349,9 @@ namespace CityBuilder.Game.Services
                 case "park_large": return "Park L";
                 case "landfill": return "Müllhalde";
                 case "incinerator": return "Verbrennung";
+                case "media_newspaper": return "Zeitung";
+                case "media_radio": return "Radio";
+                case "media_tv": return "TV-Turm";
                 default: return t.DisplayName;
             }
         }

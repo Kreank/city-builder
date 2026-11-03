@@ -6,6 +6,7 @@ using CityBuilder.Simulation.Core;
 using CityBuilder.Simulation.People;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
+using CityBuilder.Simulation.Transit;
 using CityBuilder.Simulation.Zoning;
 using Xunit;
 using Xunit.Abstractions;
@@ -454,6 +455,70 @@ namespace CityBuilder.Simulation.Tests
             var walking = planner.Pose(c, 21);
             Assert.Equal(PedestrianActivity.Walking, walking.Kind);
             Assert.InRange(walking.Position.X, 120f, 160f);
+        }
+
+        [Fact]
+        public void Transit_WaitingAtStopInBusAndWalkingToFromStop()
+        {
+            var w = SimulationWorld.CreateDefault();
+            w.Utilities.AbandonmentEnabled = false;
+            Road(w.Roads, new Vector2(-800, 0), new Vector2(800, 0));
+            w.City.Paint(new Vector2(-600, 20), 160f, ZoneType.ResidentialMedium);
+            w.City.Paint(new Vector2(600, -20), 160f, ZoneType.Industry);
+            w.City.Paint(new Vector2(600, 20), 120f, ZoneType.Retail);
+            var t = w.Transit;
+            Assert.NotNull(t.TryBuildDepot(TransitCatalog.BusDepot, new Vector2(0, -28)));
+            var stops = new[]
+            {
+                t.TryBuildStop(new Vector2(-650, 0), true), t.TryBuildStop(new Vector2(-480, 0), true),
+                t.TryBuildStop(new Vector2(0, 5), true), t.TryBuildStop(new Vector2(500, 0), true), t.TryBuildStop(new Vector2(680, 0), true),
+            };
+            Assert.All(stops, x => Assert.NotNull(x));
+            Assert.NotNull(t.CreateLine(stops.Select(x => x.Id).ToList(), loop: false, vehicles: 4));
+
+            var planner = new PedestrianPlanner(w);
+            var tp = new TransitPedestrians(w, planner);
+            planner.Transit = tp.PoseOf;
+            int waiting = 0, inBus = 0, toStop = 0, fromStop = 0;
+            var road = w.Roads.Segments.First().Type;
+            for (int i = 0; i < SimulationClock.TicksPerDay * 4; i++)
+            {
+                w.Step();
+                tp.BeginObserve();
+                foreach (var c in w.Citizens.Citizens) tp.Observe(c);
+                tp.EndObserve();
+                if (i < SimulationClock.TicksPerDay) continue;
+                double time = w.Clock.Tick + 0.5;
+                foreach (var c in w.Citizens.Citizens)
+                {
+                    if (c.Activity != Activity.Travelling || c.Mode != TravelMode.Transit) continue;
+                    var ride = w.Citizens.RideOf(c);
+                    var pose = planner.Pose(c, time);
+                    if (ride != null && ride.Bus != null) { Assert.False(pose.IsVisible, "im Bus sichtbar"); inBus++; continue; }
+                    if (ride != null && ride.WaitingAtStop != 0)
+                    {
+                        var stop = t.GetStop(ride.WaitingAtStop);
+                        if (pose.Kind == PedestrianActivity.Waiting)
+                        {
+                            waiting++;
+                            Assert.Equal(PedestrianSpot.Stop, pose.Spot);
+                            Assert.True(Vector2.Distance(pose.Position, stop.Position) < 9f, $"wartet {Vector2.Distance(pose.Position, stop.Position):0.0} m vom Halt");
+                            // auf dem Gehweg (nicht auf der Fahrbahn), Blick zur Straße
+                            var seg = w.Roads.GetSegment(stop.SegmentId);
+                            Assert.InRange(seg.DistanceTo(pose.Position), road.CarriagewayHalfWidth, road.HalfWidth);
+                            Assert.True(Vector2.Dot(pose.Direction, seg.Evaluate(seg.ClosestT(pose.Position)) - pose.Position) > 0f, "Blick nicht zur Straße");
+                        }
+                        else if (pose.Kind == PedestrianActivity.Walking) toStop++;
+                        continue;
+                    }
+                    if (ride == null && pose.Kind == PedestrianActivity.Walking) fromStop++;
+                }
+            }
+            output.WriteLine($"wartend {waiting}, im Bus {inBus}, Fußweg zur Haltestelle {toStop}, von der Haltestelle {fromStop}");
+            Assert.True(waiting > 0, "niemand wartet sichtbar");
+            Assert.True(inBus > 0, "niemand im Bus");
+            Assert.True(toStop > 0, "kein Fußweg zur Haltestelle");
+            Assert.True(fromStop > 0, "kein Fußweg von der Haltestelle");
         }
 
         [Fact]

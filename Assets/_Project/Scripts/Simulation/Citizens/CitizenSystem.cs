@@ -47,6 +47,15 @@ namespace CityBuilder.Simulation.Citizens
         public int CarArrivals;
         /// <summary>Autofahrten ohne reguläre Ankunft (abgebrochen/Zeitüberschreitung) – Bürger kam trotzdem an.</summary>
         public int CarTripsFailed;
+        // --- ÖPNV (kumuliert bzw. aktuell)
+        public int TransitTrips;
+        public int TransitArrivals;
+        /// <summary>Busfahrten aufgegeben (voll, zu lange gewartet, Linie weg) – Rest zu Fuß.</summary>
+        public int TransitGaveUp;
+        /// <summary>Davon statistisch gefahren (nicht als einzelner Fahrgast, s. <c>TransitRealShare</c>).</summary>
+        public int TransitStatistical;
+        public int TravellingByTransit;
+        // --- Ende ÖPNV
 
         public int ExternalConnections;
 
@@ -383,6 +392,7 @@ namespace CityBuilder.Simulation.Citizens
                 if (partner != null && partner.PartnerId == c.Id) partner.PartnerId = 0;
             }
             if (c.TripId != 0) { trips.Remove(c.TripId); c.TripId = 0; }
+            CancelTransitRide(c, timedOut: false); // ÖPNV
             if (c.Household != null)
             {
                 c.Household.MemberList.Remove(c);
@@ -703,7 +713,11 @@ namespace CityBuilder.Simulation.Citizens
 
             float dist = Vector2.Distance(a.Value, b.Value);
             c.TripDistance = dist;
-            if (c.Age >= Citizen.AdultAge && WantsCar(c, dist) && TryStartCar(c, destination, now)) return;
+            // --- ÖPNV: Busverbindung bewerten (Fußweg + Warten + Fahrt + max. 1 Umstieg) gegen Auto und Fußweg
+            var transit = PlanTransit(a.Value, b.Value);
+            if (c.Age >= Citizen.AdultAge && WantsCar(c, dist, transit) && TryStartCar(c, destination, now)) return;
+            if (TryStartTransit(c, b.Value, now, transit)) return;
+            // --- Ende ÖPNV
 
             int ticks = Math.Max(1, (int)MathF.Ceiling(dist / OtherMetersPerTick));
             if (c.Location.IsOutside || destination.IsOutside) ticks += OutsideTicks;
@@ -712,9 +726,9 @@ namespace CityBuilder.Simulation.Citizens
         }
 
         /// <summary>Verkehrsmittelwahl (Utility AI, s. <see cref="CarProbability"/>).</summary>
-        bool WantsCar(Citizen c, float distance)
+        bool WantsCar(Citizen c, float distance, in Transit.TransitOption transit)
         {
-            float p = CarProbability(c, distance);
+            float p = CarProbability(c, distance, transit);
             if (p <= 0f || rng.NextDouble() >= p) return false;
             return trips.Count < traffic.MaxVehicles * MaxVehicleShare;
         }
@@ -762,6 +776,7 @@ namespace CityBuilder.Simulation.Citizens
                 c.TripId = 0;
                 Stats.CarTripsFailed++;
             }
+            CancelTransitRide(c, timedOut: true); // ÖPNV: Zeitüberschreitung im Bus/an der Haltestelle
             c.Mode = TravelMode.None;
             var dest = c.Destination;
             bool valid = dest.IsBuilding ? city.GetBuilding(dest.BuildingId) != null : dest.IsOutside && network.GetNode(dest.ConnectionNodeId) != null;
@@ -809,6 +824,7 @@ namespace CityBuilder.Simulation.Citizens
         void TeleportHome(Citizen c)
         {
             if (c.TripId != 0) { trips.Remove(c.TripId); c.TripId = 0; }
+            CancelTransitRide(c, timedOut: false); // ÖPNV
             var home = c.Home;
             bool valid = home.IsBuilding ? city.GetBuilding(home.BuildingId) != null : network.GetNode(home.ConnectionNodeId) != null;
             if (!valid)
@@ -939,7 +955,7 @@ namespace CityBuilder.Simulation.Citizens
             var s = Stats;
             s.Population = s.Children = s.Students = s.Adults = s.Seniors = 0;
             s.WorkingAge = s.Employed = s.Unemployed = s.WorkingLocal = s.CommutersOut = s.CommutersIn = 0;
-            s.AtHome = s.AtWork = s.Shopping = s.Travelling = s.TravellingByCar = 0;
+            s.AtHome = s.AtWork = s.Shopping = s.Travelling = s.TravellingByCar = s.TravellingByTransit = 0;
             Array.Clear(s.AgeGroups, 0, s.AgeGroups.Length);
             Array.Clear(s.ByEducation, 0, s.ByEducation.Length);
             Array.Clear(s.AverageNeeds, 0, s.AverageNeeds.Length);
@@ -959,6 +975,7 @@ namespace CityBuilder.Simulation.Citizens
                     case Activity.Travelling:
                         s.Travelling++;
                         if (c.Mode == TravelMode.Car) s.TravellingByCar++;
+                        else if (c.Mode == TravelMode.Transit) s.TravellingByTransit++; // ÖPNV
                         break;
                 }
                 if (c.IsCommuterIn) { s.CommutersIn++; continue; }

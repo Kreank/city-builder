@@ -27,6 +27,8 @@ namespace CityBuilder.Game.Assets
         // sonst Erwachsene). Ursprung = Mitte zwischen den Füßen, Front +Z, 1 Einheit = 1 m, optionale Kindobjekte LegL/LegR/ArmL/ArmR.
         public Entry[] People = new Entry[0];
         // --- Ende Fußgänger
+        /// <summary>ÖPNV: Id „bus_depot“ (Models/Transport/BusDepot.fbx), „bus_stop“ (Models/Props/BusStop.fbx).</summary>
+        public Entry[] Transport = new Entry[0];
         /// <summary>Gemeinsames Material mit der Paletten-Textur (URP Lit).</summary>
         public Material Palette;
 
@@ -45,6 +47,14 @@ namespace CityBuilder.Game.Assets
         public GameObject Facility(string id)
         {
             foreach (var e in Facilities) if (e != null && e.Id == id && e.Model != null) return e.Model;
+            return null;
+        }
+
+        /// <summary>ÖPNV-Modell (Depot, Haltestelle) oder null → Platzhalter.</summary>
+        public GameObject TransportModel(string id)
+        {
+            if (Transport == null) return null;
+            foreach (var e in Transport) if (e != null && e.Id == id && e.Model != null) return e.Model;
             return null;
         }
 

@@ -72,6 +72,7 @@ namespace CityBuilder.Simulation.Environment
             float coastLine = 1f - 2f * Math.Clamp(tp.CoastShare, 0.05f, 0.3f);
             // --- Ende Welt
             var t = new TerrainMap(origin, sizeMeters, cellSize) { WaterLevel = 0f };
+            if (coast && MathF.Abs(coastDir.Y) > 0.3f) t.FlowDirection = new Vector2(0f, MathF.Sign(coastDir.Y)); // Wasserqualität: Fluss läuft zum Meer
             var rng = new Random(seed);
             float ox = (float)rng.NextDouble() * 1000f, oy = (float)rng.NextDouble() * 1000f;
             float riverPhase = (float)rng.NextDouble() * MathF.PI * 2f;
@@ -114,6 +115,12 @@ namespace CityBuilder.Simulation.Environment
         public float HeightAt(Vector2 p) => Sample(current, p);
         public float NaturalHeightAt(Vector2 p) => Sample(natural, p);
         public bool IsWater(Vector2 p) => HeightAt(p) < WaterLevel - 0.1f;
+
+        // --- Abwasser/Wasserqualität (G3 erweitert): Fließrichtung der Gewässer (Einheitsvektor). Der erzeugte Fluss läuft
+        // in y-Richtung ohne Gefälle (Bett auf −4 m) – die Richtung ist deshalb eine Festlegung: nach −y („Süden“), mit
+        // Küste in Nord/Süd-Richtung zum Meer hin. Gilt für alle Wasserzellen (Ausbreitung von Verschmutzung).
+        public Vector2 FlowDirection { get; set; } = new Vector2(0f, -1f);
+        // --- Ende Wasserqualität
 
         float Sample(float[] data, Vector2 p)
         {

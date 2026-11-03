@@ -20,6 +20,8 @@ namespace CityBuilder.Simulation.Economy
         Fees,
         /// <summary>Erlös aus dem Abriss eigener Bauten (Teil der Baukosten).</summary>
         Demolition,
+        /// <summary>ÖPNV: Fahrgeld je Einstieg in einen Linienbus.</summary>
+        TransitFares,
 
         // --- Ausgaben
         RoadConstruction,
@@ -36,6 +38,8 @@ namespace CityBuilder.Simulation.Economy
         Interest,
         /// <summary>Bau von Dienstgebäuden (G4).</summary>
         ServiceConstruction,
+        /// <summary>ÖPNV: Bau von Haltestellen und Depots.</summary>
+        TransitConstruction,
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -49,7 +53,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.ServiceConstruction + 1;
+        public const int Count = (int)BudgetCategory.TransitConstruction + 1; // ÖPNV: letzte Kategorie
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) => c < BudgetCategory.RoadConstruction;
@@ -84,6 +88,8 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.Services: return "Dienste";
                 case BudgetCategory.Interest: return "Zinsen";
                 case BudgetCategory.ServiceConstruction: return "Bau Dienste";
+                case BudgetCategory.TransitFares: return "Fahrgeld ÖPNV";
+                case BudgetCategory.TransitConstruction: return "Bau ÖPNV";
                 default: return c.ToString();
             }
         }

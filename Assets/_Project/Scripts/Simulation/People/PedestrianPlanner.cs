@@ -164,7 +164,7 @@ namespace CityBuilder.Simulation.People
             e = default;
             if (!Graph.TryNearestAccess(p, 80f, out var a)) return false;
             long qx = (long)MathF.Round(p.X * 4f) & 0xFFFFFF, qy = (long)MathF.Round(p.Y * 4f) & 0xFFFFFF;
-            e = new PedestrianEndpoint { Key = KindPoint | (qx << 24) | qy, Door = p, DoorHeight = height, Facing = Vector2.UnitY, Access = a, IsValid = true };
+            e = new PedestrianEndpoint { Key = KindPoint | (qx << 24) | qy, Door = p, DoorHeight = height > 0f ? height : a.Height, Facing = Vector2.UnitY, Access = a, IsValid = true };
             return true;
         }
 

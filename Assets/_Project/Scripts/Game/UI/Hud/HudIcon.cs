@@ -15,6 +15,8 @@ namespace CityBuilder.Game.UI.Hud
         LandValue,
         /// <summary>Welt: Globus (Weltkarte), Edelstein (Rohstoffe).</summary>
         Globe, Resource,
+        /// <summary>ÖPNV: Bus von der Seite.</summary>
+        Bus,
     }
 
     /// <summary>
@@ -95,6 +97,11 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Info:
                     Circle(12, 12, 9); Line(12, 11, 12, 16.5f); Line(12, 7.5f, 12, 7.6f);
+                    break;
+                case HudIconKind.Bus: // ÖPNV
+                    Poly(true, 3, 17, 3, 7, 21, 7, 21, 17);
+                    Line(3, 12, 21, 12); Line(9, 7, 9, 12); Line(15, 7, 15, 12);
+                    Circle(7.5f, 18, 1.8f); Circle(16.5f, 18, 1.8f);
                     break;
                 case HudIconKind.Car:
                     Poly(true, 5, 17, 6.5f, 10.5f, 8.4f, 9, 15.6f, 9, 17.5f, 10.5f, 19, 17);

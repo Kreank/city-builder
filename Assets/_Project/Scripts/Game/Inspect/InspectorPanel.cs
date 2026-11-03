@@ -189,6 +189,7 @@ namespace CityBuilder.Game.Inspect
                 if (b != null) hit = new Selection(SelectionKind.Building, b.Id);
                 else if (f != null) hit = new Selection(SelectionKind.Facility, f.Id);
                 else if (sf != null) hit = new Selection(SelectionKind.Service, sf.Id);
+                else if (world.Transit?.DepotAt(tool.Cursor) is var td && td != null) hit = new Selection(SelectionKind.TransitDepot, td.Id); // ÖPNV
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -210,6 +211,12 @@ namespace CityBuilder.Game.Inspect
                     break;
                 case SelectionKind.Citizen:
                     if (world.Citizens.Get(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.TransitStop: // ÖPNV
+                    if (world.Transit?.GetStop(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.TransitDepot: // ÖPNV
+                    if (world.Transit?.GetDepot(selection.Id) == null) SetSelection(Selection.None);
                     break;
                 case SelectionKind.Vehicle:
                 {
@@ -266,6 +273,18 @@ namespace CityBuilder.Game.Inspect
                 {
                     var f = world.Services.GetFacility(selection.Id);
                     if (f != null) primary.Rect(f.Corners(), f.Height + 0.3f, f.Height + InspectorPicking.ServiceHeight(f) + 0.5f, width);
+                    break;
+                }
+                case SelectionKind.TransitDepot: // ÖPNV
+                {
+                    var d = world.Transit?.GetDepot(selection.Id);
+                    if (d != null) primary.Rect(d.Corners(), d.Height + 0.3f, d.Height + 9.5f, width);
+                    break;
+                }
+                case SelectionKind.TransitStop: // ÖPNV
+                {
+                    var s = world.Transit?.GetStop(selection.Id);
+                    if (s != null) primary.Ring(SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position) + 0.6f), 8f, width * 0.6f);
                     break;
                 }
                 case SelectionKind.Vehicle:
@@ -339,6 +358,16 @@ namespace CityBuilder.Game.Inspect
                 {
                     var f = world.Services.GetFacility(selection.Id);
                     return f != null ? SimConvert.ToWorld(f.Position, f.Height) : (Vector3?)null;
+                }
+                case SelectionKind.TransitStop: // ÖPNV
+                {
+                    var s = world.Transit?.GetStop(selection.Id);
+                    return s != null ? SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position)) : (Vector3?)null;
+                }
+                case SelectionKind.TransitDepot: // ÖPNV
+                {
+                    var d = world.Transit?.GetDepot(selection.Id);
+                    return d != null ? SimConvert.ToWorld(d.Position, d.Height) : (Vector3?)null;
                 }
                 default: return null;
             }

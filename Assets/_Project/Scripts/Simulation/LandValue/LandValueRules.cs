@@ -21,6 +21,8 @@ namespace CityBuilder.Simulation.LandValue
         public float Police, Fire, Health, Education, Library, Park;
         /// <summary>Wasserlage (Ufer in der Nähe).</summary>
         public float Shore;
+        /// <summary>G3 erweitert: Verschmutzung des nahen Gewässers 0..1 (Abwasser-Auslass) – macht die Wasserlage zum Abzug.</summary>
+        public float WaterPollution;
         /// <summary>Aussichtslage (höher als die Umgebung).</summary>
         public float View;
         /// <summary>Bebauungsdichte (Wohnungen + Arbeitsplätze in der Nähe, gesättigt).</summary>
@@ -129,6 +131,8 @@ namespace CityBuilder.Simulation.LandValue
         public const float PoliceWeight = 0.06f, FireWeight = 0.05f, HealthWeight = 0.05f, EducationWeight = 0.06f, LibraryWeight = 0.03f;
         public const float ParkWeight = 0.12f;
         public const float ShoreWeight = 0.08f, ViewWeight = 0.05f, DensityWeight = 0.06f;
+        /// <summary>G3 erweitert: Wasserlage × (1 − Faktor × Verschmutzung); 1,5 → bei voller Verschmutzung −50 % der Uferprämie.</summary>
+        public const float PollutedShoreFactor = 1.5f;
         /// <summary>Nachbarschaft: ± so viel bei Zufriedenheit 1,0 bzw. 0,2 (neutral 0,6).</summary>
         public const float NeighborhoodWeight = 0.10f;
         public const float NeighborhoodNeutral = 0.6f;
@@ -165,7 +169,8 @@ namespace CityBuilder.Simulation.LandValue
             f.Services = PoliceWeight * C(i.Police) + FireWeight * C(i.Fire) + HealthWeight * C(i.Health)
                          + EducationWeight * C(i.Education) + LibraryWeight * C(i.Library);
             f.Park = ParkWeight * C(i.Park);
-            f.Water = ShoreWeight * C(i.Shore);
+            // G3 erweitert: verschmutztes Ufer → aus +0,08 wird bis zu −0,04 (stinkender Fluss statt Uferlage)
+            f.Water = ShoreWeight * C(i.Shore) * (1f - PollutedShoreFactor * C(i.WaterPollution));
             f.View = ViewWeight * C(i.View);
             f.Density = DensityWeight * C(i.Density);
             f.Neighborhood = i.Neighborhood < 0f ? 0f
