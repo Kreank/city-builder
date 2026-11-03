@@ -185,6 +185,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
             // --- Ende Stadtkasse
 
+            // --- Welt (Etappe 5): Weltkarte (F4); Ressourcen-Ansicht (F3) hängt am EnvironmentOverlayView
+            Ensure<CityBuilder.Game.WorldMap.WorldMapWindow>().Init(this);
+            // --- Ende Welt
+
             // Spiel-UI (UI Toolkit) zuletzt – sie greift auf die Begleiter oben zu. Fehlen Theme/USS in Resources,
             // bleibt die alte IMGUI-Bauleiste als Rückfall.
             if (!Ensure<CityBuilder.Game.UI.Hud.GameHud>().Init(this)) Ensure<RoadToolbar>().Init(this);
