@@ -220,6 +220,37 @@ namespace CityBuilder.Simulation.Tests
             Assert.False(g.TryAccessAtT(net.Segments.First().Id, 0.5f, new Vector2(150, 20), out _));
         }
 
+        [Fact]
+        public void Performance_GridGraphAndRoutes_Info()
+        {
+            var net = new RoadNetwork();
+            const int n = 12;
+            const float step = 90f;
+            for (int i = 0; i <= n; i++)
+            {
+                Road(net, new Vector2(0, i * step), new Vector2(n * step, i * step));
+                Road(net, new Vector2(i * step, 0), new Vector2(i * step, n * step));
+            }
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var g = new SidewalkGraph(net);
+            double build = sw.Elapsed.TotalMilliseconds;
+            var rnd = new Random(1);
+            var segs = net.Segments.ToArray();
+            sw.Restart();
+            int ok = 0;
+            for (int k = 0; k < 500; k++)
+            {
+                var sa = segs[rnd.Next(segs.Length)];
+                var sb = segs[rnd.Next(segs.Length)];
+                if (!g.TryAccess(sa.Id, rnd.Next(2) * 2 - 1, sa.Length * 0.5f, out var a) || !g.TryAccess(sb.Id, rnd.Next(2) * 2 - 1, sb.Length * 0.5f, out var b)) continue;
+                var rb = new PedestrianRouteBuilder();
+                if (g.AppendPath(a, b, rb)) ok++;
+            }
+            double routes = sw.Elapsed.TotalMilliseconds;
+            output.WriteLine($"{net.SegmentCount} Segmente, {g.VertexCount} Gehweg-Knoten, {g.EdgeCount} Kanten: Aufbau {build:0.0} ms; 500 Routen {routes:0.0} ms ({ok} gefunden)");
+            Assert.Equal(500, ok);
+        }
+
         // ------------------------------------------------------------ Planer, Park, Interpolation
 
         static Building FakeBuilding(int id, RoadNetwork net, Vector2 onRoad, Vector2 front)

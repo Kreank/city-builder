@@ -45,7 +45,7 @@ namespace CityBuilder.Game.People
         [Tooltip("Darüber werden keine Personen gezeichnet (m).")]
         public float FarDistance = 520f;
         [Tooltip("Neue Gehwegrouten je Frame (Rest im nächsten Frame).")]
-        public int RouteBudgetPerFrame = 40;
+        public int RouteBudgetPerFrame = 24;
 
         /// <summary>Statistik des letzten Frames.</summary>
         public int LastVisible { get; private set; }
