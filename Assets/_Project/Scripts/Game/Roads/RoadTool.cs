@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Inspect }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -151,6 +151,9 @@ namespace CityBuilder.Game.Roads
             zoneView = Ensure<ZoneView>();
             zoneView.Init(runner, previewMaterial);
             if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
+
+            // G2 Bürger: Info-Modus (C) mit Bürger-/Gebäude-Panel
+            Ensure<CityBuilder.Game.Citizens.CitizenPanel>().Init(this, previewMaterial);
         }
 
         ZoneView zoneView;
@@ -209,7 +212,7 @@ namespace CityBuilder.Game.Roads
         {
             if (type == null) return;
             SelectedType = type;
-            if (CurrentMode == Mode.Bulldoze || CurrentMode == Mode.Traffic || CurrentMode == Mode.Template) SetMode(Mode.Straight);
+            if (CurrentMode == Mode.Bulldoze || CurrentMode == Mode.Traffic || CurrentMode == Mode.Template || CurrentMode == Mode.Inspect) SetMode(Mode.Straight);
             if (CurrentMode == Mode.Roundabout && type.Category != RoadCategory.City) SetMode(Mode.Straight);
         }
 
@@ -272,6 +275,7 @@ namespace CityBuilder.Game.Roads
             switch (CurrentMode)
             {
                 case Mode.Zone: UpdateZone(raw); break;
+                case Mode.Inspect: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G2: Klick wählt Gebäude (CitizenPanel)
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;
@@ -293,6 +297,7 @@ namespace CityBuilder.Game.Roads
             if (kb.hKey.wasPressedThisFrame) ToggleDualCarriageway();
             if (kb.xKey.wasPressedThisFrame) ToggleUndergroundView();
             if (kb.zKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Zone ? Mode.Straight : Mode.Zone);
+            if (kb.cKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Inspect ? Mode.Straight : Mode.Inspect); // G2 Bürger-Info
             if (CurrentMode == Mode.Zone)
             {
                 if (kb.leftBracketKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame) SetBrush(BrushRadius - 4f);

@@ -40,16 +40,17 @@ namespace CityBuilder.Game.UI
                 $"Verkehr: {s.Active} Fahrzeuge · Ø {s.AverageSpeedKmh:0} km/h · {s.Waiting} warten\n" +
                 $"   angekommen {s.Arrived} · <color=#ff9080>hängen geblieben {s.Despawned}</color>\n" +
                 $"Stadt: {w.City.Stats.Population} Einwohner · {w.City.Stats.OccupiedHouseholds}/{w.City.Stats.Households} Haushalte · " +
-                $"{w.City.Stats.Workers}/{w.City.Stats.Jobs} Jobs · {w.City.Stats.Buildings} Gebäude (+{w.City.Stats.UnderConstruction} im Bau)";
+                $"{w.City.Stats.Workers}/{w.City.Stats.Jobs} Jobs · {w.City.Stats.Buildings} Gebäude (+{w.City.Stats.UnderConstruction} im Bau)\n" +
+                $"   arbeitslos {w.Citizens.Stats.Unemployed} · Auspendler {w.Citizens.Stats.CommutersOut} · Einpendler {w.Citizens.Stats.CommutersIn} (C Bürger-Info)";
 
             if (showHelp)
                 text += "\n\n<size=11>LMB bauen · RMB/Esc abbrechen · R gerade/Kurve · K Kreisverkehr · U ausbauen · I Richtung · B Abriss\n" +
                         "Tab Straßentyp · H Doppelbau · Bild↑/↓ Bauhöhe · G Einrasten (Strg = frei) · , . Vorlage drehen\n" +
-                        "T Verkehrsregeln · V Stau-Ansicht · X Unterirdisch · Z Zonen ([ ] Pinsel) · N Lärm · P Abgas\n" +
+                        "T Verkehrsregeln · V Stau-Ansicht · X Unterirdisch · Z Zonen ([ ] Pinsel) · C Bürger-Info · N Lärm · P Abgas\n" +
                         "Leertaste Pause · 1/2/3 Tempo · Bauhöhe 0 = automatisch trassieren (Tunnel/Brücke/einebnen)\n" +
                         "WASD (Shift) bewegen · Q/E/Mitteltaste drehen · Mausrad zoomen · F1 Hilfe aus</size>";
 
-            var rect = new Rect(10, 10, 600, showHelp ? 210 : 110);
+            var rect = new Rect(10, 10, 600, showHelp ? 228 : 128);
             UiBlocker.Register(rect);
             GUI.Box(rect, text, box);
 

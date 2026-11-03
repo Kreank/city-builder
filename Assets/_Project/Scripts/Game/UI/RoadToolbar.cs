@@ -142,7 +142,7 @@ namespace CityBuilder.Game.UI
             foreach (var (label, value) in new[] { ("Aus", 0f), ("Wenig", 0.4f), ("Normal", 1f), ("Viel", 2f), ("Extrem", 4f) })
                 if (Button(label, Mathf.Approximately(traffic.Demand, value), 80f)) traffic.Demand = value;
             GUILayout.EndHorizontal();
-            GUILayout.Label($"Verkehrsquellen (Sackgassen/Kartenrand): {traffic.EndpointCount} · Fahrzeuge: {traffic.Stats.Active}", infoStyle);
+            GUILayout.Label($"Außenanschlüsse (Kartenrand): {traffic.EndpointCount} · Fahrzeuge: {traffic.Stats.Active} (Bürger {traffic.Stats.CitizenVehicles})", infoStyle);
         }
 
         void ZoneRows()
