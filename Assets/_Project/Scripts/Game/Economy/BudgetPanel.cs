@@ -52,6 +52,7 @@ namespace CityBuilder.Game.Economy
 
             // Kontostand dauerhaft im HUD zeigt das neue UI-Toolkit-HUD (Agent „ui“) – hier nur das Fenster.
             if (!visible) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: s. UI/Windows (IMGUI nur Rückfall)
 
             if (!placed)
             {

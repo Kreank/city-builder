@@ -85,7 +85,8 @@ namespace CityBuilder.Game
                 }
 
                 float scroll = mouse.scroll.ReadValue().y;
-                if (Mathf.Abs(scroll) > 0.01f)
+                // Mausrad über Fenstern scrollt dort, nicht die Kamera
+                if (Mathf.Abs(scroll) > 0.01f && !CityBuilder.Game.UI.UiBlocker.IsPointerOverUi(mouse.position.ReadValue()))
                     targetDistance *= 1f - Mathf.Sign(scroll) * zoomStep;
             }
 

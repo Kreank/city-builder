@@ -13,5 +13,7 @@ namespace CityBuilder.Game.UI
         public static float BottomInset = 160f;
         /// <summary>Rechte Kante der linken Ansichtsleiste + Abstand.</summary>
         public static float LeftInset = 10f;
+        /// <summary>Breite, die rechts belegt ist (rechtes Panel der neuen UI) – IMGUI-Fenster rechts sollten links davon liegen.</summary>
+        public static float RightInset = 0f;
     }
 }
