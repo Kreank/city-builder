@@ -11,6 +11,8 @@ namespace CityBuilder.Game.UI.Hud
         Service,
         /// <summary>Fenster (Phase 2): Schließen, Kamera folgen, Zurück, Hilfe.</summary>
         Close, Follow, Back, Help,
+        /// <summary>G6 Bodenwert: Haus mit Pfeil nach oben.</summary>
+        LandValue,
     }
 
     /// <summary>
@@ -163,6 +165,9 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Back:
                     Line(19, 12, 5, 12); Poly(false, 11, 6, 5, 12, 11, 18);
+                    break;
+                case HudIconKind.LandValue:
+                    Poly(true, 3, 11, 12, 4, 21, 11, 21, 20, 3, 20); Line(12, 17.5f, 12, 11.5f); Poly(false, 9.5f, 14, 12, 11.5f, 14.5f, 14);
                     break;
                 case HudIconKind.Help:
                     Circle(12, 12, 9);

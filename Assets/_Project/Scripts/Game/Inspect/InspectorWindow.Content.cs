@@ -5,6 +5,7 @@ using CityBuilder.Game.UI.Panels;
 using CityBuilder.Game.Utilities;
 using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.LandValue;
 using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
 using CityBuilder.Simulation.Utilities;
@@ -54,9 +55,11 @@ namespace CityBuilder.Game.Inspect
                 ui.Meter("Zufriedenheit Umfeld", Percent(surroundings), surroundings, SatisfactionTone(surroundings));
                 ui.Note("Ruhe, Sicherheit, Dienste, Park");
                 float condition = citizens.BuildingCondition(b);
-                ui.Meter("Zustand", Percent(condition), condition, SatisfactionTone(condition));
-                ui.Note("Stufe und Versorgung, noch ohne Verfall");
+                ui.Meter("Wohnqualität", Percent(condition), condition, SatisfactionTone(condition));
+                ui.Note("Stufe × Zustand, ohne Versorgung schlechter");
             }
+
+            LandValueAndLevel(ui, world, b);
 
             ui.Section("Versorgung");
             using (ui.Fields())
@@ -205,8 +208,76 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Ursprüngliches Gelände", $"{natural:0.0} m ({(b.Height - natural >= 0 ? "+" : "")}{b.Height - natural:0.0} m eingeebnet)");
             }
 
-            ui.Section("Später");
-            using (ui.Fields()) ui.Field("Bodenwert", "— (kommt mit G6)", Tone.Muted);
+            LandValueFactorsSection(ui, world, b);
+        }
+
+        // ------------------------------------------------------------ G6 Bodenwert, Ausbaustufe, Zustand
+
+        static Tone ValueTone(float v) => v < 0f ? Tone.Muted : v >= 0.55f ? Tone.Good : v >= 0.3f ? Tone.Accent : Tone.Warn;
+
+        /// <summary>Übersicht: Bodenwert, Stufe mit Fortschritt und „was fehlt“, Zustand der Bausubstanz.</summary>
+        static void LandValueAndLevel(Ui ui, SimulationWorld world, Building b)
+        {
+            var lv = world.LandValue;
+            if (lv == null) return;
+            float value = lv.ValueOf(b);
+            var info = lv.LevelInfo(b);
+            ui.Section("Bodenwert & Ausbaustufe", "Faktoren im Reiter Umfeld");
+            using (ui.Card())
+            {
+                ui.Meter("Bodenwert", value < 0f ? "noch unbekannt" : $"{LandValueRules.ValueText(value)} · {value * 100f:0} %",
+                    Mathf.Max(0f, value), ValueTone(value));
+                bool top = info.Level >= info.MaxLevel;
+                ui.Meter($"Stufe {info.Level} von {info.MaxLevel}",
+                    top ? "höchste Stufe" : $"Aufstieg {info.ProgressDays}/{info.DaysNeeded} Tage", info.Progress,
+                    top ? Tone.Good : info.Missing == LevelGap.None ? Tone.Good : Tone.Accent);
+                if (!string.IsNullOrEmpty(info.MissingText) && info.Missing != LevelGap.None && info.Missing != LevelGap.MaxLevel)
+                    ui.Note("Es fehlt: " + info.MissingText);
+                ui.Meter("Zustand", $"{info.ConditionText} · {info.Condition * 100f:0} %", info.Condition, ValueTone(info.Condition));
+            }
+            if (info.Declining)
+                ui.Message("Abstieg droht", $"Seit {info.DeclineDays} von {info.DeclineDaysLimit} Tagen unter den Anforderungen der Stufe {info.Level}.", Tone.Warn);
+            if (info.EmptyDays > 0)
+                ui.Note($"Seit {info.EmptyDays} Tagen leer.");
+        }
+
+        /// <summary>Umfeld: Bodenwert mit allen Beiträgen und den Anforderungen der nächsten Stufe.</summary>
+        static void LandValueFactorsSection(Ui ui, SimulationWorld world, Building b)
+        {
+            var lv = world.LandValue;
+            ui.Section("Bodenwert", "G6 · Ansicht F2");
+            if (lv == null) { ui.Note("Bodenwert nicht verfügbar."); return; }
+            var f = lv.Explain(b);
+            if (f.IsWater) { ui.Note("Grundstück im Wasser – Bodenwert 0."); return; }
+            using (ui.Fields())
+            {
+                ui.Field("Aktuell", f.Current < 0f ? "noch nicht berechnet" : $"{LandValueRules.ValueText(f.Current)} · {f.Current * 100f:0} %", ValueTone(f.Current));
+                ui.Field("Zielwert", $"{f.Target * 100f:0} % (Bodenwert läuft träge dorthin)");
+                foreach (var (label, contribution) in f.Contributions())
+                    ui.Field(label, $"{(contribution >= 0f ? "+" : "−")}{System.Math.Abs(contribution) * 100f:0.#} %",
+                        contribution >= 0f ? Tone.Good : Tone.Warn);
+            }
+
+            var info = lv.LevelInfo(b);
+            if (info.Level >= info.MaxLevel) { ui.Note("Höchste Ausbaustufe erreicht."); return; }
+            var next = info.Next;
+            var facts = info.Facts;
+            ui.Section($"Für Stufe {info.Level + 1}", $"{next.Days} Tage erfüllt");
+            using (ui.Fields())
+            {
+                Requirement(ui, "Bodenwert", facts.LandValue, next.LandValue);
+                Requirement(ui, "Zufriedenheit", facts.Satisfaction, next.Satisfaction);
+                if (next.Skill > 0f) Requirement(ui, "Bildung/Fachkräfte", facts.Skill, next.Skill);
+                if (next.Occupancy > 0f) Requirement(ui, "Belegung", facts.Occupancy, next.Occupancy);
+                if (next.Condition > 0f) Requirement(ui, "Zustand", info.Condition, next.Condition);
+                ui.Field("Versorgung", facts.Supplied ? "vorhanden" : "fehlt", facts.Supplied ? Tone.Good : Tone.Warn);
+            }
+        }
+
+        static void Requirement(Ui ui, string label, float have, float need)
+        {
+            bool ok = have >= need;
+            ui.Field(label, have < 0f ? $"– / mind. {need * 100f:0} %" : $"{have * 100f:0} % / mind. {need * 100f:0} %", ok ? Tone.Good : Tone.Warn);
         }
 
         // ------------------------------------------------------------ Bürger

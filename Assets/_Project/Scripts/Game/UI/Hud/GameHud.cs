@@ -146,6 +146,9 @@ namespace CityBuilder.Game.UI.Hud
             HudMessages.Posted += OnMessage;
             Ui.TooltipHook = (e, text) => Tip(e, text);
             if (!UiPanels.ForceImgui) BuildWindows();
+            // G6: Aufstiege/Verfall gesammelt als Meldung (höchstens 1× je Spieltag)
+            var lvAlerts = GetComponent<LandValueAlerts>() ?? gameObject.AddComponent<LandValueAlerts>();
+            lvAlerts.Init(runner);
             Ready = true;
             RefreshAll();
             return true;
@@ -510,6 +513,8 @@ namespace CityBuilder.Game.UI.Hud
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Noise);
             RailButton(HudIconKind.Air, "Abgas (P)", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.AirPollution),
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution);
+            RailButton(HudIconKind.LandValue, "Bodenwert (F2) – rot niedrig, gelb mittel, grün hoch", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.LandValue),
+                () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue); // G6
             RailButton(HudIconKind.Power, "Strom (O schaltet Strom, Wasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Power),
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power);
             RailButton(HudIconKind.Water, "Wasser (O schaltet Strom, Wasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Water),
@@ -542,6 +547,7 @@ namespace CityBuilder.Game.UI.Hud
                 Add(trafficOverlay != null && trafficOverlay.Visible, "Verkehr");
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Noise, "Lärm");
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution, "Abgas");
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue, "Bodenwert");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Strom");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Wasser");
                 Add(serviceOverlay != null && serviceOverlay.Current != null,

@@ -261,8 +261,34 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
-- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, ServicePanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
-  Phase 2: Inspektor als rechtes Panel im neuen Stil (Entwurf `Panels.dc.html`).
+- Noch IMGUI: nur die Rückfall-`RoadToolbar` und die Rückfall-Fenster (s. Phase 2); neue IMGUI-Fenster anderer Agenten
+  (Wirtschaft, Weltkarte) sollen auf den Baukasten umziehen.
+
+## Spiel-UI Phase 2 (Fenster)
+- **Baukasten** `Game/UI/Panels`: `Ui` (Sofort-Modus: Fenster beschreiben ihren Inhalt bei jeder Aktualisierung neu,
+  Elemente werden nach Stelle + Art **wiederverwendet** → Hover/Klick/Scroll bleiben erhalten), Widgets in `Ui.Widgets.cs`:
+  Behälter `Card/Fields/Grid(2|3)/Chips/Actions/Row/Col` (für `using`), `Section`, `Text`, `Note`, `Title`, `Field`,
+  `FieldLink` (anklickbar), `TotalRow`, `Columns`, `Stat` (Kennzahl-Kachel), `Progress`, `Meter`, `Need` (Bedürfnisbalken),
+  `ValueBar`, `WeekBars` (Wochen-Saldo), `Chip`, `ListItem` (Avatar + Titel + Badge, anklickbar), `Quote`, `Message`,
+  `Tabs`, `ActionButton`, `IconButton`, `Stepper` (−/+), `Slider`, `Pager`; Farbtöne über `Tone`.
+  `GameWindow` (Basis: `OpenScore`, `Close`, `HandleEscape`, `DrawHead`/`DrawBody`, `Tick`/`Poll`, Kopf-Helfer `Head(...)`),
+  `WindowHost` (in `GameHud.Windows`; höchstens ein rechtes Panel + ein mittiges Fenster, höchster `OpenScore` gewinnt,
+  mittig verdrängt das neue das alte; Esc: mittig schließen, sonst `HandleEscape` des rechten Panels; 5×/s + nach Klick neu),
+  `WorldLabels` (Welt-Beschriftungen per `Begin/Add` je Frame, Ebene in der HUD), `UiPanels` (Schalter).
+  **Neues Fenster:** Klasse von `GameWindow` ableiten (Beispiel im Doc-Kommentar), `hud.Windows.Add(new …())`. USS-Abschnitt
+  „Fenster (Phase 2)“ in `CityHud.uss`.
+- **Fenster** (`Game/UI/Windows`, Inspektor in `Game/Inspect/InspectorWindow*.cs`): Inspektor (rechts, Info-Modus),
+  Verkehrsregeln (rechts, Modus T, Zufahrt-Buchstaben als Welt-Beschriftung), Versorgungsnetze (rechts, Werkzeug J/Ansicht O),
+  Dienste (rechts, Werkzeug 4/Ansicht ⇧4), Stadtkasse (mittig, M bzw. Klick auf den Kontostand), Hilfe & Tasten (mittig, F1 bzw.
+  „?“ oben) inkl. der Entwickler-Statistik. Welt-Beschriftungen von RoadGuidesView/UtilityTool/ServiceTool gehen bei aktiver
+  neuer UI über `WorldLabels`. Mausrad über Fenstern zoomt die Kamera nicht mehr.
+- **Rückfall:** Startet die neue UI nicht (Theme/USS fehlt) oder `UiPanels.ForceImgui`, zeichnen BudgetPanel, TrafficPanel,
+  UtilityPanel, ServicePanel und DebugHud wie früher per IMGUI (Aktionen wie Steuern/Verkehrsregeln bleiben so bedienbar).
+  Die IMGUI-Darstellung des Inspektors ist entfernt (rein lesend, sonst doppelte Pflege); seine Logik bleibt in `InspectorPanel`.
+- G6 im HUD: Inspektor zeigt Bodenwert, Stufe + Fortschritt + „was fehlt“, Zustand (Übersicht) und alle Bodenwert-Faktoren mit
+  Anforderungen der nächsten Stufe (Umfeld); linke Leiste Knopf „Bodenwert“ (F2); `UI/Hud/LandValueAlerts` meldet Aufstiege
+  und Verfall gesammelt höchstens 1× je Spieltag.
+- Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
 ## Inspektor (Info-Modus, Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
@@ -286,7 +312,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Bedürfnismodell im Inspektor:** Bürger mit Namen, Familienstand + Partner (anklickbar), Persönlichkeit/Charakterzüge;
   „Befinden“: Gesundheit/krank, Zufriedenheit, Gemüt, Sorgen, Bedürfnisbalken (Erfüllung rot→grün), Erinnerungen als
   Sätze, Rohwerte + Haushaltseinkommen; Freizeit „im Park“/„Spaziergang im Viertel“. Gebäude: Zustand, Zufriedenheit
-  Bewohner/Mitarbeiter/Umfeld. Noch offen: Bodenwert (G6), Zustand von Bauwerken.
+  Bewohner/Mitarbeiter/Umfeld, Bodenwert/Stufe/Zustand (G6). Darstellung seit Phase 2: `InspectorWindow` (rechtes Panel).
+  Noch offen: Zustand von Bauwerken (Versorger/Dienste).
 
 ## Strom & Wasser (G3)
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
@@ -553,8 +580,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
-     Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2). Offen: Anzeige in Inspektor/HUD (ui2),
-     Stufen nach Einkommen (G5), Meldungen bei Aufstieg/Verfall
+     Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
+     bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
 5. Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
