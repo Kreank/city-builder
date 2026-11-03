@@ -18,8 +18,14 @@ namespace CityBuilder.Simulation.Services
         /// </summary>
         public const string EducationPrimary = "education_primary", EducationSecondary = "education_secondary";
 
-        /// <summary>Die sieben Hauptarten (Reihenfolge = Anzeige).</summary>
-        public static readonly string[] All = { Police, Fire, Health, Education, Library, Park, Garbage };
+        /// <summary>
+        /// G4 erweitert: Medien (Zeitung über Zustellung im Straßennetz, Radio/TV per Funkradius). Abdeckung = „informiert“;
+        /// Schlagzeilen erzeugt das <see cref="MediaSystem"/>.
+        /// </summary>
+        public const string Media = "media";
+
+        /// <summary>Die Hauptarten (Reihenfolge = Anzeige).</summary>
+        public static readonly string[] All = { Police, Fire, Health, Education, Library, Park, Garbage, Media };
 
         public static string DisplayName(string kind)
         {
@@ -34,6 +40,7 @@ namespace CityBuilder.Simulation.Services
                 case Library: return "Bibliothek";
                 case Park: return "Parks";
                 case Garbage: return "Müllabfuhr";
+                case Media: return "Medien";
                 default: return kind;
             }
         }
@@ -79,6 +86,11 @@ namespace CityBuilder.Simulation.Services
         public float PollutionRadius { get; }
         /// <summary>Fassungsvermögen in t (Müllhalde: läuft voll, dann nimmt sie nichts mehr an). 0 = unbegrenzt.</summary>
         public float Storage { get; }
+        /// <summary>
+        /// G4 erweitert: Funk (Radio/TV) – Reichweite als Radius in Metern (Luftlinie) wie <see cref="Walking"/>, braucht keine
+        /// Zufahrt. Technisch gilt dafür <see cref="Walking"/> = true; dieses Flag unterscheidet nur Anzeige/Texte.
+        /// </summary>
+        public bool Broadcast { get; }
 
         public float UpkeepPerDay => UpkeepPerWeek / 7f;
         /// <summary>Reichweite in Sekunden Fahrzeit (nur Straßendienste).</summary>
@@ -86,8 +98,10 @@ namespace CityBuilder.Simulation.Services
 
         public ServiceType(string id, string name, string kind, float width, float depth, float capacity, string unit, float range,
             float cost, float upkeepPerWeek, float noise = 0f, float noiseRadius = 0f, bool walking = false, string channel = null,
-            float pollution = 0f, float pollutionRadius = 0f, float storage = 0f)
+            float pollution = 0f, float pollutionRadius = 0f, float storage = 0f, bool broadcast = false)
         {
+            Broadcast = broadcast;
+            if (broadcast) walking = true; // Funkradius = Luftlinien-Radius wie Parks
             Id = id ?? throw new ArgumentNullException(nameof(id));
             DisplayName = name;
             Kind = kind;
@@ -157,9 +171,23 @@ namespace CityBuilder.Simulation.Services
             "incinerator", "Müllverbrennungsanlage", ServiceKinds.Garbage, 40f, 32f, 120f, "t/Tag", 3f, 70000f, 6300f,
             noise: 0.4f, noiseRadius: 100f, pollution: 0.03f, pollutionRadius: 180f);
 
+        // --- G4 erweitert: Medien. Zeitung = Zustellung über das Straßennetz (Fahrminuten wie andere Dienste, Kapazität =
+        // Leser), Radio/TV = Funkradius in m (Luftlinie, keine Zufahrt nötig, Kapazität = Hörer/Zuschauer).
+        public static readonly ServiceType Newspaper = new ServiceType(
+            "media_newspaper", "Zeitungsverlag", ServiceKinds.Media, 24f, 20f, 3000f, "Leser", 3f, 30000f, 1750f,
+            noise: 0.1f, noiseRadius: 40f);
+
+        public static readonly ServiceType RadioStation = new ServiceType(
+            "media_radio", "Radiosender", ServiceKinds.Media, 16f, 16f, 8000f, "Hörer", 900f, 40000f, 2100f, broadcast: true);
+
+        public static readonly ServiceType TvTower = new ServiceType(
+            "media_tv", "TV-Sender (Turm)", ServiceKinds.Media, 20f, 20f, 25000f, "Zuschauer", 1600f, 110000f, 5600f, broadcast: true);
+        // --- Ende Medien
+
         public static readonly ServiceType[] All =
         {
             PoliceStation, FireStation, Clinic, Hospital, PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator,
+            Newspaper, RadioStation, TvTower,
         };
 
         public static ServiceType Get(string id)

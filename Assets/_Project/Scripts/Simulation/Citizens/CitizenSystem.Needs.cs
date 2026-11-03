@@ -32,6 +32,18 @@ namespace CityBuilder.Simulation.Citizens
         /// </summary>
         public Func<Building, ParkSpot> ParkFinder { get; set; }
 
+        // --- Abwasser/Wasserqualität/Atom/Medien (G3/G4 erweitert): lesende Hooks, verbunden in CitizenUtilityBinding.Connect.
+        // Alle null = neutral (Tests ohne Bindung, Startphase ohne solche Bauwerke).
+        /// <summary>Trinkwasserqualität am Wohngebäude 0..1 (1 = sauber, null = 1). Senkt die Gesundheit.</summary>
+        public Func<Building, float> DrinkingWaterQuality { get; set; }
+        /// <summary>Sorge „Atomkraftwerk nebenan“ am Wohngebäude 0..1 (null = 0). Wirkt je nach Ängstlichkeit.</summary>
+        public Func<Building, float> NuclearConcern { get; set; }
+        /// <summary>Medienreichweite am Wohngebäude 0..1 (Zeitung/Radio/TV, null = 0): Freizeit/Bildung leicht +.</summary>
+        public Func<Building, float> MediaReach { get; set; }
+        /// <summary>Stimmung der aktuellen Schlagzeilen −1..+1 (null = 0): verstärkt das Gemüt der Erreichten ein wenig.</summary>
+        public Func<float> NewsTone { get; set; }
+        // --- Ende
+
         /// <summary>Multiplikator auf alle gewürfelten Lebensereignisse (Tests/Balancing).</summary>
         public float LifeEventRate = 1f;
 
@@ -46,6 +58,9 @@ namespace CityBuilder.Simulation.Citizens
             public float Noise, Air;
             public float Police, Fire, Health, Education, EducationPrimary, EducationSecondary, Library, Park, Garbage, GarbageLevel;
             public bool Supplied, PowerOut, WaterOut;
+            // G3/G4 erweitert: Trinkwasser (1 = sauber), Atom-Sorge, Medienreichweite, Abwasser fehlt
+            public float DrinkingWater, Nuclear, Media;
+            public bool SewageOut;
         }
 
         readonly Dictionary<int, HomeContext> contexts = new Dictionary<int, HomeContext>();
@@ -68,7 +83,13 @@ namespace CityBuilder.Simulation.Citizens
                 var st = u.GetStatus(b);
                 ctx.PowerOut = !st.HasPower && u.IsRequired(UtilityKind.Power);
                 ctx.WaterOut = !st.HasWater && u.IsRequired(UtilityKind.Water);
+                ctx.SewageOut = !st.HasSewage && u.IsRequired(UtilityKind.Sewage); // G3 erweitert
             }
+            // --- G3/G4 erweitert
+            ctx.DrinkingWater = DrinkingWaterQuality == null ? 1f : Math.Clamp(DrinkingWaterQuality(b), 0f, 1f);
+            ctx.Nuclear = NuclearConcern == null ? 0f : Math.Clamp(NuclearConcern(b), 0f, 1f);
+            ctx.Media = MediaReach == null ? 0f : Math.Clamp(MediaReach(b), 0f, 1f);
+            // --- Ende
             var cov = ServiceCoverage;
             ctx.Police = Coverage(cov, ServiceIds.Police, b);
             ctx.Fire = Coverage(cov, ServiceIds.Fire, b);
@@ -125,18 +146,28 @@ namespace CityBuilder.Simulation.Citizens
                 Approach(n, NeedKind.Housing, HousingTarget(home, ctx, c.Household.MemberList.Count), 0.3f);
                 Approach(n, NeedKind.Supply, ctx.Supplied ? 1f : 0.05f, 0.6f);
                 float calm = CalmTarget(ctx);
-                Approach(n, NeedKind.Calm, calm, 0.35f);
+                // G3 erweitert: Atomkraftwerk nebenan – nur Ängstliche spüren es deutlich (Ruhe/Umwelt etwas schlechter)
+                float nuclearCalm = ctx.Nuclear > 0f ? NuclearCalmPenalty * ctx.Nuclear * p.Anxious : 0f;
+                Approach(n, NeedKind.Calm, calm - nuclearCalm, 0.35f);
                 float safety = SafetyTarget(ctx);
                 Approach(n, NeedKind.Safety, safety, 0.25f);
                 Approach(n, NeedKind.Education, EducationTarget(c, ctx), 0.25f);
-                Approach(n, NeedKind.Health, 0.65f * c.Health + 0.35f * ctx.Health, 0.3f);
-                // Freizeit sinkt mit der Zeit (≈ 0,35 je Tag), ein Park in Reichweite hilft ein wenig nebenbei
-                n[(int)NeedKind.Leisure] = Math.Clamp(n[(int)NeedKind.Leisure] - 0.035f + 0.008f * ctx.Park, 0f, 1f);
+                // G3 erweitert: schlechtes Trinkwasser (verschmutzter Fluss an der Pumpe) senkt die Gesundheit
+                Approach(n, NeedKind.Health, 0.65f * c.Health + 0.35f * ctx.Health - DrinkingWaterHealthPenalty * (1f - ctx.DrinkingWater), 0.3f);
+                // Freizeit sinkt mit der Zeit (≈ 0,35 je Tag), ein Park in Reichweite hilft ein wenig nebenbei (G4 erweitert: Medien auch)
+                n[(int)NeedKind.Leisure] = Math.Clamp(n[(int)NeedKind.Leisure] - 0.035f + 0.008f * ctx.Park + MediaLeisureBonus * ctx.Media, 0f, 1f);
 
                 // Eindrücke vom Wohnort → Erinnerungen
                 int street = home.FrontSegmentId;
                 if (ctx.PowerOut) Remember(c, MemoryKind.PowerOutage, 0.35f, street: street, building: home.Id);
                 if (ctx.WaterOut) Remember(c, MemoryKind.WaterOutage, 0.35f, street: street, building: home.Id);
+                // --- G3 erweitert (ohne Zufall: verbraucht keinen RNG, ändert bestehende Abläufe nicht)
+                if (ctx.SewageOut) Remember(c, MemoryKind.SewageBackup, 0.3f, street: street, building: home.Id);
+                if (ctx.DrinkingWater < Utilities.WaterQualitySystem.BadDrinkingWater)
+                    Remember(c, MemoryKind.BadTapWater, 0.2f + 0.6f * (1f - ctx.DrinkingWater), street: street, building: home.Id);
+                if (ctx.Nuclear > 0f && p.Anxious >= NuclearFearAnxious)
+                    Remember(c, MemoryKind.NuclearFear, 0.6f * ctx.Nuclear * p.Anxious, street: street);
+                // --- Ende
                 if (calm < 0.5f && rng.Chance((0.5f - calm) * p.NoiseSensitive * 0.6f))
                     Remember(c, ctx.Air > ctx.Noise ? MemoryKind.Smog : MemoryKind.Noise, 0.3f + (0.5f - calm), street: street);
                 if (safety < 0.35f && rng.Chance(p.Anxious * 0.15f)) Remember(c, MemoryKind.FeelsUnsafe, 0.35f, street: street);
@@ -147,6 +178,12 @@ namespace CityBuilder.Simulation.Citizens
 
             c.Satisfaction = SatisfactionOf(c);
             float moodTarget = 0.5f + 0.5f * MathF.Tanh(c.Memories.MoodSum() * 0.8f) + 0.2f * (c.Satisfaction - 0.6f) - (c.IsIll ? 0.1f : 0f);
+            // G4 erweitert: Medien verstärken die Stimmung leicht (schlechte Nachrichten drücken, gute heben) – nur wer erreicht wird
+            if (home != null && NewsTone != null)
+            {
+                float media = Context(home).Media;
+                if (media > 0f) moodTarget += NewsMoodWeight * media * Math.Clamp(NewsTone(), -1f, 1f);
+            }
             c.Mood = Math.Clamp(c.Mood + (moodTarget - c.Mood) * 0.4f, 0f, 1f);
         }
 
@@ -168,6 +205,21 @@ namespace CityBuilder.Simulation.Citizens
             Math.Clamp((0.55f + 0.12f * b.Level) * (0.5f + 0.5f * b.Condition), 0f, 1f) - (supplied ? 0f : 0.25f);
         // --- Ende G6
 
+        // --- G3/G4 erweitert: Stärken (Platzhalter fürs Balancing, bewusst vorsichtig)
+        /// <summary>Gesundheits-Ziel sinkt um bis zu so viel bei Trinkwasserqualität 0.</summary>
+        public const float DrinkingWaterHealthPenalty = 0.4f;
+        /// <summary>Ruhe/Umwelt sinkt um bis zu so viel × Ängstlichkeit direkt neben dem Atomkraftwerk.</summary>
+        public const float NuclearCalmPenalty = 0.3f;
+        /// <summary>Ab dieser Ängstlichkeit entsteht die Erinnerung „Atomkraftwerk nebenan“.</summary>
+        public const float NuclearFearAnxious = 0.4f;
+        /// <summary>Freizeit je Bewertung bei voller Medienreichweite (≈ +0,04 je Tag gegen −0,35 Abklingen).</summary>
+        public const float MediaLeisureBonus = 0.004f;
+        /// <summary>Bildung (Erwachsene): Ziel + so viel bei voller Medienreichweite.</summary>
+        public const float MediaEducationBonus = 0.08f;
+        /// <summary>Gemüt-Ziel ± so viel bei voller Reichweite und eindeutig guten/schlechten Nachrichten.</summary>
+        public const float NewsMoodWeight = 0.05f;
+        // --- Ende
+
         static float CalmTarget(in HomeContext ctx) =>
             Math.Clamp(1f - Math.Clamp(ctx.Noise * 1.1f + ctx.Air * 1.6f, 0f, 1f) + (ctx.Garbage - 0.5f) * 0.2f - 0.3f * ctx.GarbageLevel, 0f, 1f);
 
@@ -177,7 +229,7 @@ namespace CityBuilder.Simulation.Citizens
             c.Age < 6 ? 0.5f + 0.5f * ctx.EducationPrimary          // Vorschulkind: Grundschule in der Nähe beruhigt die Eltern
             : c.Age < 12 ? 0.1f + 0.9f * ctx.EducationPrimary
             : c.Age < Citizen.AdultAge ? 0.1f + 0.9f * ctx.EducationSecondary
-            : 0.2f + 0.8f * (0.6f * ctx.Library + 0.4f * ctx.Education);
+            : Math.Clamp(0.2f + 0.8f * (0.6f * ctx.Library + 0.4f * ctx.Education) + MediaEducationBonus * ctx.Media, 0f, 1f); // G4 erw.: Medien
 
         float WorkTarget(Citizen c, Building job)
         {
@@ -208,7 +260,10 @@ namespace CityBuilder.Simulation.Citizens
             float jam = MathF.Min(1f, c.Memories.Strength(MemoryKind.TrafficJam));
             if (commuteMeters <= 0f) return 0.75f - 0.1f * jam;
             float t = 1f - Math.Clamp((commuteMeters - 500f) / 3500f, 0f, 0.7f);
-            return Math.Clamp(t - 0.25f * jam - 0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.LongCommute)), 0f, 1f);
+            // ÖPNV: volle/verspätete Busse senken, gute Fahrten heben die Mobilität
+            float bus = -0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusFull)) - 0.1f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusLate))
+                        + 0.1f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusRide));
+            return Math.Clamp(t - 0.25f * jam - 0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.LongCommute)) + bus, 0f, 1f);
         }
 
         /// <summary>Zufriedenheit: gewichteter Mittelwert (Lebensphase × Persönlichkeit).</summary>

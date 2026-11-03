@@ -84,9 +84,14 @@ namespace CityBuilder.Simulation.Utilities
         public int TicksWithoutWater;
         public int PowerNetwork;
         public int WaterNetwork;
+        // --- Abwasser (G3 erweitert): Abwasser wird abgenommen (Kläranlage/Auslass im selben Kanalnetz)
+        public bool HasSewage;
+        public int TicksWithoutSewage;
+        public int SewageNetwork;
+        // --- Ende Abwasser
 
-        public bool Has(UtilityKind k) => k == UtilityKind.Power ? HasPower : HasWater;
-        public int TicksWithout(UtilityKind k) => k == UtilityKind.Power ? TicksWithoutPower : TicksWithoutWater;
+        public bool Has(UtilityKind k) => k == UtilityKind.Power ? HasPower : k == UtilityKind.Sewage ? HasSewage : HasWater;
+        public int TicksWithout(UtilityKind k) => k == UtilityKind.Power ? TicksWithoutPower : k == UtilityKind.Sewage ? TicksWithoutSewage : TicksWithoutWater;
     }
 
     /// <summary>Ein zusammenhängendes Netz einer Versorgungsart mit seiner Bilanz.</summary>

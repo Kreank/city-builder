@@ -63,6 +63,7 @@ namespace CityBuilder.Simulation.Services
         {
             ServiceKinds.Police, ServiceKinds.Fire, ServiceKinds.Health, ServiceKinds.EducationPrimary, ServiceKinds.EducationSecondary,
             ServiceKinds.Library, ServiceKinds.Park, ServiceKinds.Garbage,
+            ServiceKinds.Media, // G4 erweitert: Zeitung/Radio/TV
         };
         static readonly int GarbageChannel = Array.IndexOf(Channels, ServiceKinds.Garbage);
         static readonly int FireChannel = Array.IndexOf(Channels, ServiceKinds.Fire);
@@ -171,6 +172,10 @@ namespace CityBuilder.Simulation.Services
                 utilities.OtherStructureAt = (p, margin) => FacilityAt(p, margin) != null;
             }
         }
+
+        // --- ÖPNV (Hook): überlappt ein fremdes Bauwerk (Mitte, Front, Breite, Tiefe)? Gesetzt vom TransitSystem.
+        public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
+        // --- Ende ÖPNV
 
         public ServiceFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
 
@@ -303,7 +308,8 @@ namespace CityBuilder.Simulation.Services
                 case ServiceKinds.EducationPrimary: return residents * 0.08f;
                 case ServiceKinds.EducationSecondary: return residents * 0.07f;
                 case ServiceKinds.Library:
-                case ServiceKinds.Park: return residents;
+                case ServiceKinds.Park:
+                case ServiceKinds.Media: return residents; // Medien: Leser/Hörer/Zuschauer = Einwohner
                 case ServiceKinds.Garbage: return residents * 0.01f + workers * (b.Zone == ZoneType.Industry ? 0.02f : 0.005f);
                 default: return 0f;
             }
@@ -412,6 +418,10 @@ namespace CityBuilder.Simulation.Services
                 if (f.Id != plan.MovingId &&
                     ServiceGeometry.RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
                     return ServiceBuildError.OverlapsFacility;
+            // --- ÖPNV (Hook): andere Bauwerke (Depots) im Weg
+            if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
+                return ServiceBuildError.OverlapsFacility;
+            // --- Ende ÖPNV
             if (utilities != null)
             {
                 foreach (var f in utilities.Facilities)

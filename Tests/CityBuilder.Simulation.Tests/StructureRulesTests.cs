@@ -4,6 +4,7 @@ using System.Numerics;
 using CityBuilder.Simulation.Core;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
+using CityBuilder.Simulation.Transit;
 using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
 using Xunit;
@@ -265,6 +266,29 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(gas.NetworkId >= 0);
             Assert.Equal(2, u.FacilityCount);
             Assert.True(PlanRoad(w, new Vector2(-100, 200), new Vector2(-100, 2)).IsValid, "alte Fläche ist frei");
+        }
+    
+
+        [Fact]
+        public void MoveDepot_KeepsId_AndRoadBlockerFollows()
+        {
+            var w = SimulationWorld.CreateDefault();
+            Road(w, new Vector2(-300, 0), new Vector2(300, 0));
+            var t = w.Transit;
+            Assert.True(t.SnapDepot(TransitCatalog.BusDepot, new Vector2(-100, 50), out var pos, out float rot));
+            var d = t.TryBuildDepot(TransitCatalog.BusDepot, pos, rot);
+            Assert.NotNull(d);
+            Assert.True(t.SnapDepot(TransitCatalog.BusDepot, new Vector2(100, -50), out var pos2, out float rot2));
+            Assert.Equal(TransitBuildError.OverlapsRoad, t.PlanMoveDepot(d.Id, new Vector2(0, 5), 0f).Error);
+            var plan = t.PlanMoveDepot(d.Id, pos2, rot2);
+            Assert.True(plan.IsValid, plan.Error.ToString());
+            Assert.Equal(TransitCatalog.BusDepot.Cost * TransitSystem.MoveCostShare, plan.Cost, 2);
+            Assert.True(t.MoveDepot(plan));
+            Assert.Same(d, t.GetDepot(d.Id));
+            Assert.Equal(pos2, d.Position);
+            Assert.True(d.HasAccess);
+            Assert.True(PlanRoad(w, new Vector2(-100, 200), new Vector2(-100, 2)).IsValid, "alte Fläche frei");
+            Assert.Equal(RoadBuildError.OverlapsStructure, PlanRoad(w, new Vector2(100, -200), new Vector2(100, -2)).Error);
         }
     }
 }

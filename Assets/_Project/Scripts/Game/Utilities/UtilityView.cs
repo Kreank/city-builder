@@ -74,10 +74,44 @@ namespace CityBuilder.Game.Utilities
                 Sync(u);
             }
             if (pipeRoot != null) pipeRoot.gameObject.SetActive(ground != null && ground.Underground);
+            // --- Abwasser (G3 erweitert): Hausanschlüsse (Zufahrt → Kanal), nur unterirdisch sichtbar
+            if (u.StructureVersion != builtConnections || runner.World.City.Version != builtConnectionsCity)
+            {
+                builtConnections = u.StructureVersion;
+                builtConnectionsCity = runner.World.City.Version;
+                SyncHouseConnections(u);
+            }
+            if (connectionRoot != null) connectionRoot.gameObject.SetActive(ground != null && ground.Underground);
+            // --- Ende
             // Nur Darstellung: Rotoren drehen sich mit Echtzeit (die Simulation kennt keine Rotorstellung)
             float spin = Time.deltaTime * 60f * (runner.IsPaused ? 0f : 1f);
             foreach (var r in rotors) if (r != null) r.Rotate(0f, 0f, spin, Space.Self);
         }
+
+        // --- Abwasser (G3 erweitert): Hausanschlüsse nach ConnectionRules (Zufahrt → nächster Punkt des Kanals)
+        Transform connectionRoot;
+        int builtConnections = -1, builtConnectionsCity = -1;
+
+        void SyncHouseConnections(UtilitySystem u)
+        {
+            if (connectionRoot == null) connectionRoot = NewRoot("House Connections");
+            for (int i = connectionRoot.childCount - 1; i >= 0; i--) Destroy(connectionRoot.GetChild(i).gameObject);
+            var color = new Color(0.5f, 0.36f, 0.2f);
+            float depth = UtilityTool.PipeDepth + 1.5f; // wie die Abwasserkanäle
+            foreach (var b in runner.World.City.Buildings)
+            {
+                if (!b.IsConstructed) continue;
+                var line = u.ConnectedLine(b, UtilityKind.Sewage);
+                if (line == null || !ConnectionRules.HouseConnection(line, b, out var from, out var to)) continue;
+                var a = SimConvert.ToWorld(from, Ground(from) - depth * 0.6f);
+                var c = SimConvert.ToWorld(to, Ground(to) - depth);
+                var delta = c - a;
+                if (delta.sqrMagnitude < 1e-4f) continue;
+                Part(connectionRoot, cylinder, (a + c) * 0.5f, Quaternion.FromToRotation(Vector3.up, delta.normalized),
+                    new Vector3(0.5f, delta.magnitude * 0.5f, 0.5f), color, local: false);
+            }
+        }
+        // --- Ende
 
         // ------------------------------------------------------------ Abgleich mit der Simulation
 
@@ -205,6 +239,29 @@ namespace CityBuilder.Game.Utilities
                     Box(root, new Vector3(4f, 1.2f, -4f), new Vector3(3f, 2.4f, 3f), concrete); // Brunnenhaus
                     break;
                 }
+                // --- Atom/Abwasser (G3 erweitert): Platzhalter, bis NuclearPlant/SewagePlant.fbx im Katalog sind
+                case "power_nuclear":
+                {
+                    var tower = new Color(0.82f, 0.81f, 0.78f);
+                    Cyl(root, new Vector3(-18f, 14f, 10f), 12f, 28f, tower); // Kühltürme
+                    Cyl(root, new Vector3(6f, 14f, 10f), 12f, 28f, tower);
+                    Part(root, sphere, new Vector3(16f, 10f, -12f), Quaternion.identity, new Vector3(18f, 20f, 18f), new Color(0.88f, 0.88f, 0.86f)); // Reaktorkuppel
+                    Box(root, new Vector3(-10f, 6f, -14f), new Vector3(26f, 12f, 16f), new Color(0.6f, 0.62f, 0.66f));
+                    break;
+                }
+                case "sewage_plant":
+                {
+                    var basin = new Color(0.35f, 0.32f, 0.22f);
+                    for (int i = 0; i < 3; i++)
+                        Cyl(root, new Vector3(-12f + i * 12f, 1.2f, 6f), 5f, 2.4f, basin); // Klärbecken
+                    Box(root, new Vector3(0f, 3f, -9f), new Vector3(20f, 6f, 10f), new Color(0.7f, 0.72f, 0.7f));
+                    break;
+                }
+                case "sewage_outlet":
+                    Box(root, new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 4f), new Color(0.45f, 0.42f, 0.38f));
+                    Part(root, cylinder, new Vector3(0f, 0.6f, 3.5f), Quaternion.Euler(90f, 0f, 0f), new Vector3(1.4f, 2.5f, 1.4f), new Color(0.4f, 0.3f, 0.2f));
+                    break;
+                // --- Ende
                 default:
                     Box(root, new Vector3(0f, 5f, 0f), new Vector3(w * 0.8f, 10f, d * 0.8f), concrete);
                     break;
@@ -356,14 +413,14 @@ namespace CityBuilder.Game.Utilities
 
         GameObject BuildPipe(UtilityLine l)
         {
-            var root = new GameObject($"Wasserrohr #{l.Id}").transform;
+            var root = new GameObject($"{UtilityCatalog.LineName(l.Kind)} #{l.Id}").transform;
             root.SetParent(pipeRoot, false);
-            var color = new Color(0.2f, 0.5f, 0.95f);
+            var color = l.Kind == UtilityKind.Sewage ? new Color(0.5f, 0.36f, 0.2f) : new Color(0.2f, 0.5f, 0.95f); // Abwasser braun
             int n = Mathf.Max(1, Mathf.CeilToInt(l.Length / 8f));
             Vector3 Point(int i)
             {
                 var p = SimVector2.Lerp(l.A, l.B, i / (float)n);
-                return SimConvert.ToWorld(p, Ground(p) - UtilityTool.PipeDepth);
+                return SimConvert.ToWorld(p, Ground(p) - UtilityTool.PipeDepth - (l.Kind == UtilityKind.Sewage ? 1.5f : 0f)); // Kanal tiefer als Wasser
             }
             var prev = Point(0);
             for (int i = 1; i <= n; i++)

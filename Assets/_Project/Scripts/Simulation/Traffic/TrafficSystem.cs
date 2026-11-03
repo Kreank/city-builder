@@ -32,7 +32,7 @@ namespace CityBuilder.Simulation.Traffic
     /// (Fahrzeugfolgemodell IDM), wählt Spuren/Spurwechsel, beachtet Vorfahrt, Schilder und Ampeln.
     /// Verkehrszeit ist von der Kalenderzeit entkoppelt: 1 Tick = <see cref="Dt"/> Sekunden Fahrzeit.
     /// </summary>
-    public sealed class TrafficSystem : ISimulationSystem
+    public sealed partial class TrafficSystem : ISimulationSystem
     {
         public const float Dt = 0.25f;
         const float MinGap = 2f;
@@ -212,6 +212,9 @@ namespace CityBuilder.Simulation.Traffic
         void StepOnLane(Vehicle v, Lane lane)
         {
             v.LastTick = tick;
+            // --- ÖPNV: Linienbus steht an der Haltestelle (Ein-/Aussteigen)
+            if (v.IsScheduled && HoldAtStop(v)) return;
+            // --- Ende ÖPNV
             if (v.Planned != null && v.Planned.From != lane) v.Planned = null;
 
             int index = lane.Vehicles.IndexOf(v);
@@ -254,6 +257,13 @@ namespace CityBuilder.Simulation.Traffic
                 }
                 if (endGap < gap) { gap = endGap; leaderSpeed = endSpeed; }
             }
+            // --- ÖPNV: Linienbus bremst bis zur Haltestelle (wie vor einem stehenden Fahrzeug)
+            if (v.IsScheduled && v.IsOnFinalEdge)
+            {
+                float stopGap = ArrivalS(v, lane) + MinGap - v.S;
+                if (stopGap < gap) { gap = MathF.Max(0.1f, stopGap); leaderSpeed = 0f; }
+            }
+            // --- Ende ÖPNV
 
             Advance(v, desired, gap, leaderSpeed, leader);
 
@@ -265,8 +275,17 @@ namespace CityBuilder.Simulation.Traffic
 
             if (v.IsOnFinalEdge && v.S >= ArrivalS(v, lane) - 1f)
             {
-                Arrive(v);
-                return;
+                // --- ÖPNV: Linienbus kommt an der Haltestelle an (bleibt stehen, statt zu verschwinden)
+                if (v.IsScheduled)
+                {
+                    if (v.Speed < 1.5f || v.S >= ArrivalS(v, lane)) { ReachStop(v); return; }
+                }
+                else
+                // --- Ende ÖPNV
+                {
+                    Arrive(v);
+                    return;
+                }
             }
             if (v.S >= length)
             {
@@ -389,6 +408,7 @@ namespace CityBuilder.Simulation.Traffic
                 float score = c.To.Vehicles.Count + c.Vehicles.Count;
                 if (after.HasValue && !HasConnection(c.To, after.Value, v.Class)) score += 20f;
                 if (v.Class == VehicleClass.Bus && c.To.Definition.Kind == LaneKind.Bus) score -= 5f;
+                if (v.IsScheduled && !after.HasValue) score -= c.To.Rank * 3f; // ÖPNV: vor der Haltestelle rechts einordnen
                 if (score < bestScore) { bestScore = score; best = c; }
             }
             return best;
@@ -415,7 +435,9 @@ namespace CityBuilder.Simulation.Traffic
 
         List<EdgeKey> FindRoute(Vehicle v, EdgeKey from, float s, Lane fromLane) =>
             v.HasSegmentDestination
-                ? Paths.FindPathToSegment(from, s, v.DestinationSegmentId, v.DestinationT, v.Class, fromLane)
+                ? v.DestinationDirection != 0 // ÖPNV: Haltestelle auf einer Straßenseite
+                    ? Paths.FindPathToEdge(from, s, new EdgeKey(v.DestinationSegmentId, v.DestinationDirection == 1), v.DestinationT, v.Class, fromLane)
+                    : Paths.FindPathToSegment(from, s, v.DestinationSegmentId, v.DestinationT, v.Class, fromLane)
                 : Paths.FindPath(from, v.Destination, v.Class, fromLane);
 
         /// <summary>Wechselt auf eine Nachbarspur, wenn nur von dort die nächste Abbiegung möglich ist.</summary>
@@ -461,7 +483,7 @@ namespace CityBuilder.Simulation.Traffic
             if (v.Lane == null || v.InJunction) return;
             v.Reroutes++;
             var path = FindRoute(v, v.Lane.Edge, v.S, v.Lane) ?? FindRoute(v, v.Lane.Edge, v.S, null);
-            if (path == null && v.TripId != 0)
+            if (path == null && (v.TripId != 0 || v.IsScheduled)) // ÖPNV: Linienbus meldet sich beim TransitSystem ab
             {
                 // Bürgerfahrt: Ziel nicht mehr erreichbar → abbrechen, das Bürgersystem lässt den Bürger trotzdem ankommen
                 Remove(v, despawned: true);
@@ -673,6 +695,7 @@ namespace CityBuilder.Simulation.Traffic
             v.Lane = null;
             v.Connection = null;
             if (despawned) Stats.Despawned++;
+            if (v.IsScheduled) ScheduledVehicleRemoved?.Invoke(v, despawned); // ÖPNV
             if (v.TripId != 0)
             {
                 if (v.TripId > 0) { if (arrived) Stats.CitizenTripsArrived++; else Stats.CitizenTripsFailed++; } // G5: Lkw < 0
