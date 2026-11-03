@@ -129,7 +129,11 @@ namespace CityBuilder.Simulation.Core
         public TrafficSystem Traffic { get; private set; }
 
         /// <summary>Welt mit den Standard-Systemen.</summary>
-        public static SimulationWorld CreateDefault(WorldSettings settings = null, int seed = 12345)
+        /// <param name="newGame">
+        /// Neue Welt (Standard): Inhalte des Kartenstarts erzeugen (vorgebaute Autobahn, s. <see cref="WorldSettings.PrebuiltConnections"/>).
+        /// Beim Laden false – die Straßen und Gateways kommen dann aus dem Spielstand.
+        /// </param>
+        public static SimulationWorld CreateDefault(WorldSettings settings = null, int seed = 12345, bool newGame = true)
         {
             var world = new SimulationWorld(settings ?? new WorldSettings());
             world.Seed = seed; // Speichern & Laden: CreateDefault(settings, seed) baut die Welt beim Laden neu auf
@@ -213,6 +217,14 @@ namespace CityBuilder.Simulation.Core
                 if (world.Media != null) CityBuilder.Simulation.Trade.TradeMedia.Connect(world.Trade, world.Media); // Schlagzeilen zum Handel
             }
             // --- Ende Etappe 8
+
+            // --- Außenanbindungen (Gateways): Autobahn/Bahn/Wasser/Luft am Kartenrand; Zuzug und Handel über Anschlüsse,
+            // Durchgangsverkehr nach Wichtigkeit, Bahnkorridor bleibt frei. Läuft zuletzt (zählt Verkehr/Handel des Ticks).
+            world.Gateways = new Gateways.GatewaySystem(world);
+            world.AddSystem(world.Gateways);
+            world.Gateways.Connect();
+            if (newGame && world.Settings.PrebuiltConnections) world.Gateways.Generate();
+            // --- Ende Gateways
             return world;
         }
 
@@ -247,6 +259,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }
+
+        /// <summary>Außenanbindungen (Autobahn, Bahn, Wasser, Luft) am Kartenrand. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Gateways.GatewaySystem Gateways { get; private set; }
 
         // --- Speichern & Laden
         /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>

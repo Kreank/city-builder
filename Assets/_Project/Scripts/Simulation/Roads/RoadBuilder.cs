@@ -56,6 +56,8 @@ namespace CityBuilder.Simulation.Roads
         InsufficientFunds,
         /// <summary>Fahrbahn (inkl. Gehweg) schneidet ein Dienst-/Versorgungsbauwerk (<see cref="RoadPlan.BlockedBy"/>).</summary>
         OverlapsStructure,
+        /// <summary>Gateways: Straße gehört der Welt (vorgebaute Autobahn/Anschlussstelle) – kein Abriss/Umbau.</summary>
+        Locked,
     }
 
     public sealed class RoadPlan
@@ -478,6 +480,7 @@ namespace CityBuilder.Simulation.Roads
         {
             if (type == null || segment == null) return RoadBuildError.InvalidType;
             if (segment.Type == type) return RoadBuildError.Duplicate;
+            if (segment.IsLocked) return RoadBuildError.Locked; // Gateways: Fernstraße der Welt
             if (segment.MaxSlope > type.MaxSlope + 1e-3f) return RoadBuildError.TooSteep;
             if (segment.IsRoundabout && (!type.IsOneWay || type.Category != RoadCategory.City)) return RoadBuildError.InvalidType;
             foreach (var node in new[] { segment.Start, segment.End })
@@ -669,7 +672,7 @@ namespace CityBuilder.Simulation.Roads
             var inside = new List<int>();
             foreach (var s in network.Segments)
             {
-                if (s.IsRoundabout) continue;
+                if (s.IsRoundabout || s.IsLocked) continue; // Gateways: Fernstraße der Welt bleibt
                 float level = plan.FollowTerrain ? network.Ground.HeightAt(s.Evaluate(0.5f)) : plan.Height;
                 if (MathF.Abs(s.HeightAt(0.5f) - level) > RoadNetwork.SameLevelTolerance * 2f) continue;
                 if (Vector2.Distance(s.Evaluate(0.5f), plan.Center) < plan.Radius - 1f &&
@@ -720,10 +723,26 @@ namespace CityBuilder.Simulation.Roads
         public static float DemolishRefund(RoadSegment segment) =>
             (float)(SegmentValue(segment) * Economy.EconomyRules.DemolitionRefundShare);
 
-        /// <summary>Spieler-Abriss: entfernt das Segment und schreibt den Abrisserlös gut.</summary>
+        // --- Gateways: Straßen der Welt (RoadSegmentFlags.Locked)
+        /// <summary>Hinweis, warum ein Segment nicht abgerissen/umgebaut/umgedreht werden darf (null = erlaubt).</summary>
+        public static string LockedReason(RoadSegment segment) =>
+            segment != null && segment.IsLocked
+                ? "Gehört zum Fernstraßennetz (Autobahn/Anschlussstelle) – nicht abreißbar. Anschließen: am Zubringer weiterbauen."
+                : null;
+
+        /// <summary>Spieler dreht die Fahrtrichtung um – nicht bei Straßen der Welt. Liefert das neue Segment oder null.</summary>
+        public static RoadSegment Reverse(RoadNetwork network, RoadSegment segment)
+        {
+            if (segment == null || !network.Contains(segment) || segment.IsLocked) return null;
+            return network.Reverse(segment);
+        }
+        // --- Ende Gateways
+
+        /// <summary>Spieler-Abriss: entfernt das Segment und schreibt den Abrisserlös gut (nicht bei Straßen der Welt).</summary>
         public static bool Demolish(RoadNetwork network, RoadSegment segment)
         {
             if (segment == null || !network.Contains(segment)) return false;
+            if (segment.IsLocked) return false; // Gateways: vorgebaute Fernstraße – nur der Zubringer ist abreißbar
             float refund = DemolishRefund(segment);
             if (!network.RemoveSegment(segment.Id)) return false;
             network.Budget?.Refund(refund);

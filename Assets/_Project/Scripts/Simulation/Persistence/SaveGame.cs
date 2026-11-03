@@ -24,7 +24,8 @@ namespace CityBuilder.Simulation.Persistence
         public const string GameVersion = "0.6";
         /// <summary>Abschnitt mit Einstellungen, Seed und Uhr – wird vor allen anderen gelesen (baut die Welt).</summary>
         public const string WorldSectionId = "world";
-        const int WorldSectionVersion = 1;
+        /// <summary>v2: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse).</summary>
+        const int WorldSectionVersion = 2;
 
         // ------------------------------------------------------------ Speichern
 
@@ -128,7 +129,7 @@ namespace CityBuilder.Simulation.Persistence
             catch (SaveFormatException e) { throw new SaveLoadException($"Weltdaten beschädigt: {e.Message}", e); }
 
             SimulationWorld world;
-            try { world = SimulationWorld.CreateDefault(settings, seed); }
+            try { world = SimulationWorld.CreateDefault(settings, seed, newGame: false); } // Gateways: Autobahn kommt aus dem Stand
             catch (Exception e) when (e is ArgumentException || e is OverflowException || e is OutOfMemoryException || e is IndexOutOfRangeException)
             {
                 throw new SaveLoadException("Weltdaten ungültig (Welt kann nicht erzeugt werden).", e);
@@ -193,6 +194,10 @@ namespace CityBuilder.Simulation.Persistence
             }
             w.Int(world.Seed);
             w.Long(world.Clock.Tick);
+            // v2 Gateways
+            w.Bool(s.PrebuiltConnections);
+            w.Bool(s.RequireGatewayForMoveIn);
+            w.Bool(s.RequireGatewayForTrade);
         }
 
         static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick)
@@ -218,6 +223,12 @@ namespace CityBuilder.Simulation.Persistence
                 };
             seed = r.Int();
             tick = r.Long();
+            if (version >= 2) // Gateways (v1: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
+            {
+                s.PrebuiltConnections = r.Bool();
+                s.RequireGatewayForMoveIn = r.Bool();
+                s.RequireGatewayForTrade = r.Bool();
+            }
             if (!(s.SizeMeters >= 64f && s.SizeMeters <= 65536f) || !(s.EnvironmentCellSize >= 1f) || !(s.TerrainCellSize >= 0.5f) || tick < 0)
                 throw new SaveFormatException("Welteinstellungen ungültig.");
             if (s.SizeMeters / s.TerrainCellSize > 8192f || s.SizeMeters / s.EnvironmentCellSize > 8192f)

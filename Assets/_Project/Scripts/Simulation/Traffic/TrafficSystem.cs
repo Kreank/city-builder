@@ -61,6 +61,11 @@ namespace CityBuilder.Simulation.Traffic
         public float Demand = 1f;
         /// <summary>Durchgangsverkehr je Außenanschluss und Tick (bei Demand 1).</summary>
         public float ThroughTrafficRate = 0.02f;
+        // --- Gateways (Hook, klein): Gewichte des Durchgangsverkehrs. (Start, null) = Gewicht als Startpunkt (Menge
+        // skaliert mit der Summe), (Start, Ziel) = Gewicht des Ziels (0 = nicht, z. B. Wende am selben Gateway).
+        // null = wie bisher (gleich verteilt, alle Ziele außer dem Start).
+        public Func<RoadNode, RoadNode, float> ThroughTrafficWeight;
+        // --- Ende Gateways
 
         /// <summary>Bürgerfahrt beendet: (Fahrzeug, angekommen?). Wird während des Ticks ausgelöst – Empfänger dürfen keine Fahrten starten.</summary>
         public event Action<Vehicle, bool> TripEnded;
@@ -606,14 +611,29 @@ namespace CityBuilder.Simulation.Traffic
         {
             RefreshEndpoints();
             if (endpoints.Count < 2) return;
-            float expected = Demand * endpoints.Count * ThroughTrafficRate;
+            float weight = endpoints.Count;
+            if (ThroughTrafficWeight != null) { weight = 0f; foreach (var e in endpoints) weight += MathF.Max(0f, ThroughTrafficWeight(e.Node, null)); } // Gateways
+            float expected = Demand * weight * ThroughTrafficRate;
             int count = (int)expected + (rng.NextDouble() < expected - (int)expected ? 1 : 0);
-            for (int i = 0; i < count && Vehicles.Count < MaxVehicles; i++) TrySpawnOne();
+            for (int i = 0; i < count && Vehicles.Count < MaxVehicles; i++) TrySpawnOne(weight);
         }
 
-        void TrySpawnOne()
+        /// <summary>Gateways: Startpunkt nach Gewicht (ein Zufallswert wie bisher).</summary>
+        Endpoint PickOrigin(float total)
         {
-            var origin = endpoints[rng.Next(endpoints.Count)];
+            if (ThroughTrafficWeight == null || total <= 0f) return endpoints[rng.Next(endpoints.Count)];
+            double roll = rng.NextDouble() * total;
+            foreach (var e in endpoints)
+            {
+                roll -= MathF.Max(0f, ThroughTrafficWeight(e.Node, null));
+                if (roll < 0) return e;
+            }
+            return endpoints[endpoints.Count - 1];
+        }
+
+        void TrySpawnOne(float total)
+        {
+            var origin = PickOrigin(total);
             if (origin.Out.Count == 0) return;
 
             VehicleClass cls;
@@ -672,6 +692,23 @@ namespace CityBuilder.Simulation.Traffic
         Endpoint PickDestination(VehicleClass cls, RoadNode except)
         {
             if (endpoints.Count == 0) return null;
+            if (ThroughTrafficWeight != null) // --- Gateways: Ziel nach Gewicht (ein Zufallswert)
+            {
+                double sum = 0;
+                foreach (var e in endpoints)
+                    if (e.Node != except && e.In.Any(l => (l.Allowed & cls) != 0)) sum += MathF.Max(0f, ThroughTrafficWeight(except, e.Node));
+                if (sum <= 0) return null;
+                double roll = rng.NextDouble() * sum;
+                foreach (var e in endpoints)
+                {
+                    if (e.Node == except || !e.In.Any(l => (l.Allowed & cls) != 0)) continue;
+                    float w = MathF.Max(0f, ThroughTrafficWeight(except, e.Node));
+                    if (w <= 0f) continue;
+                    roll -= w;
+                    if (roll < 0) return e;
+                }
+                return null;
+            }
             for (int i = 0; i < 6; i++)
             {
                 var e = endpoints[rng.Next(endpoints.Count)];
