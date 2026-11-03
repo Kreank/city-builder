@@ -50,11 +50,22 @@ namespace CityBuilder.Editor
             Report();
         }
 
+        /// <summary>Ordner direkt unter Assets/, die zum Projekt gehören und nie verschoben werden.</summary>
+        static readonly string[] ProjectFolders =
+        {
+            "_Project", "ThirdParty", "Scenes", "Settings", "Plugins", "Resources", "StreamingAssets", "Editor", "Gizmos",
+            "TextMesh Pro", "UI Toolkit",
+        };
+
         [MenuItem("City Builder/Third Party/Organize")]
         public static void Organize()
         {
             if (!AssetDatabase.IsValidFolder(Root)) AssetDatabase.CreateFolder("Assets", "ThirdParty");
-            foreach (var src in PackageRoots)
+            // Bekannte Paketordner plus jeder andere neue Ordner direkt unter Assets/ (neu importierte Store-Pakete)
+            var roots = PackageRoots.Concat(AssetDatabase.GetSubFolders("Assets")
+                    .Where(f => !ProjectFolders.Contains(Path.GetFileName(f), System.StringComparer.OrdinalIgnoreCase)))
+                .Distinct().ToList();
+            foreach (var src in roots)
             {
                 if (!AssetDatabase.IsValidFolder(src)) continue;
                 string dst = $"{Root}/{Path.GetFileName(src)}";
