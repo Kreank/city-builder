@@ -168,6 +168,10 @@ namespace CityBuilder.Game.Roads
             }
             Ensure<CityBuilder.Game.Utilities.UtilityPanel>().Init(this, utilityOverlay);
             // --- Ende G3
+
+            // --- Stadtkasse: Fenster (Taste M)
+            Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
+            // --- Ende Stadtkasse
         }
 
         /// <summary>Unterirdisch-Ansicht erzwingen (G3: Wasserrohre verlegen).</summary>
@@ -712,7 +716,7 @@ namespace CityBuilder.Game.Roads
             ShowSegmentHighlight(segment, segment.Type.Width + 1f, false);
             if (clicked)
             {
-                roads.RemoveSegment(segment.Id);
+                RoadBuilder.Demolish(roads, segment); // Stadtkasse: Abrisserlös
                 previewRenderer.enabled = false;
             }
         }
@@ -823,6 +827,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.InsufficientClearance: return $"Zu wenig Durchfahrtshöhe (min. {RoadBuilder.Clearance:0.#} m)";
                 case RoadBuildError.InvalidHeight: return $"Höhe {RoadBuilder.MinHeight:0} bis {RoadBuilder.MaxHeight:0} m über Gelände";
                 case RoadBuildError.OverWater: return "Über Wasser nur als Brücke – Bauhöhe erhöhen (Bild↑)";
+                case RoadBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 default: return null;
             }
         }
