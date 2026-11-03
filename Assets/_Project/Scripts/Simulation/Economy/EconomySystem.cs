@@ -85,6 +85,11 @@ namespace CityBuilder.Simulation.Economy
 
         public float TaxRate(TaxKind kind) => taxRates[(int)kind];
 
+        // --- G6 Bodenwert (Hook): Faktor der Grundsteuer je Gebäude (EconomyRules.PropertyTaxFactor aus dem Bodenwert).
+        // null = 1 (alte Pauschale je Haushalt). Gesetzt von SimulationWorld (LandValueSystem.PropertyTaxFactor).
+        public Func<Building, float> PropertyTaxFactor { get; set; }
+        // --- Ende G6
+
         /// <summary>Setzt einen Steuersatz (0..0,30; auf ganze Prozent gerundet).</summary>
         public void SetTaxRate(TaxKind kind, float rate)
         {
@@ -190,8 +195,11 @@ namespace CityBuilder.Simulation.Economy
                 foreach (var b in city.Buildings)
                 {
                     if (!b.IsConstructed) continue;
+                    // --- G6 Bodenwert: Grundsteuer = bewohnte Haushalte × Basis × Bodenwert-Faktor × Satz Wohnen
                     if (b.OccupiedHouseholds > 0)
-                        d.Add(BudgetCategory.ResidentialTax, b.OccupiedHouseholds * EconomyRules.HouseholdTaxBase * TaxRate(TaxKind.Residential));
+                        d.Add(BudgetCategory.ResidentialTax, b.OccupiedHouseholds * EconomyRules.HouseholdTaxBase
+                            * (PropertyTaxFactor?.Invoke(b) ?? 1f) * TaxRate(TaxKind.Residential));
+                    // --- Ende G6
                     if (b.Workers > 0)
                     {
                         var kind = TaxKindOf(b.Zone);

@@ -119,6 +119,12 @@ namespace CityBuilder.Simulation.Core
             CitizenServiceBinding.Connect(world.Citizens, world.Services);
             // --- Ende G4
 
+            // --- G6 Bodenwert & Ausbaustufen (nach Diensten: liest Abdeckung, Müll, Zufriedenheit; vor der Kasse: Grundsteuer)
+            world.LandValue = new LandValue.LandValueSystem(world);
+            world.AddSystem(world.LandValue);
+            world.City.LotPreference = world.LandValue.GrowthPreference;
+            // --- Ende G6
+
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
             world.Roads.Budget = world.Economy;
@@ -127,6 +133,7 @@ namespace CityBuilder.Simulation.Core
             world.City.DemandModifier = world.Economy.DemandFactor;
             world.Services.Budget = world.Economy;          // G4: Baukosten Dienste
             world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
+            world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             return world;
@@ -143,6 +150,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Dienste (G4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceSystem Services { get; private set; }
+
+        /// <summary>G6 Bodenwert, Ausbaustufen, Gebäudezustand. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public LandValue.LandValueSystem LandValue { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }
