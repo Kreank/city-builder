@@ -220,7 +220,8 @@ namespace CityBuilder.Game.Inspect
                 if (b != null) ui.FieldLink(label, BuildingName(b), () => Go(SelectionKind.Building, b.Id));
                 else ui.Field(label, $"Gebäude #{p.BuildingId} (abgerissen)", Tone.Muted);
             }
-            else ui.Field(label, p.IsOutside ? $"außerhalb (Außenanschluss {p.ConnectionNodeId})" : "–");
+            else if (p.IsOutside) GatewayField(ui, world, label, p.ConnectionNodeId); // Außenanbindung: Gateway-Name
+            else ui.Field(label, "–");
         }
 
         /// <summary>Bürger als Listenzeile mit Avatar und Stimmung; Klick wählt ihn aus.</summary>

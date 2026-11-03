@@ -70,6 +70,14 @@ namespace CityBuilder.Game.Inspect
             return true;
         }
 
+        /// <summary>Ort außerhalb als Zeile: Gateway anklickbar („A 7 Richtung …“), sonst Außenanschluss/Umland.</summary>
+        void GatewayField(Ui ui, SimulationWorld world, string label, int nodeId)
+        {
+            var g = world.Gateways?.OfNode(nodeId);
+            if (g != null) ui.FieldLink(label, g.Name, () => Go(SelectionKind.Gateway, g.Id));
+            else ui.Field(label, nodeId != 0 ? $"außerhalb (Außenanschluss {nodeId})" : "Umland (ohne Anschluss)");
+        }
+
         static string TargetText(SimulationWorld world, Gateway g)
         {
             switch (g.TargetKind)

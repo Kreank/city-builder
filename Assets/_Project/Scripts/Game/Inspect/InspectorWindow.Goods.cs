@@ -114,10 +114,10 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Art", KindName(s));
                 if (s.FromBuildingId != 0 && world.City.GetBuilding(s.FromBuildingId) != null)
                     ui.FieldLink("Von", FirmName(world, s.FromBuildingId), () => Go(SelectionKind.Building, s.FromBuildingId));
-                else ui.Field("Von", "Außenanschluss (Weltmarkt)");
+                else GatewayField(ui, world, "Von", s.ConnectionNodeId); // Außenanbindung: welcher Gateway
                 if (s.ToBuildingId != 0 && world.City.GetBuilding(s.ToBuildingId) != null)
                     ui.FieldLink("Nach", FirmName(world, s.ToBuildingId), () => Go(SelectionKind.Building, s.ToBuildingId));
-                else ui.Field("Nach", "Außenanschluss (Weltmarkt)");
+                else GatewayField(ui, world, "Nach", s.ConnectionNodeId);
                 ui.Field("Warenwert", Money(s.Value));
                 ui.Field("Transport (geschätzt)", Money(s.TransportCost) + " · wird mit der echten Fahrzeit abgerechnet");
             }
