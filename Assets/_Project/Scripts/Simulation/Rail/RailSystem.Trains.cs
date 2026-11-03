@@ -79,15 +79,37 @@ namespace CityBuilder.Simulation.Rail
         {
             var entry = EntryEdge(entryNode);
             if (!entry.HasValue) return false;
+            return PlanRouteFrom(t, entry.Value, exitNode, null);
+        }
+
+        /// <summary>
+        /// Fahrweg ab <paramref name="from"/> (inkl.) zur Ausfahrt planen; <paramref name="prefix"/> = schon befahrene/reservierte
+        /// Stücke davor (bleiben unverändert, Halte darauf auch).
+        /// </summary>
+        bool PlanRouteFrom(Train t, EdgeKey from, int exitNode, List<EdgeKey> prefix)
+        {
             Func<EdgeKey, bool> atExit = e => { var s = Tracks.GetSegment(e.SegmentId); return s != null && EndNode(s, e).Id == exitNode; };
-            List<EdgeKey> best = FindPath(entry.Value, atExit);
+            List<EdgeKey> best = FindPath(from, atExit);
             if (best == null) return false;
+            var entry = (EdgeKey?)from;
+            float prefixEnd = 0f;
+            var keptStops = new List<(int station, float s)>();
+            List<float> prefixLengths = null;
+            if (prefix != null)
+            {
+                prefixLengths = t.EdgeLength.GetRange(0, prefix.Count); // alte Längen: Stücke hinter dem Zug können schon umgebaut sein
+                foreach (float len in prefixLengths) prefixEnd += len;
+                for (int k = 0; k < t.Stops.Count; k++) if (t.Stops[k].s <= prefixEnd + t.Length) keptStops.Add(t.Stops[k]);
+            }
             var kind = t.Type.Kind == TrainKind.Intercity ? StationKind.Passenger : StationKind.Freight;
             float bestLen = float.MaxValue;
             List<EdgeKey> via = null;
             foreach (var st in stations)
             {
                 if (st.Type.Kind != kind || !st.InService) continue;
+                bool served = false;
+                foreach (var x in keptStops) if (x.station == st.Id) served = true;
+                if (served) continue; // schon gehalten bzw. Halt liegt auf dem behaltenen Stück
                 foreach (var p in st.PlatformList)
                     for (int k = 0; k < 2; k++)
                     {
@@ -103,11 +125,17 @@ namespace CityBuilder.Simulation.Rail
                     }
             }
             if (via != null) best = via;
-            SetRoute(t, best);
-            // Halte: alle Bahnhöfe passender Art, deren Bahnsteig auf dem Fahrweg liegt
+            if (prefix != null) { var full = new List<EdgeKey>(prefix); full.AddRange(best); best = full; }
+            SetRoute(t, best, prefixLengths);
+            // Halte: alle Bahnhöfe passender Art, deren Bahnsteig auf dem Fahrweg liegt (auf dem behaltenen Stück: die alten)
+            int done = 0;
+            for (int k = 0; k < keptStops.Count; k++) if (k < t.NextStop) done++;
             t.Stops.Clear();
-            t.NextStop = 0;
-            for (int i = 0; i < t.Route.Count; i++)
+            t.Stops.AddRange(keptStops);
+            t.NextStop = Math.Min(t.NextStop, done);
+            if (prefix == null) t.NextStop = 0;
+            int firstNew = prefix?.Count ?? 0;
+            for (int i = firstNew; i < t.Route.Count; i++)
             {
                 var e = t.Route[i];
                 foreach (var st in stations)
@@ -136,13 +164,14 @@ namespace CityBuilder.Simulation.Rail
             return s;
         }
 
-        void SetRoute(Train t, List<EdgeKey> route)
+        void SetRoute(Train t, List<EdgeKey> route, List<float> knownLengths = null)
         {
             t.Route.Clear(); t.RouteStart.Clear(); t.EdgeLength.Clear();
             float s = 0f;
-            foreach (var e in route)
+            for (int i = 0; i < route.Count; i++)
             {
-                float len = Tracks.GetSegment(e.SegmentId).Length;
+                var e = route[i];
+                float len = knownLengths != null && i < knownLengths.Count ? knownLengths[i] : Tracks.GetSegment(e.SegmentId).Length;
                 t.Route.Add(e);
                 t.RouteStart.Add(s);
                 t.EdgeLength.Add(len);
@@ -165,8 +194,21 @@ namespace CityBuilder.Simulation.Rail
                     int exit = t.FromGatewayId == GatewayA ? Track1EndNode : Track2EndNode;
                     if (!PlanRoute(t, entry, exit)) CancelTrain(t);
                 }
-                else CancelTrain(t); // Gleis unter/vor dem Zug weg (sollte durch die Belegt-Sperre nicht vorkommen)
+                else if (!Replan(t)) CancelTrain(t); // kein Weg mehr zur Ausfahrt
             }
+        }
+
+        /// <summary>
+        /// Fahrweg voraus wurde umgebaut (Weiche eingebaut, Gleis abgerissen): ab dem letzten reservierten Stück neu planen –
+        /// reservierte Stücke sind vor Umbau geschützt, die Indizes davor bleiben gleich.
+        /// </summary>
+        bool Replan(Train t)
+        {
+            int keep = Math.Max(t.ReservedUntil, t.HeadIndex);
+            if (keep < 0 || keep >= t.Route.Count || Tracks.GetSegment(t.Route[keep].SegmentId) == null) return false;
+            int exit = t.FromGatewayId == GatewayA ? Track1EndNode : Track2EndNode;
+            var prefix = t.Route.GetRange(0, keep);
+            return PlanRouteFrom(t, t.Route[keep], exit, prefix);
         }
 
         // ------------------------------------------------------------ Einfahren

@@ -52,6 +52,7 @@ namespace CityBuilder.Simulation.Rail
             {
                 w.Int(t.Id); w.String(t.Type.Id); w.Name(t.State); w.Int(t.FromGatewayId); w.Int(t.ToGatewayId);
                 w.List(t.Route, e => { w.Int(e.SegmentId); w.Bool(e.Along); });
+                w.List(t.EdgeLength, w.Float); // Stücke hinter dem Zug können schon umgebaut sein
                 w.Float(t.HeadS); w.Float(t.PrevHeadS); w.Float(t.Speed);
                 w.Int(t.ReservedUntil); w.Int(t.ReleasedBefore); w.Int(t.HeadIndex);
                 w.List(t.Stops, x => { w.Int(x.station); w.Float(x.s); });
@@ -128,10 +129,13 @@ namespace CityBuilder.Simulation.Rail
                 t.Type = TrainCatalog.Get(type ?? "") ?? throw new SaveFormatException($"Unbekannte Zuggattung „{type}“.");
                 t.State = r.Name<TrainState>(); t.FromGatewayId = r.Int(); t.ToGatewayId = r.Int();
                 var route = r.List(() => new EdgeKey(r.Int(), r.Bool()), 5);
-                foreach (var e in route) if (Tracks.GetSegment(e.SegmentId) == null) throw new SaveFormatException($"Zug {t.Id}: Gleisstück {e.SegmentId} fehlt.");
-                SetRoute(t, route);
+                var lengths = r.List(r.Float, 4);
+                if (lengths.Count != route.Count) throw new SaveFormatException($"Zug {t.Id}: Fahrweg unvollständig.");
                 t.HeadS = r.Float(); t.PrevHeadS = r.Float(); t.Speed = r.Float();
                 t.ReservedUntil = r.Int(); t.ReleasedBefore = r.Int(); t.HeadIndex = r.Int();
+                for (int i = Math.Max(0, t.ReleasedBefore); i < route.Count; i++)
+                    if (Tracks.GetSegment(route[i].SegmentId) == null) throw new SaveFormatException($"Zug {t.Id}: Gleisstück {route[i].SegmentId} fehlt.");
+                SetRoute(t, route, lengths);
                 foreach (var x in r.List(() => (r.Int(), r.Float()), 8)) t.Stops.Add(x);
                 t.NextStop = r.Int(); t.DwellUntil = r.Double(); t.SpawnTime = r.Double(); t.WaitSince = r.Double(); t.BlockedBy = r.Int();
                 t.ThroughPassengers = r.Int(); t.Loads = r.Int(); t.AtSignal = r.Bool(); t.DelaySeconds = r.Double();

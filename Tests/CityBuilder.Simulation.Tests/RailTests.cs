@@ -26,7 +26,7 @@ namespace CityBuilder.Simulation.Tests
         readonly ITestOutputHelper output;
         public RailTests(ITestOutputHelper output) => this.output = output;
 
-        static WorldSettings Settings(bool terrain = false, bool world = false, int worldSeed = 99)
+        static WorldSettings Settings(bool terrain = false, bool world = false, int worldSeed = 99, bool fullPlanet = false)
         {
             var s = new WorldSettings
             {
@@ -37,9 +37,41 @@ namespace CityBuilder.Simulation.Tests
             {
                 s.GenerateWorld = true;
                 s.WorldSeed = worldSeed;
-                s.Planet = new World.PlanetSettings { Width = 96, Height = 48, TargetRegions = 60, TargetCountries = 8 };
+                if (!fullPlanet) s.Planet = new World.PlanetSettings { Width = 96, Height = 48, TargetRegions = 60, TargetCountries = 8 };
             }
             return s;
+        }
+
+        [Theory]
+        [InlineData(2024)] // Spiel-Standard: volle Erde, Seed 2024
+        [InlineData(74)]
+        [InlineData(333)]
+        public void GameWorlds_MainlineAndAStationSpot_TrainsRunFast(int seed)
+        {
+            var w = SimulationWorld.CreateDefault(Settings(terrain: true, world: true, worldSeed: seed, fullPlanet: true));
+            var rail = w.Rail;
+            output.WriteLine(rail.MainlineReport);
+            Assert.True(rail.HasMainline, rail.MainlineReport);
+            // Irgendwo entlang der Hauptstrecke lässt sich ein Personenbahnhof setzen (spielbar auch im Hügelland)
+            int valid = 0, tried = 0;
+            for (float f = 0.1f; f <= 0.9f; f += 0.05f)
+                foreach (float side in new[] { 1f, -1f })
+                {
+                    var p = Axis(w, f, out _, out var normal);
+                    var plan = rail.PlanStation(StationCatalog.Passenger, p + normal * side * 30f);
+                    tried++;
+                    if (plan.IsValid) valid++;
+                }
+            output.WriteLine($"Bahnhofsplätze: {valid} von {tried} gültig");
+            Assert.True(valid > 0, "kein Platz für einen Bahnhof an der Hauptstrecke");
+            // Leistung: Fahrplan einen halben Tag (Info)
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int maxTrains = 0;
+            for (int i = 0; i < SimulationClock.TicksPerDay / 2; i++) { w.Step(); maxTrains = Math.Max(maxTrains, rail.Trains.Count); }
+            sw.Stop();
+            output.WriteLine($"½ Tag: {rail.TrainsCompleted} Züge durch, max. {maxTrains} gleichzeitig, ausgefallen {rail.TrainsCancelled}, {sw.ElapsedMilliseconds} ms gesamt");
+            Assert.Equal(0, rail.TrainsCancelled);
+            Assert.True(rail.TrainsCompleted > 10);
         }
 
         static void Road(SimulationWorld w, Vector2 a, Vector2 b, RoadType t = null)
@@ -353,6 +385,53 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(0, minGapViolations);
             Assert.True(signalStops > 0, "Folgezug wartet am Signal");
             Assert.All(list, t => Assert.DoesNotContain(t, rail.Trains)); // alle drei durch (Fahrplanzüge kommen dazu)
+            Assert.Equal(0, rail.TrainsCancelled);
+        }
+
+        [Fact]
+        public void StationOnPassingLoop_IntercityTakesTheLoop_WaitingTrainReplans()
+        {
+            var w = SimulationWorld.CreateDefault(Settings());
+            var rail = w.Rail;
+            float f = FarFraction(w);
+            var mid = Axis(w, f, out var dir, out var normal);
+            Vector2 T1(float s) => mid + dir * s - normal * (RailRules.TrackSpacing * 0.5f); // Gleis 1 (A → B) rechts der Achse
+            // Wartender Zug (Fahrweg geplant), bevor die Weichen ins Hauptgleis kommen
+            var waiting = rail.QueueTrain(TrainCatalog.Freight, fromA: true);
+            Assert.Equal(TrainState.Waiting, waiting.State);
+            // Überholgleis 12 m neben Gleis 1: Weiche – Bogen hinaus – Gerade – Bogen zurück – Weiche
+            var a = T1(-180f);
+            var b = a + dir * 120f - normal * 12f;
+            var c = b + dir * 120f;
+            var d = c + dir * 120f + normal * 12f;
+            foreach (var (s0, ctrl, s1) in new[] { (a, (Vector2?)(a + dir * 60f), b), (b, (Vector2?)null, c), (c, (Vector2?)(c + dir * 60f), d) })
+            {
+                var plan = rail.PlanTrack(s0, ctrl, s1);
+                output.WriteLine($"Stück {s0} → {s1}: {plan.Error}");
+                Assert.True(plan.IsValid, plan.Error.ToString());
+                Assert.NotEmpty(rail.BuildTrack(plan));
+            }
+            // Bahnhof am Überholgleis (Hauptgleis 18 m entfernt → kein Bahnsteig dort)
+            var stPlan = rail.PlanStation(StationCatalog.Passenger, (b + c) * 0.5f - normal * 30f);
+            Assert.True(stPlan.IsValid, stPlan.Error.ToString());
+            var st = rail.BuildStation(stPlan);
+            Assert.Single(st.Platforms);
+            var front = st.FrontMid + st.Front * 7.5f;
+            var side = new Vector2(-st.Front.Y, st.Front.X);
+            Road(w, front - side * 100f, front + side * 100f);
+            w.Step();
+            Assert.True(st.InService, $"Zufahrt {st.HasAccess}, Hauptstrecke {st.OnMainline}");
+            Assert.Contains(waiting, rail.Trains); // neu geplant statt ausgefallen
+            var loopSegs = rail.Tracks.Segments.Where(s => !s.IsLocked).Select(s => s.Id).ToHashSet();
+            var ic = rail.QueueTrain(TrainCatalog.Intercity, fromA: true);
+            Assert.Contains(ic.RouteEdges, e => loopSegs.Contains(e.SegmentId));
+            Assert.Single(ic.Stops(rail));
+            bool dwelled = false;
+            Substeps(w, 4000, () => { if (ic.State == TrainState.Dwelling) dwelled = true; });
+            output.WriteLine($"Fernzug über das Überholgleis: Halt {dwelled}, fertig {rail.TrainsCompleted}, ausgefallen {rail.TrainsCancelled}");
+            Assert.True(dwelled);
+            Assert.DoesNotContain(ic, rail.Trains);
+            Assert.DoesNotContain(waiting, rail.Trains);
             Assert.Equal(0, rail.TrainsCancelled);
         }
 
