@@ -18,7 +18,8 @@ namespace CityBuilder.Editor
         const string Folder = ThirdPartySetup.Root + "/_Catalog/Resources";
         const string AssetPath = Folder + "/AssetCatalog.asset";
 
-        enum Fit { Length, Height, Footprint }
+        /// <summary>Native = Originalgröße behalten (eigene Blender-Modelle, 1 Einheit = 1 m).</summary>
+        enum Fit { Length, Height, Footprint, Native }
 
         sealed class Spec
         {
@@ -28,6 +29,24 @@ namespace CityBuilder.Editor
             public float Target;     // Ziellänge bzw. -höhe in Metern
             public bool Vehicle;     // Längsachse auf +Z, Front erkennen
             public float MaxWidth = float.MaxValue; // Fahrzeuge dürfen nicht breiter als die Spur werden
+            public Material Material; // gesetzt: alle Teile bekommen dieses Material (eigene Modelle → Paletten-Material)
+        }
+
+        // ------------------------------------------------------------ eigene Blender-Modelle (Assets/_Project/Models)
+        const string OwnModels = "Assets/_Project/Models";
+
+        /// <summary>Alle FBX eines eigenen Ordners (optional mit Namensanfang) als Specs in Originalgröße mit Paletten-Material.</summary>
+        static Spec[] Own(string subfolder, string prefix = "")
+        {
+            string dir = $"{OwnModels}/{subfolder}";
+            if (!AssetDatabase.IsValidFolder(dir)) return new Spec[0];
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{OwnModels}/Palette/CB_Palette.mat");
+            return AssetDatabase.FindAssets("t:Model", new[] { dir })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => Path.GetDirectoryName(p).Replace('\\', '/') == dir && Path.GetFileName(p).StartsWith(prefix))
+                .OrderBy(p => p)
+                .Select(p => new Spec { Hint = dir + "/", Name = Path.GetFileNameWithoutExtension(p), Fit = Fit.Native, Material = mat })
+                .ToArray();
         }
 
         static Spec V(string hint, string name, float length, float maxWidth = 2.3f) =>
@@ -164,7 +183,8 @@ namespace CityBuilder.Editor
         [MenuItem("City Builder/Third Party/Build Asset Catalog")]
         public static void Build()
         {
-            if (!AssetDatabase.IsValidFolder(ThirdPartySetup.Root)) { Debug.LogError("[Catalog] Assets/ThirdParty fehlt – erst Pakete importieren."); return; }
+            // Ohne Store-Pakete trotzdem bauen (eigene Blender-Modelle reichen für einen Katalog)
+            if (!AssetDatabase.IsValidFolder(ThirdPartySetup.Root)) AssetDatabase.CreateFolder("Assets", "ThirdParty");
             Directory.CreateDirectory(Folder);
             AssetDatabase.Refresh();
             AssetDatabase.DeleteAsset(AssetPath);
@@ -172,8 +192,10 @@ namespace CityBuilder.Editor
             var catalog = ScriptableObject.CreateInstance<AssetCatalog>();
             AssetDatabase.CreateAsset(catalog, AssetPath);
             // Prefabs und reine Modelldateien (manche Pakete liefern nur FBX); Mobil-Varianten auslassen
+            var ownRoots = AssetDatabase.IsValidFolder(OwnModels) ? new[] { OwnModels } : new string[0];
             var allPrefabs = AssetDatabase.FindAssets("t:Prefab", new[] { ThirdPartySetup.Root })
                 .Concat(AssetDatabase.FindAssets("t:Model", new[] { ThirdPartySetup.Root }))
+                .Concat(ownRoots.Length > 0 ? AssetDatabase.FindAssets("t:Model", ownRoots) : new string[0])
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(p => !p.Contains("/Mobile/") && !p.Contains("_mobile"))
                 .OrderBy(p => p.EndsWith(".prefab") ? 0 : 1) // Prefab vor gleichnamigem Modell
@@ -183,16 +205,17 @@ namespace CityBuilder.Editor
             catalog.Trucks = BakeAll(catalog, allPrefabs, Trucks);
             catalog.Buses = BakeAll(catalog, allPrefabs, Buses);
             catalog.Trams = BakeAll(catalog, allPrefabs, Trams);
-            catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps);
+            // Eigene Blender-Modelle nach Ordner (ohne Namensliste): Buildings/<Zone>, Nature/Tree_*, Props/StreetLamp
+            catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps.Concat(Own("Props", "StreetLamp")).ToArray());
             catalog.TrafficLights = BakeAll(catalog, allPrefabs, Lights).Take(1).ToArray();
-            catalog.Trees = BakeAll(catalog, allPrefabs, Trees);
-            catalog.ResidentialLow = BakeAll(catalog, allPrefabs, ResLow);
-            catalog.ResidentialMedium = BakeAll(catalog, allPrefabs, ResMedium);
-            catalog.ResidentialHigh = BakeAll(catalog, allPrefabs, ResHigh);
-            catalog.Mixed = BakeAll(catalog, allPrefabs, MixedB);
-            catalog.Retail = BakeAll(catalog, allPrefabs, RetailB);
-            catalog.Office = BakeAll(catalog, allPrefabs, OfficeB);
-            catalog.Industry = BakeAll(catalog, allPrefabs, IndustryB);
+            catalog.Trees = BakeAll(catalog, allPrefabs, Trees.Concat(Own("Nature", "Tree_")).ToArray());
+            catalog.ResidentialLow = BakeAll(catalog, allPrefabs, ResLow.Concat(Own("Buildings/ResidentialLow")).ToArray());
+            catalog.ResidentialMedium = BakeAll(catalog, allPrefabs, ResMedium.Concat(Own("Buildings/ResidentialMedium")).ToArray());
+            catalog.ResidentialHigh = BakeAll(catalog, allPrefabs, ResHigh.Concat(Own("Buildings/ResidentialHigh")).ToArray());
+            catalog.Mixed = BakeAll(catalog, allPrefabs, MixedB.Concat(Own("Buildings/Mixed")).ToArray());
+            catalog.Retail = BakeAll(catalog, allPrefabs, RetailB.Concat(Own("Buildings/Retail")).ToArray());
+            catalog.Office = BakeAll(catalog, allPrefabs, OfficeB.Concat(Own("Buildings/Office")).ToArray());
+            catalog.Industry = BakeAll(catalog, allPrefabs, IndustryB.Concat(Own("Buildings/Industry")).ToArray());
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -256,7 +279,9 @@ namespace CityBuilder.Editor
                         }
                         temporary.Add(source);
                     }
-                    var mats = r.sharedMaterials;
+                    var mats = spec.Material != null
+                        ? Enumerable.Repeat(spec.Material, Mathf.Max(1, r.sharedMaterials.Length)).ToArray()
+                        : r.sharedMaterials;
                     for (int sub = 0; sub < source.subMeshCount; sub++)
                     {
                         var mat = mats.Length > 0 ? mats[Mathf.Min(sub, mats.Length - 1)] : null;
@@ -318,7 +343,7 @@ namespace CityBuilder.Editor
             float current = spec.Fit == Fit.Length ? bounds.size.z
                 : spec.Fit == Fit.Footprint ? Mathf.Max(bounds.size.x, bounds.size.z)
                 : bounds.size.y;
-            float s = current > 1e-4f ? spec.Target / current : 1f;
+            float s = spec.Fit == Fit.Native ? 1f : current > 1e-4f ? spec.Target / current : 1f;
             if (bounds.size.x * s > spec.MaxWidth) s = spec.MaxWidth / bounds.size.x;
             var offset = new Vector3(-bounds.center.x, -bounds.min.y, -bounds.center.z);
             for (int i = 0; i < v.Length; i++) v[i] = (v[i] + offset) * s;

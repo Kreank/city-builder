@@ -31,6 +31,20 @@ namespace CityBuilder.Simulation.Economy
         public const double OfficeJobTaxBase = 60.0;
         public const double IndustryJobTaxBase = 40.0;
 
+        // --- G6 Bodenwert: Grundsteuer nach Bodenwert (statt pauschal je Haushalt)
+        /// <summary>
+        /// Bodenwert, bei dem ein bewohnter Haushalt genau <see cref="HouseholdTaxBase"/> zahlt. 0,30 ≈ Bodenwert eines
+        /// typischen Wohngebäudes an der Straße ohne Dienste (Grundwert + Straße + etwas Jobs/Dichte − Straßenlärm) →
+        /// eine Durchschnittsstadt bringt etwa die bisherigen Beträge; gute Lagen mehr, schlechte weniger.
+        /// </summary>
+        public const float PropertyTaxReferenceLandValue = 0.30f;
+        public const float PropertyTaxMinFactor = 0.25f, PropertyTaxMaxFactor = 2.5f;
+
+        /// <summary>Faktor auf die Grundsteuer-Basis: Bodenwert / Referenz, begrenzt auf 0,25..2,5.</summary>
+        public static float PropertyTaxFactor(float landValue) =>
+            System.Math.Clamp(landValue / PropertyTaxReferenceLandValue, PropertyTaxMinFactor, PropertyTaxMaxFactor);
+        // --- Ende G6
+
         /// <summary>Nachfrage-Bonus je Prozentpunkt unter dem Standardsatz (0 % → ×1,2).</summary>
         public const float DemandBonusPerPoint = 0.02f;
         /// <summary>Nachfrage-Malus je Prozentpunkt über dem Standardsatz (20 % → ×0,6, 30 % → ×0,2).</summary>

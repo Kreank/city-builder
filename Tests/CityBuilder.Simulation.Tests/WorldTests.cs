@@ -450,6 +450,36 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(2, p.Economy.DaysSimulated);
         }
 
+        [Fact]
+        public void LandValue_UsesRegionTerrain_ShoreOnlyWithWater()
+        {
+            // G6 liest Ufer/Aussicht live aus world.Terrain → Küstenregion hat Uferlagen, trockene Binnenregion keine
+            var p = P;
+            var big = p.Regions.Where(r => r.Cells.Count >= 4).ToList();
+            int coastId = big.First(r => r.IsCoastal && !r.HasRiver).Id;
+            int dryId = big.First(r => !r.HasRiver && !r.IsCoastal).Id;
+            float MaxShore(int region, out float maxView)
+            {
+                var w = SimulationWorld.CreateDefault(new WorldSettings { GenerateWorld = true, WorldSeed = 2024, StartRegion = region, GenerateTerrain = true, SizeMeters = 1024f });
+                w.LandValue.ForceRecalculate();
+                float shore = 0f; maxView = 0f;
+                for (float x = -480f; x <= 480f; x += 16f)
+                for (float y = -480f; y <= 480f; y += 16f)
+                {
+                    var f = w.LandValue.Explain(new Vector2(x, y));
+                    if (f.IsWater) continue;
+                    shore = MathF.Max(shore, f.Water);
+                    maxView = MathF.Max(maxView, f.View);
+                }
+                return shore;
+            }
+            float coastShore = MaxShore(coastId, out float coastView);
+            float dryShore = MaxShore(dryId, out float dryView);
+            output.WriteLine($"Ufer-Beitrag Küste {coastShore:0.000} / trocken {dryShore:0.000} · Aussicht {coastView:0.000} / {dryView:0.000}");
+            Assert.True(coastShore > 0.03f);
+            Assert.Equal(0f, dryShore);
+        }
+
         // ------------------------------------------------------------ Ressourcen-API
 
         static Vector2 FindRich(ResourceMap m, string id)

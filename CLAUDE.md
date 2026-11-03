@@ -69,7 +69,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, World)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -385,11 +385,58 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
   Budgetregler je Dienst, Ausbaustufen.
 
+## Bodenwert & Ausbaustufen (G6)
+- `Simulation/LandValue`: `LandValueRules` (alle Formeln/Zahlen, Platzhalter fürs Balancing), `LandValueSystem`
+  (`world.LandValue`, alle 30 min, nach Diensten und vor der Kasse) + `LandValueSystem.Levels.cs` (Stufen, Zustand).
+- **Bodenwert** 0..1 je Zelle im Raster `LandValue.Layer` (`GridLayer`, gleiches 16-m-Gitter wie Lärm/Abgas):
+  Grundwert 0,10 + Straßenanbindung 0,18 (voll bis 24 m, 0 ab 96 m) + Arbeitsplätze in 800 m 0,14 (Sättigung
+  1 − e^(−Jobs/250), „Nähe Zentrum/Jobs“) + Außenanschluss 0,04 (Luftlinie, 0 ab 2,5 km) + Dienste 0,25 (Polizei 0,06,
+  Feuerwehr 0,05, Gesundheit 0,05, Bildung 0,06, Bibliothek 0,03; Gebäude auf der Zelle → `Services.Coverage`, sonst
+  `CoverageAt` nur mit Straße ≤ 96 m) + Parks 0,12 + Wasserlage 0,08 (Ufer ≤ 72 m) + Aussicht 0,05 (Höhe über dem
+  Mittel im 150-m-Ring) + Dichte 0,06 + Nachbarschaft ±0,10 (Zufriedenheit der Bewohner/Beschäftigten in 160 m, 0,6
+  neutral) − Lärm 0,25 × − Abgas 0,35 × − Müll 0,20 × Müllstand (`Citizens.GarbageLevel`, also erst mit Müllabfuhr);
+  Wasserzellen 0. Ergebnis begrenzt auf 0..1.
+- **Gestaffelt & träge:** je Durchlauf 1/48 der Zellen → jede Zelle einmal am Spieltag; Wert läuft um 35 % zum Ziel
+  (erste Berechnung direkt). Hilfsraster: Straßenabstand (fein, bei `Roads.Version`), Autobahnnähe sowie Jobs, Dichte,
+  Zufriedenheit, Müll (grob 64 m, je Runde aus den Gebäuden gestempelt); Gelände (Wasser/Ufer/Aussicht) je Zelle
+  zwischengespeichert, verworfen über `TerrainMap.Changed`. Kosten: alle 16 384 Zellen ≈ 8 ms (Debug), ≈ 0,2 ms je Durchlauf.
+  `ForceRecalculate()` rechnet alles sofort und ungeglättet (Tests, Laden).
+- **Ausbaustufen** 1–3 (`Building.Level`, täglich): Aufstieg, wenn Bodenwert, Zufriedenheit (Bewohner bzw. Beschäftigte),
+  Versorgung (`Utilities.IsSatisfied`), Bildung/Fachkräfte (Wohnen: Erwachsene ≥ mittlerer Abschluss; Büro: Beschäftigte
+  mit Hochschule; Handel/Industrie: ≥ mittlerer Abschluss), Belegung ≥ 75 % und Zustand ≥ 0,5 erfüllt sind –
+  netto 5 Tage (Stufe 2) bzw. 8 Tage (Stufe 3); erfüllt +1, sonst −2 Tage. Anforderungen je Zone in
+  `LandValueRules.RequirementFor` (Bodenwert Wohnen 0,40/0,60, Büro 0,45/0,62, Handel 0,40/0,58, Industrie nur 0,25/0,40).
+  Aufstieg setzt den Zustand auf 1 (Modernisierung). Kapazität × 1,0/1,4/1,8 (`HouseholdsFor/JobsFor`, Stufe 1 = alte
+  Formel) → mehr Wohnungen/Jobs und damit mehr Strom-/Wasserbedarf und Müll. Abstieg nach netto 10 schlechten Tagen
+  (Bodenwert 0,12 unter der eigenen Stufe, Zufriedenheit < 0,4 oder keine Versorgung). Überbelegung nach Abstieg baut sich
+  über Umzug/Wegzug ab (es zieht niemand nach). Änderung → `CitySystem.NotifyBuildingChanged` (Version++, `BuildingChanged`).
+- **Zustand** `Building.Condition` 0..1 (täglich): −0,002 Alterung, −0,04 ohne Versorgung, −0,03 × Müllstand, −0,01 bei
+  Leerstand > 10 Tage, −0,01 bei Zufriedenheit < 0,35; +0,012 Instandhaltung, wenn versorgt, kaum Müll, belegt, zufrieden
+  (≥ 0,55) und Bodenwert ≥ 0,25. Zustand 0 → `BuildingDecayed`, Abriss (`DemolishDecayed`). Das Bürgersystem nutzt ihn:
+  `CitizenSystem.BuildingCondition(b)` = Wohnqualität (0,55 + 0,12 × Stufe) × (0,5 + 0,5 × Zustand) − 0,25 ohne Versorgung –
+  dieselbe Formel im Wohnbedürfnis (bei Zustand 1 wie vor G6).
+- **Grundsteuer nach Bodenwert:** `EconomySystem.PropertyTaxFactor` (Hook) = `EconomyRules.PropertyTaxFactor(Bodenwert)`
+  = Bodenwert / 0,30, begrenzt 0,25..2,5 (unbekannt → 1); Grundsteuer = bewohnte Haushalte × 40 € × Faktor × Satz Wohnen.
+  0,30 ≈ typisches Wohngebäude an der Straße ohne Dienste → Durchschnittsstadt bringt etwa die alte Pauschale.
+- **Standortwahl (Hook)** `CitySystem.LotPreference` = `LandValue.GrowthPreference`: Wohnen/Handel/Büro bevorzugen hohen
+  Bodenwert, Industrie günstiges Land + Autobahnnähe (0,55 × (1 − Wert) + 0,45 × Autobahn, 0 ab 640 m); Gewicht
+  0,05 + Vorliebe² beim Würfeln der Startzelle (gleich viel Zufall wie vorher).
+- **API (Inspektor/HUD):** `ValueAt(p)`, `ValueOf(b)` (−1 = unbekannt), `Explain(p|b)` → `LandValueFactors` (Beiträge je
+  Faktor, `Contributions()` als (Text, Wert), `Target`, `Current`), `LevelInfo(b)` → `BuildingLevelInfo` (Stufe, Fortschritt
+  0..1, Tage, `Missing` + `MissingText`, nächste Anforderungen, Abstiegs-Tage, Zustand + `ConditionText`, `Facts`),
+  `FactsOf(b)`, `HighwayAccessAt(p)`, `LandValueRules.ValueText/ConditionText/LevelGapText`. Events `LevelChanged`,
+  `BuildingDecayed`; Zähler `Upgrades/Downgrades/DecayedBuildings`. Test-Hook `FactsProvider`.
+- Darstellung: `EnvironmentOverlayView` Overlay „Bodenwert“ (**F2**, rot → gelb → grün); `BuildingView` sortiert die
+  Katalogmodelle einer Zone nach Höhe und wählt je Stufe aus einem Drittel (bei nur einem Modell dieses), Platzhalter
+  +30 % Höhe je Stufe. Knopf in der HUD-Ansichtsleiste/Inspektor-Anzeige baut `ui2` an diese API.
+- Später: Stufenaufstieg auch nach Wohlstand/Einkommen (G5), Brände/Kriminalität senken den Wert, Bodenwert als
+  Preis beim Kauf von Grundstücken, Denkmalschutz/Stilrichtungen, Abriss-Meldung im HUD.
+
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
   (alle Zahlen an einem Ort, Platzhalter fürs Balancing), `BudgetCategory`/`TaxKind`, `BudgetPeriod` (Buchungen eines
   Tages/einer Woche je Kategorie, Beträge ≥ 0, Einnahme/Ausgabe aus der Kategorie).
-- **Tagesabrechnung**: Grundsteuer = bewohnte Haushalte × 40 € × Satz Wohnen; Gewerbe-/Einkommensteuer = besetzte
+- **Tagesabrechnung**: Grundsteuer = bewohnte Haushalte × 40 € × Bodenwert-Faktor (G6) × Satz Wohnen; Gewerbe-/Einkommensteuer = besetzte
   Jobs × Basis (Handel/Mischgebiet 45, Büro 60, Industrie 40 €) × Satz der Zonenart. Unterhalt: Straßen 0,5 % des
   Neubauwerts je Tag (`RoadBuilder.SegmentValue` = Länge × €/m × Brücken-/Tunnelfaktor → 1 km Stadtstraße 60 €/Tag),
   freie Leitungen/Rohre 0,5 % je Tag, Versorgungsbauwerke `UpkeepPerDay` aus dem `UtilityCatalog`, weitere
@@ -494,6 +541,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
   in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
   und `InputSystem_Actions` – alles andere (Store-Pakete direkt nach dem Import) wird nie committet.
+- **Eigene Modelle kommen nach Ordner automatisch ins Spiel** (Neubau beider Kataloge, sobald sich ein FBX unter
+  `Models/` ändert): `Utilities/<Name>.fbx` und `Services/<Name>.fbx` über die Namenslisten in `OwnModelCatalogBuilder`
+  (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
+  (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
+  `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
+  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
+  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -562,7 +616,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
-   - G6 Bodenwert, Zufriedenheit, Ausbaustufen (Zufriedenheit je Bürger/Gebäude liefert schon das Bedürfnismodell)
+   - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
+     Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2). Offen: Anzeige in Inspektor/HUD (ui2),
+     Stufen nach Einkommen (G5), Meldungen bei Aufstieg/Verfall
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
