@@ -119,6 +119,9 @@ namespace CityBuilder.Simulation.Gateways
         // --- Bahn (Stufe 2): Hauptstrecke liegt (vom Bahnsystem gesetzt, abgeleitet, nicht gespeichert)
         public bool RailBuilt { get; internal set; }
         // --- Ende Bahn
+        // --- Wasserstraße (Stufe 3): Grund, warum der Wasserweg nicht befahrbar ist (vom ShippingSystem gesetzt, abgeleitet)
+        public string ShippingNote { get; internal set; }
+        // --- Ende Wasserstraße
 
         /// <summary>Alle Zuzügler-Haushalte über diesen Anschluss seit Spielbeginn (verteilt den Zuzug nach Wichtigkeit).</summary>
         public int TotalMoveIns { get; internal set; }
@@ -153,7 +156,7 @@ namespace CityBuilder.Simulation.Gateways
                 switch (Kind)
                 {
                     case GatewayKind.Rail: return RailBuilt ? "noch nicht befahrbar (Bahnhof an der Hauptstrecke fehlt)" : "noch nicht befahrbar (Züge folgen)"; // Bahn
-                    case GatewayKind.Water: return Navigable ? "noch nicht befahrbar (Schiffe/Hafen folgen)" : "nicht schiffbar (zu schmal/flach)";
+                    case GatewayKind.Water: return !Navigable ? "nicht schiffbar (zu schmal/flach)" : ShippingNote ?? "noch nicht befahrbar (Schiffe/Hafen folgen)"; // Wasserstraße
                     case GatewayKind.Air: return "noch nicht befahrbar (Flughafen folgt)";
                     default: return "noch nicht befahrbar (folgt)";
                 }

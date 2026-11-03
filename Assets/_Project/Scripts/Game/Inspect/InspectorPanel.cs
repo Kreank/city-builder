@@ -200,6 +200,10 @@ namespace CityBuilder.Game.Inspect
             int train = Rail.RailView.Active != null ? Rail.RailView.Active.PickTrain(ray) : 0;
             if (train != 0 && (hit.IsNone || hit.Kind == SelectionKind.Building || hit.Kind == SelectionKind.Gateway)) hit = new Selection(SelectionKind.Train, train);
             // --- Ende Bahn
+            // --- Wasserstraße: Schiffe (Kugel um den Rumpf) vor Gebäuden/Gelände
+            int ship = Shipping.ShippingView.Active != null ? Shipping.ShippingView.Active.PickShip(ray) : 0;
+            if (ship != 0 && (hit.IsNone || hit.Kind == SelectionKind.Building || hit.Kind == SelectionKind.Gateway)) hit = new Selection(SelectionKind.Ship, ship);
+            // --- Ende Wasserstraße
             if (hit.IsNone && tool.HasCursor)
             {
                 // Rückfall: Geländepunkt unter der Maus
@@ -211,6 +215,8 @@ namespace CityBuilder.Game.Inspect
                 else if (sf != null) hit = new Selection(SelectionKind.Service, sf.Id);
                 else if (world.Transit?.DepotAt(tool.Cursor) is var td && td != null) hit = new Selection(SelectionKind.TransitDepot, td.Id); // ÖPNV
                 else if (world.Rail?.StationAt(tool.Cursor, 1f) is var rs && rs != null) hit = new Selection(SelectionKind.Station, rs.Id); // Bahn
+                else if (world.Shipping?.HarborAt(tool.Cursor, 1f) is var hb && hb != null) hit = new Selection(SelectionKind.Harbor, hb.Id); // Wasserstraße
+                else if (world.Shipping?.DrawbridgeNear(tool.Cursor, 12f) is var db && db != null) hit = new Selection(SelectionKind.Drawbridge, db.SegmentId); // Wasserstraße
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -248,6 +254,15 @@ namespace CityBuilder.Game.Inspect
                 case SelectionKind.Station: // Bahn
                     if (world.Rail?.GetStation(selection.Id) == null) SetSelection(Selection.None);
                     break;
+                case SelectionKind.Ship: // Wasserstraße
+                    if (world.Shipping?.GetShip(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.Harbor: // Wasserstraße
+                    if (world.Shipping?.GetHarbor(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.Drawbridge: // Wasserstraße
+                    if (world.Shipping?.DrawbridgeOf(selection.Id) == null) SetSelection(Selection.None);
+                    break;
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -273,7 +288,8 @@ namespace CityBuilder.Game.Inspect
             return null;
         }
 
-        public bool CanFollow => selection.Kind == SelectionKind.Vehicle || selection.Kind == SelectionKind.Citizen || selection.Kind == SelectionKind.Train; // Bahn: Zug
+        public bool CanFollow => selection.Kind == SelectionKind.Vehicle || selection.Kind == SelectionKind.Citizen || selection.Kind == SelectionKind.Train // Bahn: Zug
+            || selection.Kind == SelectionKind.Ship; // Wasserstraße: Schiff
 
         // ------------------------------------------------------------ Hervorhebung & Verfolgen
 
@@ -336,6 +352,23 @@ namespace CityBuilder.Game.Inspect
                     if (st != null) primary.Rect(st.Footprint.Corners(), st.Height + 0.3f, st.Height + 12f, width);
                     break;
                 }
+                // --- Wasserstraße
+                case SelectionKind.Ship:
+                    if (Shipping.ShippingView.Active != null && Shipping.ShippingView.Active.TryGetShipPosition(selection.Id, out var sp)) primary.Ring(sp, 30f, width * 0.6f);
+                    break;
+                case SelectionKind.Harbor:
+                {
+                    var hb = world.Shipping?.GetHarbor(selection.Id);
+                    if (hb != null) primary.Rect(hb.Footprint.Corners(), hb.Height + 0.3f, hb.Height + 14f, width);
+                    break;
+                }
+                case SelectionKind.Drawbridge:
+                {
+                    var db = world.Shipping?.DrawbridgeOf(selection.Id);
+                    if (db != null) primary.Ring(SimConvert.ToWorld(db.Position, db.Height + 1f), 24f, width * 0.6f);
+                    break;
+                }
+                // --- Ende Wasserstraße
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -430,6 +463,20 @@ namespace CityBuilder.Game.Inspect
                     var st = world.Rail?.GetStation(selection.Id);
                     return st != null ? SimConvert.ToWorld(st.Position, st.Height) : (Vector3?)null;
                 }
+                // --- Wasserstraße
+                case SelectionKind.Ship:
+                    return Shipping.ShippingView.Active != null && Shipping.ShippingView.Active.TryGetShipPosition(selection.Id, out var sp) ? sp : (Vector3?)null;
+                case SelectionKind.Harbor:
+                {
+                    var hb = world.Shipping?.GetHarbor(selection.Id);
+                    return hb != null ? SimConvert.ToWorld(hb.Position, hb.Height) : (Vector3?)null;
+                }
+                case SelectionKind.Drawbridge:
+                {
+                    var db = world.Shipping?.DrawbridgeOf(selection.Id);
+                    return db != null ? SimConvert.ToWorld(db.Position, db.Height) : (Vector3?)null;
+                }
+                // --- Ende Wasserstraße
                 default: return null;
             }
         }

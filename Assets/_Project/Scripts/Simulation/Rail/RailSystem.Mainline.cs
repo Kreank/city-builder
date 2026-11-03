@@ -49,11 +49,11 @@ namespace CityBuilder.Simulation.Rail
             {
                 var p = a + u * MathF.Min(length, k * ds);
                 water[k] = terrain.IsWater(p);
-                raw[k] = water[k] ? terrain.WaterLevel + Profiles.WaterClearance + 2f : terrain.HeightAt(p);
+                raw[k] = water[k] ? Profiles.WaterFloor(terrain, p, Profiles.WaterClearance + 2f) : terrain.HeightAt(p); // Wasserstraße: Fahrrinne
             }
             var grade = BoxSmooth(raw, Math.Max(1, (int)(RailRules.MainlineSmoothing / ds)));
             var floor = new float[count];
-            for (int k = 0; k < count; k++) floor[k] = water[k] ? terrain.WaterLevel + Profiles.WaterClearance + 2f : float.MinValue;
+            for (int k = 0; k < count; k++) floor[k] = water[k] ? Profiles.WaterFloor(terrain, a + u * MathF.Min(length, k * ds), Profiles.WaterClearance + 2f) : float.MinValue; // Wasserstraße
 
             // Straßen (Autobahn, Zubringer), die den Korridor kreuzen: Gleis darüber mit lichter Höhe
             var crossings = new List<float>(); // Achsen-Strecke der Kreuzungen

@@ -93,17 +93,34 @@ namespace CityBuilder.Editor
             { "rail_tank_wagon", new[] { "Rail/TankWagon" } },
             { "rail_level_crossing", new[] { "Rail/LevelCrossing" } },
             { "rail_track", new[] { "Rail/Track_Straight" } },
+            // --- Wasserstraße & Hafen (Stufe 3): Schiffe, Hafenbauten, Tonnen, Klappbrücke
+            { "ship_cargo", new[] { "Coast/CargoShip" } },
+            { "ship_ferry", new[] { "Coast/Ferry" } },
+            { "ship_sailboat", new[] { "Coast/Sailboat" } },
+            { "harbor_quay", new[] { "Coast/Quay" } },
+            { "harbor_crane", new[] { "Coast/HarborCrane" } },
+            { "harbor_container_crane", new[] { "Coast/ContainerCrane" } },
+            { "harbor_warehouse", new[] { "Coast/HarborWarehouse" } },
+            { "buoy_red", new[] { "Coast/Buoy_Red" } },
+            { "buoy_green", new[] { "Coast/Buoy_Green" } },
+            { "drawbridge", new[] { "Infrastructure/Drawbridge" } },
         };
 
         /// <summary>Ordner/Datei ohne Funktion im Spiel → worauf sie wartet (für den Bericht).</summary>
         static readonly (string prefix, string waitsFor)[] Waiting =
         {
             ("Airport/", "Flughafen (Roadmap: ÖPNV & Fernverkehr)"),
-            ("Coast/", "Hafen/Schifffahrt/Küste (Roadmap: Schifffahrt mit Häfen)"),
+            // --- Wasserstraße & Hafen: Schiffe/Hafenbauten/Tonnen sind zugeordnet (TransportFiles); offen bleiben Strand, Fähre als Linie, Fischerei
+            ("Coast/Beach", "Strand/Badestelle (Freizeit am Ufer, Roadmap: Tourismus)"),
+            ("Coast/LifeguardTower", "Strand/Badestelle (Freizeit am Ufer, Roadmap: Tourismus)"),
+            ("Coast/Lighthouse", "Leuchtturm an der Küste (Seehafen-Ausbau, nächste Teilstufe Wasserstraße)"),
+            ("Coast/Breakwater", "Mole/Wellenbrecher (Seehafen-Ausbau, nächste Teilstufe Wasserstraße)"),
+            ("Coast/Pier", "Anleger für Fähr-/Ausflugslinien (nächste Teilstufe Wasserstraße)"),
+            ("Coast/FishingBoat", "Fischereihafen (nächste Teilstufe Wasserstraße)"),
+            ("Coast/Tugboat", "Schlepper beim Anlegen großer Schiffe (nächste Teilstufe Wasserstraße)"),
             ("Transport/TaxiDepot", "Taxi (Roadmap: ÖPNV)"),
             ("Transport/MetroEntrance", "U-Bahn (Roadmap: ÖPNV)"),
             ("Rail/Tram", "Tram (Roadmap: Tramlinien, vorgemerkt)"),
-            ("Infrastructure/Drawbridge", "Klapp-/Zugbrücken (Roadmap: Schifffahrt)"),
             // --- Eigene Assets 2: Taxi und Gelände-Kacheln (Entscheidungen s. docs/Modell-Konvention.md)
             ("Vehicles/Taxi", "Taxi (Taxi-Depot + Taxi als Verkehrsmittel der Bürger, Roadmap: ÖPNV)"),
             ("Terrain/Cliff_Corner", "Gelände-Kachelraster: Klippen-Ecke passt nur an rechtwinklige Kanten – das Gelände ist eine stetige Höhenkarte (Cliff_Straight steht an steilen Hängen)"),

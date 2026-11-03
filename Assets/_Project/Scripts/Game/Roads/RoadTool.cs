@@ -26,7 +26,9 @@ namespace CityBuilder.Game.Roads
             /// <summary>Wohnhäuser einzeln setzen (Anno-Stil, Taste 6) – <c>Zoning.HouseTool</c> übernimmt.</summary>
             House,
             /// <summary>Bahn (Taste 7): Gleise, Personen-/Güterbahnhof – <c>Rail.RailTool</c> übernimmt.</summary>
-            Rail }
+            Rail,
+            /// <summary>Wasserstraße &amp; Hafen (Taste 8): Güterhafen, Klappbrücke – <c>Shipping.ShippingTool</c> übernimmt.</summary>
+            Harbor }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -222,6 +224,11 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Rail.RailTool>().Init(this, previewMaterial);
             if (litBase != null) Ensure<CityBuilder.Game.Rail.RailView>().Init(runner, litBase);
             // --- Ende Bahn
+
+            // --- Wasserstraße & Hafen: Werkzeug (Modus Harbor, Taste 8), Häfen/Schiffe/Klappbrücken/Fahrrinne, Hafenfenster (F8)
+            Ensure<CityBuilder.Game.Shipping.ShippingTool>().Init(this, previewMaterial);
+            if (litBase != null) Ensure<CityBuilder.Game.Shipping.ShippingView>().Init(runner, litBase, previewMaterial);
+            // --- Ende Wasserstraße
 
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
@@ -522,6 +529,7 @@ namespace CityBuilder.Game.Roads
                 case Mode.Transit: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // ÖPNV: TransitTool übernimmt
                 case Mode.House: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Wohnhäuser: HouseTool übernimmt
                 case Mode.Rail: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Bahn: RailTool übernimmt
+                case Mode.Harbor: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Wasserstraße: ShippingTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;
@@ -718,6 +726,10 @@ namespace CityBuilder.Game.Roads
             };
             string parallel = ParallelInfo(roads, plan); // Bauhilfe Parallelabstand
             if (parallel != null) g.Info = parallel + " · " + g.Info;
+            // --- Wasserstraße: Brücke über die Fahrrinne – lichte Höhe („zu niedrig für Schiffe – höher bauen oder Klappbrücke“)
+            var bridge = runner.World.Shipping != null ? runner.World.Shipping.CheckBridge(plan) : default;
+            if (bridge.Text != null) g.Info = bridge.Text + " · " + g.Info;
+            // --- Ende Wasserstraße
 
             g.StartDirection = SafeNormalize(plan.Control - plan.Start, plan.End - plan.Start);
             var startNode = plan.StartAnchor.Kind == AnchorKind.Node ? plan.StartAnchor.Node : null;
@@ -1251,6 +1263,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 case RoadBuildError.OverlapsStructure: return "Straße überschneidet ein Bauwerk – anders führen oder Gebäude verschieben";
                 case RoadBuildError.Locked: return "Gehört zum Fernstraßennetz – nicht abreißbar/umbaubar (am Zubringer anschließen)"; // Gateways
+                case RoadBuildError.DrawbridgeNoFairway: return "Klappbrücke quer über die Fahrrinne ziehen (genau eine Querung, Stadtstraße)"; // Wasserstraße
                 default: return null;
             }
         }
