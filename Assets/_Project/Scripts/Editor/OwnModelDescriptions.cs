@@ -85,6 +85,14 @@ namespace CityBuilder.Editor
         {
             { "bus_depot", new[] { "Transport/BusDepot" } },
             { "bus_stop", new[] { "Props/BusStop" } },
+            // --- Bahn (Stufe 2): Bahnhof, Fahrzeuge, Bahnübergang (Tram bleibt vorgemerkt)
+            { "train_station", new[] { "Transport/TrainStation" } },
+            { "rail_locomotive", new[] { "Rail/Locomotive" } },
+            { "rail_coach", new[] { "Rail/PassengerCoach" } },
+            { "rail_container_wagon", new[] { "Rail/ContainerWagon" } },
+            { "rail_tank_wagon", new[] { "Rail/TankWagon" } },
+            { "rail_level_crossing", new[] { "Rail/LevelCrossing" } },
+            { "rail_track", new[] { "Rail/Track_Straight" } },
         };
 
         /// <summary>Ordner/Datei ohne Funktion im Spiel → worauf sie wartet (für den Bericht).</summary>
@@ -94,7 +102,7 @@ namespace CityBuilder.Editor
             ("Coast/", "Hafen/Schifffahrt/Küste (Roadmap: Schifffahrt mit Häfen)"),
             ("Transport/TaxiDepot", "Taxi (Roadmap: ÖPNV)"),
             ("Transport/MetroEntrance", "U-Bahn (Roadmap: ÖPNV)"),
-            ("Transport/TrainStation", "Bahn (Roadmap: S-Bahn/Fernbahn)"),
+            ("Rail/Tram", "Tram (Roadmap: Tramlinien, vorgemerkt)"),
             ("Infrastructure/Drawbridge", "Klapp-/Zugbrücken (Roadmap: Schifffahrt)"),
             // --- Eigene Assets 2: Taxi und Gelände-Kacheln (Entscheidungen s. docs/Modell-Konvention.md)
             ("Vehicles/Taxi", "Taxi (Taxi-Depot + Taxi als Verkehrsmittel der Bürger, Roadmap: ÖPNV)"),

@@ -186,8 +186,14 @@ namespace CityBuilder.Simulation.Gateways
             if (nodeId == 0) return null;
             foreach (var g in gateways)
                 if (g.EntryNodeId == nodeId || g.ExitNodeId == nodeId) return g;
-            return null;
+            return RailGatewayOfNode?.Invoke(nodeId); // --- Bahn: Ankunftsknoten der Bahnhöfe gehören zum Rail-Gateway
         }
+
+        // --- Bahn (Hooks, gesetzt vom RailSystem): Zuzug per Bahn (Netzteil → Ankunftsknoten eines Personenbahnhofs) und
+        // Zuordnung Straßenknoten → Rail-Gateway (Zählung Zuzug/Handel). null = keine Bahn.
+        internal Func<int, RoadNode> RailEntryFor;
+        internal Func<int, Gateway> RailGatewayOfNode;
+        // --- Ende Bahn
 
         /// <summary>Befahrbare Straßen-Gateways (Autobahn-Enden).</summary>
         public IEnumerable<Gateway> RoadGateways()
@@ -274,6 +280,15 @@ namespace CityBuilder.Simulation.Gateways
                 float score = (g.TotalMoveIns + 1f) / MathF.Max(0.1f, g.Importance);
                 if (score < bestScore - 1e-6f) { bestScore = score; best = g; }
             }
+            // --- Bahn: Personenbahnhof im Netzteil = Anschluss; abwechselnd nach Wichtigkeit mit der Autobahn
+            var railNode = RailEntryFor?.Invoke(component);
+            if (railNode != null)
+            {
+                var rg = RailGatewayOfNode?.Invoke(railNode.Id);
+                float railScore = rg != null ? (rg.TotalMoveIns + 1f) / MathF.Max(0.1f, rg.Importance) : float.MaxValue - 1f;
+                if (best == null || railScore < bestScore - 1e-6f) return railNode;
+            }
+            // --- Ende Bahn
             if (best != null) return world.Roads.GetNode(best.EntryNodeId);
             if (anyRoad) return null;
             // Ohne Gateways (Testwelten): nächster befahrbarer Außenanschluss im selben Netzteil

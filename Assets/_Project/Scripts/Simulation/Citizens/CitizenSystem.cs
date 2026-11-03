@@ -607,6 +607,7 @@ namespace CityBuilder.Simulation.Citizens
                 float d = Vector2.Distance(from, n.Position);
                 if (d < bestD) { bestD = d; best = n; }
             }
+            if (best == null && RailArrivalNodeFor != null) best = RailArrivalNodeFor(comp); // --- Bahn: Pendeln nur per Bahn (Bahnhof im Netzteil)
             return best;
         }
 
@@ -746,6 +747,8 @@ namespace CityBuilder.Simulation.Citizens
 
             float dist = Vector2.Distance(a.Value, b.Value);
             c.TripDistance = dist;
+            // --- Bahn: Fahrt von/nach außerhalb mit dem Fernzug über einen eigenen Bahnhof (Zuzügler am Bahnhof: immer)
+            if (RailOfferFor != null && c.Location.IsOutside != destination.IsOutside && TryStartRail(c, a.Value, b.Value, destination, now)) return;
             // --- ÖPNV: Busverbindung bewerten (Fußweg + Warten + Fahrt + max. 1 Umstieg) gegen Auto und Fußweg
             var transit = PlanTransit(a.Value, b.Value);
             if (c.Age >= Citizen.AdultAge && WantsCar(c, dist, transit) && TryStartCar(c, destination, now)) return;

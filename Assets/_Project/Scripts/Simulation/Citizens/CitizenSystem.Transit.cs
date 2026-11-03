@@ -142,6 +142,7 @@ namespace CityBuilder.Simulation.Citizens
         /// <summary>Laufende Busfahrt beenden (Ankunft per Zeitüberschreitung, Umzug, Wegzug, Heimteleport).</summary>
         void CancelTransitRide(Citizen c, bool timedOut)
         {
+            CancelRailRide(c, timedOut); // --- Bahn: laufende Bahnfahrt ebenso abbrechen
             if (!rides.TryGetValue(c.Id, out var p)) return;
             rides.Remove(c.Id);
             Transit?.CancelRide(p);

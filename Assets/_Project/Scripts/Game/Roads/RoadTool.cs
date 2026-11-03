@@ -24,7 +24,9 @@ namespace CityBuilder.Game.Roads
     {
         public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect, Service, Transit,
             /// <summary>Wohnhäuser einzeln setzen (Anno-Stil, Taste 6) – <c>Zoning.HouseTool</c> übernimmt.</summary>
-            House }
+            House,
+            /// <summary>Bahn (Taste 7): Gleise, Personen-/Güterbahnhof – <c>Rail.RailTool</c> übernimmt.</summary>
+            Rail }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -215,6 +217,11 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Transit.TransitTool>().Init(this, previewMaterial);
             if (litBase != null) Ensure<CityBuilder.Game.Transit.TransitView>().Init(runner, litBase, previewMaterial);
             // --- Ende ÖPNV
+
+            // --- Bahn: Werkzeug (Modus Rail, Taste 7), Gleise/Bahnhöfe/Züge/Schranken/Signale, Bahnfenster (F7)
+            Ensure<CityBuilder.Game.Rail.RailTool>().Init(this, previewMaterial);
+            if (litBase != null) Ensure<CityBuilder.Game.Rail.RailView>().Init(runner, litBase);
+            // --- Ende Bahn
 
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
@@ -514,6 +521,7 @@ namespace CityBuilder.Game.Roads
                 case Mode.Service: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G4: ServiceTool übernimmt
                 case Mode.Transit: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // ÖPNV: TransitTool übernimmt
                 case Mode.House: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Wohnhäuser: HouseTool übernimmt
+                case Mode.Rail: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Bahn: RailTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;

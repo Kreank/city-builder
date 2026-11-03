@@ -19,6 +19,8 @@ namespace CityBuilder.Game.UI.Hud
         Cursor,
         /// <summary>ÖPNV: Bus von der Seite.</summary>
         Bus,
+        /// <summary>Bahn: Zug von vorn auf dem Gleis.</summary>
+        Train,
         /// <summary>Sicherheit: Flamme (Brände/Brandgefahr), Schild mit Stern (Kriminalität/Polizei).</summary>
         Flame, Shield,
     }
@@ -117,6 +119,11 @@ namespace CityBuilder.Game.UI.Hud
                     Poly(true, 3, 17, 3, 7, 21, 7, 21, 17);
                     Line(3, 12, 21, 12); Line(9, 7, 9, 12); Line(15, 7, 15, 12);
                     Circle(7.5f, 18, 1.8f); Circle(16.5f, 18, 1.8f);
+                    break;
+                case HudIconKind.Train: // Bahn
+                    Poly(true, 6, 17, 6, 5, 18, 5, 18, 17);
+                    Line(6, 11, 18, 11); Circle(9, 14, 1.2f); Circle(15, 14, 1.2f);
+                    Line(8, 17, 5, 21); Line(16, 17, 19, 21); Line(4, 21, 20, 21);
                     break;
                 case HudIconKind.Car:
                     Poly(true, 5, 17, 6.5f, 10.5f, 8.4f, 9, 15.6f, 9, 17.5f, 10.5f, 19, 17);

@@ -61,6 +61,13 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Wirtschaftsförderung je Branche (Geld je Beschäftigtem an geförderte Firmen).</summary>
         IndustrySubsidies,
         // --- Ende Produktion lenken
+
+        // --- Bahn (Stufe 2, hinten angefügt; Einnahme/Ausgabe s. Budget.IsIncome)
+        /// <summary>Ausgabe: Bau von Gleisen und Bahnhöfen.</summary>
+        RailConstruction,
+        /// <summary>Einnahme: Stationsentgelte (Halt Fern-/Güterzug), Fahrgeldanteil je Ein-/Aussteiger, Umschlag je Ladung.</summary>
+        RailFares,
+        // --- Ende Bahn
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -74,12 +81,13 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.IndustrySubsidies + 1; // letzte Kategorie (Wohnhäuser, dann Produktion lenken hinter Etappe 8)
+        public const int Count = (int)BudgetCategory.RailFares + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, dann Bahn)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
             c < BudgetCategory.RoadConstruction
-            || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived; // Etappe 8
+            || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived // Etappe 8
+            || c == BudgetCategory.RailFares; // Bahn
 
         public static BudgetCategory TaxCategory(TaxKind kind)
         {
@@ -122,6 +130,8 @@ namespace CityBuilder.Simulation.Economy
                 // --- Ende Etappe 8
                 case BudgetCategory.HouseConstruction: return "Bau Gebäude (gesetzt)"; // Setzen statt Zonen: Wohnhäuser, Läden, Büros, Hallen
                 case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
+                case BudgetCategory.RailConstruction: return "Bau Bahn";              // Bahn
+                case BudgetCategory.RailFares: return "Bahn: Entgelte & Fahrgeld";   // Bahn
                 default: return c.ToString();
             }
         }

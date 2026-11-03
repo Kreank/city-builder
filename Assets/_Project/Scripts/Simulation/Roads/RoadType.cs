@@ -8,6 +8,8 @@ namespace CityBuilder.Simulation.Roads
         City,       // Stadtstraßen
         Highway,    // Autobahn (Richtungsfahrbahn, immer Einbahn)
         Ramp,       // Auf-/Abfahrt, Verbindung Autobahn ↔ Stadt
+        // --- Bahn (Stufe 2): Gleise liegen in einem eigenen RoadNetwork (world.Rail.Tracks), nie im Straßennetz
+        Rail,       // Gleis (Fernbahn/Spielergleis)
     }
 
     /// <summary>
@@ -43,7 +45,19 @@ namespace CityBuilder.Simulation.Roads
         public bool IsHighway => Category == RoadCategory.Highway;
 
         /// <summary>Maximale Steigung (Anteil, 0.06 = 6 %).</summary>
-        public float MaxSlope => Category == RoadCategory.Highway ? 0.06f : Category == RoadCategory.Ramp ? 0.08f : 0.10f;
+        public float MaxSlope => Category == RoadCategory.Highway ? 0.06f : Category == RoadCategory.Ramp ? 0.08f
+            : Category == RoadCategory.Rail ? RailMaxSlope : 0.10f;
+
+        // --- Bahn: Gleise sind viel strenger als Straßen (Steigung 3,5 %, s. Rail.RailRules), Weichen zweigen flach ab
+        /// <summary>Größte Steigung für Gleise (Anteil).</summary>
+        public const float RailMaxSlope = 0.035f;
+        public bool IsRail => Category == RoadCategory.Rail;
+        /// <summary>
+        /// Kleinster Winkel zwischen zwei Strecken an einem Knoten: Straßen 10°, Gleise fast 0 (Weiche: Abzweig 4–12° neben
+        /// dem Stammgleis – die eigentliche Gleisregel „tangential anschließen“ prüft das Bahnsystem).
+        /// </summary>
+        public float MinJunctionAngle => IsRail ? 0f : RoadBuilder.MinJunctionAngle;
+        // --- Ende Bahn
 
         RoadType(string id, string displayName, RoadCategory category, List<LaneDefinition> lanes,
             float speedLimitKmh, float costPerMeter, float noiseLevel, float noiseRadius)

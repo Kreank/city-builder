@@ -38,7 +38,9 @@ namespace CityBuilder.Game.UI.Windows
             ui.Section("Start");
             ui.Note("Eine Autobahn führt schon durch die Karte. Baue deine erste Straße an den Zubringer der Anschlussstelle " +
                     "(„hier anschließen“) – erst dann ziehen Leute zu, und Handel/Lkw laufen über die Autobahn. Autobahn und " +
-                    "Anschlussstelle gehören der Welt (nicht abreißbar); Bahntrasse und Wasserwege sind vorbereitet und folgen später.");
+                    "Anschlussstelle gehören der Welt (nicht abreißbar). Die Fernbahn-Hauptstrecke liegt ebenfalls schon: ein " +
+                    "Personenbahnhof an ihren Gleisen (Bauleiste „Bahn“, 7) mit Straße davor holt Fernzüge, Pendler und Zuzügler per Bahn, " +
+                    "ein Güterbahnhof macht Import/Export billiger. Wasserwege folgen später.");
             ui.Section("Bauen");
             using (ui.Fields())
             {
@@ -57,6 +59,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("4 · ⇧4", "Dienste · Abdeckungs-Ansicht durchschalten");
                 ui.Field("5 · F6", "ÖPNV (Haltestelle, Linie zeichnen, Busdepot) · Linienübersicht");
                 ui.Field("6", "Bauen (Anno-Stil): Wohnen, Gewerbe, Industrie setzen · LMB halten und ziehen = Reihe entlang der Straße · , . drehen · Stufen nach Einrichtungen in Reichweite"); // Setzen statt Zonen
+                ui.Field("7 · F7", "Bahn (Gleise, Weichen, Personen-/Güterbahnhof; Bild↑/↓ Bauhöhe) · Bahnübersicht"); // Bahn
             }
             ui.Section("Ansehen");
             using (ui.Fields())
