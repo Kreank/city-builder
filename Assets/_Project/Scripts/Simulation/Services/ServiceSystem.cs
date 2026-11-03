@@ -162,6 +162,10 @@ namespace CityBuilder.Simulation.Services
             }
         }
 
+        // --- ÖPNV (Hook): überlappt ein fremdes Bauwerk (Mitte, Front, Breite, Tiefe)? Gesetzt vom TransitSystem.
+        public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
+        // --- Ende ÖPNV
+
         public ServiceFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
 
         public ServiceFacility FacilityAt(Vector2 p, float margin = 0f)
@@ -337,6 +341,10 @@ namespace CityBuilder.Simulation.Services
             foreach (var f in facilities.Values)
                 if (ServiceGeometry.RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
                     return ServiceBuildError.OverlapsFacility;
+            // --- ÖPNV (Hook): andere Bauwerke (Depots) im Weg
+            if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
+                return ServiceBuildError.OverlapsFacility;
+            // --- Ende ÖPNV
             if (utilities != null)
             {
                 foreach (var f in utilities.Facilities)

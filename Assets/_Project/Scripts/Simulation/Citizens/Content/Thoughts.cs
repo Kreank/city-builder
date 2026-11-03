@@ -188,6 +188,27 @@ namespace CityBuilder.Simulation.Citizens.Content
                 "Heute einfach mal nichts gemacht. Das tat gut.",
                 "Ein gemütlicher Abend mit {Partner} auf dem Sofa.",
             },
+            /* BusFull */ new[]
+            {
+                "Der Bus war so voll, dass er einfach weitergefahren ist.",
+                "Zwei volle Busse an der {Straße} – dann bin ich eben gelaufen.",
+                "Eingequetscht wie eine Sardine. Morgen nehme ich wieder das Auto.",
+                "Die Linie braucht dringend mehr Busse.",
+            },
+            /* BusLate */ new[]
+            {
+                "Ewig an der Haltestelle gestanden. Wo bleibt der Bus?",
+                "Der Bus steckte im Stau – wie alle anderen auch.",
+                "Laut Fahrplan hätte er längst da sein müssen.",
+                "Wegen des Busses wieder zu spät bei {Firma}.",
+            },
+            /* BusRide */ new[]
+            {
+                "Mit dem Bus war ich entspannt und pünktlich da.",
+                "Im Bus konnte ich in Ruhe lesen.",
+                "Kein Parkplatz suchen – der Bus hält direkt an der {Straße}.",
+                "Die Buslinie ist wirklich praktisch.",
+            },
         };
 
         public static int Count(MemoryKind k) => ByKind[(int)k].Length;

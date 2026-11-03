@@ -30,6 +30,13 @@ namespace CityBuilder.Simulation.Citizens
         FeelsUnsafe,
         Demolished,
         QuietEvening,
+        // --- ÖPNV
+        /// <summary>Bus war voll, stehen gelassen.</summary>
+        BusFull,
+        /// <summary>Bus kam spät/zu lange gewartet.</summary>
+        BusLate,
+        /// <summary>Angenehme, pünktliche Busfahrt.</summary>
+        BusRide,
     }
 
     /// <summary>
@@ -96,6 +103,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.ChildMovedOut: return -0.1f;
                 case MemoryKind.FeelsUnsafe: return -0.5f;
                 case MemoryKind.Demolished: return -0.7f;
+                case MemoryKind.BusFull: return -0.4f;
+                case MemoryKind.BusLate: return -0.3f;
+                case MemoryKind.BusRide: return 0.25f;
                 default: return 0.3f; // QuietEvening
             }
         }
@@ -106,6 +116,9 @@ namespace CityBuilder.Simulation.Citizens
             switch (k)
             {
                 case MemoryKind.TrafficJam: return 0.72f;
+                case MemoryKind.BusFull:
+                case MemoryKind.BusLate: return 0.75f;
+                case MemoryKind.BusRide: return 0.7f;
                 case MemoryKind.LongCommute: return 0.8f;
                 case MemoryKind.NoShop: return 0.7f;
                 case MemoryKind.NiceShopping: return 0.7f;
@@ -152,6 +165,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.ChildMovedOut: return "Kind ausgezogen";
                 case MemoryKind.FeelsUnsafe: return "fühlt sich unsicher";
                 case MemoryKind.Demolished: return "Wohnung abgerissen";
+                case MemoryKind.BusFull: return "Bus voll";
+                case MemoryKind.BusLate: return "Bus verspätet";
+                case MemoryKind.BusRide: return "gute Busfahrt";
                 default: return "ruhiger Abend";
             }
         }
