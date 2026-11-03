@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CityBuilder.Game.Environment;
 using CityBuilder.Game.Roads;
+using CityBuilder.Game.Services;
 using CityBuilder.Game.Terrain;
 using CityBuilder.Game.Traffic;
 using CityBuilder.Game.Utilities;
@@ -43,6 +44,8 @@ namespace CityBuilder.Game.UI.Hud
         VehicleView vehicles;
         TerraformTool terraform;
         UtilityTool utilityTool;
+        ServiceTool serviceTool;          // G4
+        ServiceOverlayView serviceOverlay; // G4
 
         PanelSettings panelSettings;
         UIDocument document;
@@ -81,6 +84,8 @@ namespace CityBuilder.Game.UI.Hud
             vehicles = GetComponent<VehicleView>();
             terraform = GetComponent<TerraformTool>();
             utilityTool = GetComponent<UtilityTool>();
+            serviceTool = GetComponent<ServiceTool>();
+            serviceOverlay = GetComponent<ServiceOverlayView>();
 
             var theme = Resources.Load<ThemeStyleSheet>(ThemeResource);
             var style = Resources.Load<StyleSheet>(StyleResource);
@@ -455,6 +460,8 @@ namespace CityBuilder.Game.UI.Hud
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power);
             RailButton(HudIconKind.Water, "Wasser (O schaltet Strom, Wasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Water),
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water);
+            RailButton(HudIconKind.Service, "Dienste-Abdeckung (⇧4 schaltet Polizei → Feuerwehr → … → Müll → aus)", () => serviceOverlay?.Cycle(),
+                () => serviceOverlay != null && serviceOverlay.Selected != null); // G4
             rail.Add(Container("cb-rail-sep"));
             RailButton(HudIconKind.Underground, "Unterirdisch (X) – Boden durchsichtig, Tunnel und Rohre sichtbar",
                 () => tool.ToggleUndergroundView(), () => tool.UndergroundView);
@@ -483,6 +490,8 @@ namespace CityBuilder.Game.UI.Hud
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution, "Abgas");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Strom");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Wasser");
+                Add(serviceOverlay != null && serviceOverlay.Current != null,
+                    serviceOverlay != null && serviceOverlay.Current != null ? "Abdeckung " + CityBuilder.Simulation.Services.ServiceKinds.DisplayName(serviceOverlay.Current) : null); // G4
                 Add(tool.UndergroundView, "Unterirdisch");
                 overlayName.EnableInClassList("cb-hidden", s == null);
                 if (s != null) overlayNameValue.text = s;

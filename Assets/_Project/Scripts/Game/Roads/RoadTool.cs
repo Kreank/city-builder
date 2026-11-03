@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform, Utility, Inspect, Service }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -169,6 +169,17 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Utilities.UtilityAlerts>().Init(runner); // Meldungen (Toasts) zur Versorgung
             // --- Ende G3
 
+            // --- G4 Dienste: Werkzeug (Modus Service, Taste 4), Gebäude, Abdeckungs-Ansicht (⇧4), Fenster
+            Ensure<CityBuilder.Game.Services.ServiceTool>().Init(this, previewMaterial);
+            var serviceOverlay = Ensure<CityBuilder.Game.Services.ServiceOverlayView>();
+            if (litBase != null)
+            {
+                Ensure<CityBuilder.Game.Services.ServiceView>().Init(runner, litBase);
+                serviceOverlay.Init(runner, litBase, previewMaterial);
+            }
+            Ensure<CityBuilder.Game.Services.ServicePanel>().Init(this, serviceOverlay);
+            // --- Ende G4
+
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
             // --- Ende Stadtkasse
@@ -303,6 +314,7 @@ namespace CityBuilder.Game.Roads
                 case Mode.Inspect: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Klick wählt Objekt (InspectorPanel)
                 case Mode.Terraform: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // TerraformTool
                 case Mode.Utility: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G3: UtilityTool übernimmt
+                case Mode.Service: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G4: ServiceTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;

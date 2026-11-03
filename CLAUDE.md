@@ -41,7 +41,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Economy)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -158,7 +158,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
@@ -168,7 +168,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
-- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
+- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, ServicePanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
   Phase 2: Inspektor als rechtes Panel im neuen Stil (Entwurf `Panels.dc.html`).
 
 ## Inspektor (Info-Modus, Taste C)
@@ -187,9 +187,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Haushaltsart, Wohnung, Mitglieder) · Alltag (Arbeit/Pendeln/arbeitslos, Arbeitszeit, Tätigkeit, Ort, Fahrt mit
   Zweck/Ziel/Dauer, Auto anklickbar bzw. Platzhalter-Ankunft, Einkaufsbedürfnis) · Befinden. **Fahrzeug**: Klasse,
   Tempo, Fahrtdauer (Verkehrszeit), Ort, Ziel, Fahrer. **Versorgungsbauwerk**: Leistung, Netzbilanz, Kosten, Emissionen.
+  **Dienstgebäude** (G4, `SelectionKind.Service`): Dienstart, Kapazität, Auslastung/Überlastungsfaktor, versorgte Gebäude,
+  Reichweite/Zufahrt, Lager, Kosten/Unterhalt, Lärm. Gebäude-Reiter Umfeld: **Dienste in Reichweite** = Abdeckung je
+  Dienstart (Bildung mit Grund-/Oberschule), Müll am Gebäude, Brandrisiko.
 - **Platzhalter fürs Bedürfnismodell** (zeigen „— (kommt mit Bedürfnismodell)“, keine Zahlen): Bürger Gesundheit,
   Zufriedenheit, Gemüt, Familienstand; Gebäude Zustand, Zufriedenheit Bewohner/Mitarbeiter/Umfeld; Bodenwert (G6),
-  Dienste in Reichweite (G4), Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
+  Zustand von Bauwerken. Unter „Befinden“ stehen die vorhandenen Rohwerte (Lärm/Abgas/
   Versorgung an der Wohnung, Arbeitslosigkeit, Einkaufsbedürfnis), die das Modell später bewerten kann.
   Neue Werte: dort statt `Pending` einsetzen.
 
@@ -240,6 +243,54 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
   Leitungen am selben Punkt zusammenlegen.
+
+## Dienste (G4)
+- `Simulation/Services`: `ServiceCatalog` (Polizeiwache, Feuerwache, Klinik, Krankenhaus, Grundschule, Gymnasium/Oberschule,
+  Bibliothek, Park klein/groß, Müllhalde, Verbrennungsanlage – Grundfläche, Kapazität je Tag (Personen/Schüler/t Müll),
+  Reichweite, Baukosten, Unterhalt **je Woche**, Lärm, Abgas, Lager), `ServiceSystem` (alle 30 min, `world.Services`).
+- **Verbindliche Abfrage-API** (andere Systeme docken nur so an): `world.Services.Coverage(string kind, Building b)` und
+  `CoverageAt(string kind, Vector2 p)` → 0..1, Arten als `ServiceKinds.Police/Fire/Health/Education/Library/Park/Garbage`.
+  `Education` = Mittel aus `EducationPrimary`/`EducationSecondary` (auch einzeln abfragbar). Unbekannte Art → 0.
+  Weitere: `GarbageAt/GarbageLevel(b)`, `FireRisk(b)`, `AverageCoverage(kind)`, `DemandOf(b, channel)`;
+  `DemandProvider` (Func) erlaubt echten Bedarf (z. B. Schülerzahlen aus dem Bürgersystem) statt Schätzung.
+- **Reichweite über das Straßennetz**: Dijkstra über Fahrzeit vom Anschlusspunkt (nächste ebenerdige Stadtstraße, Rand
+  ≤ 8 m von der Grundfläche – sonst `NoRoadAccess`); Tempolimit × 0,8, +5 s je Kreuzung (≥ 3 Straßen), Einbahnstraßen nur
+  in Fahrtrichtung, Autobahnen/Rampen befahrbar. Gebäude werden an ihrer Zufahrt (`FrontSegmentId`/`FrontT`) erreicht.
+  Wirkung 1 bis 40 % der Reichweite, dann linear auf 0. Ohne Straßenverbindung (z. B. Fluss ohne Brücke) keine Wirkung.
+  **Parks** wirken über Fußweg-Radius (Luftlinie zur Parkfläche): Spaziergänger kürzen über Wege/Grundstücke ab, die das
+  Straßennetz nicht kennt; Parks brauchen keine Zufahrt.
+- **Abdeckung** = max über alle Dienste des Kanals (Entfernungswirkung × min(1, Kapazität/Belastung)). Jedes Gebäude
+  belastet den Dienst mit der besten Wirkung (Bedarf × Wirkung). Bedarf aus der Belegung (`Residents`, `Workers`);
+  Schüler geschätzt 8 %/7 % der Einwohner. Neu gerechnet: Reichweiten nur bei Straßen-/Dienst-Version, Zuordnung zusätzlich
+  bei Stadt-Version, Last/Abdeckung je Durchlauf (billig); `CoverageVersion` für die Darstellung.
+- **Direkte Folgen** (keine Bürgerwirkungen – Gesundheit/Kriminalität/Bildung baut das Bedürfnissystem über die API):
+  Müll (Einwohner 10 kg/Tag, Arbeitsplätze 5 kg, Industrie 20 kg – Spielmaßstab) stapelt sich am Gebäude, abgeholt wird
+  Abdeckung × höchstens 4× die laufende Menge (Rückstau baut sich ab); Müllhalde läuft voll (25 000 t → wirkt nicht mehr).
+  `FireRisk` = Grundrisiko je Zone × (1 − 0,8 × Feuerwehr) + 0,2 × Müllstand – noch ohne Brände.
+- Platzregeln wie G3: nicht auf Straße/Wasser/anderen Bauwerken/Strommasten, max. 8 m Gefälle (wird eingeebnet), Gebäude
+  darunter werden abgerissen, Straße durchs Dienstgebäude reißt es ab. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
+  G3) und Terraforming (`TerrainMap.LockQuery`, verkettet) sind auf Dienstflächen gesperrt. Versorger/Masten dürfen nicht
+  auf Dienstflächen (Hooks `UtilitySystem.OtherStructureOverlaps/-At`).
+- **Kosten (Stadtkasse)**: `ServiceSystem` ist `IUpkeepSource` (`Name` „Dienste“, `WeeklyUpkeep()` = Summe der
+  Katalogwerte je Woche) und wird in `CreateDefault` per `world.Economy.RegisterUpkeep` angemeldet. Baukosten über
+  `Budget` (`IConstructionBudget`): `Plan` → `ServiceBuildError.InsufficientFunds` (nach den Geometrieregeln), `Build`
+  bucht unter `BudgetCategory.ServiceConstruction` („Bau Dienste“). Spieler-Abriss `Demolish` = 25 % zurück
+  (`EconomyRules.DemolitionRefundShare`); internes `Remove` (Straße durchs Gebäude) bringt nichts.
+- Darstellung (`Game/Services`, Begleiter des `RoadTool`, Modus `RoadTool.Mode.Service`): `ServiceTool` (**Taste 4** –
+  einziger freier Buchstabe wäre Y, das Input System liest aber US-Lage, auf QWERTZ also die Taste „Z“; Bauleiste
+  „Dienste (4)“ über `DrawToolbarRows`, `,`/`.` drehen, Vorschau färbt erreichte Straßen nach Wirkung grün→rot, Parks mit
+  Ring), `ServiceView` (Platzhalter aus Grundkörpern, Müllsäcke an Gebäuden mit Müllstau), `ServiceOverlayView`
+  (**⇧4** schaltet Polizei → … → Müll → aus; Abdeckung grün→rot über Gebäuden; im Werkzeug automatisch die gewählte Art),
+  `ServicePanel` (IMGUI, Abdeckung Ø je Art, Auslastung je Gebäude). **Neue HUD**: Kategorie „Dienste“ (Taste 4) in
+  `GameHud.BuildBar` mit Kacheln aller `ServiceCatalog`-Gebäude, Werkzeugzeile (Drehen, Ansicht durchschalten ⇧4) und
+  Abriss-Kachel „Dienstgebäude“; linke Ansichtsleiste Knopf „Dienste-Abdeckung“ (`ServiceOverlayView.Cycle`),
+  Icon `HudIconKind.Service`. Die IMGUI-Zeilen `ServiceTool.DrawToolbarRows` bleiben für die Rückfall-`RoadToolbar`.
+- **Eigene Modelle**: FBX unter `Assets/_Project/Models/Services/<Name>.fbx` werden automatisch übernommen
+  (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
+  PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
+- Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
+  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
+  Budgetregler je Dienst, Ausbaustufen.
 
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
@@ -341,8 +392,10 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse. Später: Abwasser, schwankende Erzeugung
-   - G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
-     Bibliothek, Parks, Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Müll (Müllhalde, Verbrennungsanlage)
+   - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
+     Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
+     (im Editor noch nicht visuell abgenommen). Später: Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Brände/Kriminalität
+     als Ereignisse, Dienstfahrzeuge
    - G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,

@@ -21,6 +21,8 @@ namespace CityBuilder.Game.Assets
         }
 
         public Entry[] Facilities = new Entry[0];
+        /// <summary>G4 Dienste: Id = <c>ServiceType.Id</c> („police_station“ …), FBX unter Models/Services.</summary>
+        public Entry[] Services = new Entry[0];
         /// <summary>Gemeinsames Material mit der Paletten-Textur (URP Lit).</summary>
         public Material Palette;
 
@@ -39,6 +41,14 @@ namespace CityBuilder.Game.Assets
         public GameObject Facility(string id)
         {
             foreach (var e in Facilities) if (e != null && e.Id == id && e.Model != null) return e.Model;
+            return null;
+        }
+
+        /// <summary>Modell eines Dienstgebäudes (G4) oder null → Platzhalter.</summary>
+        public GameObject Service(string id)
+        {
+            if (Services == null) return null;
+            foreach (var e in Services) if (e != null && e.Id == id && e.Model != null) return e.Model;
             return null;
         }
     }

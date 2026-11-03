@@ -27,6 +27,14 @@ namespace CityBuilder.Editor
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
         };
 
+        /// <summary>G4: Dateiname (ohne .fbx) unter Models/Services → Id des Dienstgebäudes (<c>ServiceCatalog</c>).</summary>
+        static readonly Dictionary<string, string> ServiceFiles = new Dictionary<string, string>
+        {
+            { "PoliceStation", "police_station" }, { "FireStation", "fire_station" }, { "Clinic", "clinic" }, { "Hospital", "hospital" },
+            { "PrimarySchool", "school_primary" }, { "HighSchool", "school_high" }, { "Library", "library" },
+            { "ParkSmall", "park_small" }, { "ParkLarge", "park_large" }, { "Landfill", "landfill" }, { "Incinerator", "incinerator" },
+        };
+
         static bool scheduled;
 
         void OnPreprocessTexture()
@@ -69,9 +77,22 @@ namespace CityBuilder.Editor
                 Debug.Log($"[OwnModels] {kv.Value} ← {kv.Key}.fbx, Größe {Bounds(model).size}");
             }
             catalog.Facilities = entries.ToArray();
+
+            // --- G4 Dienste
+            var services = new List<OwnModelCatalog.Entry>();
+            foreach (var kv in ServiceFiles)
+            {
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Services/{kv.Key}.fbx");
+                if (model == null) continue;
+                services.Add(new OwnModelCatalog.Entry { Id = kv.Value, Model = model });
+                Debug.Log($"[OwnModels] {kv.Value} ← Services/{kv.Key}.fbx, Größe {Bounds(model).size}");
+            }
+            catalog.Services = services.ToArray();
+            // --- Ende G4
+
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke → {CatalogPath}");
+            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste → {CatalogPath}");
         }
 
         static Material EnsurePaletteMaterial()

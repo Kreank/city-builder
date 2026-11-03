@@ -34,6 +34,8 @@ namespace CityBuilder.Simulation.Economy
         Services,
         /// <summary>Überziehungszinsen.</summary>
         Interest,
+        /// <summary>Bau von Dienstgebäuden (G4).</summary>
+        ServiceConstruction,
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -47,7 +49,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.Interest + 1;
+        public const int Count = (int)BudgetCategory.ServiceConstruction + 1;
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) => c < BudgetCategory.RoadConstruction;
@@ -81,6 +83,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.LineUpkeep: return "Unterhalt Leitungen";
                 case BudgetCategory.Services: return "Dienste";
                 case BudgetCategory.Interest: return "Zinsen";
+                case BudgetCategory.ServiceConstruction: return "Bau Dienste";
                 default: return c.ToString();
             }
         }

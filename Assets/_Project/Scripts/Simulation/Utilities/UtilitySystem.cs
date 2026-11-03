@@ -230,8 +230,17 @@ namespace CityBuilder.Simulation.Utilities
             foreach (var f in facilities.Values)
                 if (RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
                     return UtilityBuildError.OverlapsFacility;
+            if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
+                return UtilityBuildError.OverlapsFacility; // G4-Hook: Dienstgebäude
             return UtilityBuildError.None;
         }
+
+        // --- G4 Dienste (Hooks, gesetzt vom ServiceSystem): andere Bauwerke, auf die weder Versorger noch Masten dürfen.
+        /// <summary>Überlappt das Rechteck (Mitte, Tiefenrichtung, Breite, Tiefe) ein fremdes Bauwerk?</summary>
+        public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
+        /// <summary>Liegt ein fremdes Bauwerk am Punkt (mit Rand)?</summary>
+        public Func<Vector2, float, bool> OtherStructureAt { get; set; }
+        // --- Ende G4
 
         bool WaterNear(Vector2 p, float radius)
         {
