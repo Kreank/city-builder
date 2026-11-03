@@ -126,6 +126,20 @@ namespace CityBuilder.Simulation.Goods
         /// <summary>Strom/Wasser versorgt (oder in der Stadt noch nicht verlangt)? null = immer.</summary>
         public Func<Building, bool> UtilitiesSatisfied { get; set; }
 
+        // --- Etappe 8 Handel (Hooks, gesetzt von Trade.TradeSystem.AttachCity)
+        /// <summary>Weltmarktpreis je Gut aus den Ländern (Angebot/Nachfrage). null = deterministisches Rauschen (G5, ohne Welt).</summary>
+        public Func<GoodType, float> WorldPriceSource { get; set; }
+        /// <summary>Verträge/Grenzlager/Zölle. null = kein Handel zwischen Ländern (G5 wie vorher).</summary>
+        public ITradeGateway TradeGateway { get; set; }
+
+        /// <summary>Weltmarktpreise sofort aus <see cref="WorldPriceSource"/> übernehmen (z. B. beim Anschließen).</summary>
+        public void RefreshWorldPrices()
+        {
+            if (WorldPriceSource == null) return;
+            foreach (var m in markets) m.WorldPrice = WorldPriceSource(m.Good);
+        }
+        // --- Ende Etappe 8
+
         /// <summary>Pleite-Firmen: Gebäude wird verlassen (abgerissen). Aus = Firma macht mit Schulden weiter.</summary>
         public bool AbandonBankruptBuildings { get; set; } = true;
 
@@ -492,7 +506,8 @@ namespace CityBuilder.Simulation.Goods
                 ty.ImportedUnits += m.Today.Imported;
                 ty.ExportedUnits += m.Today.Exported;
                 dayDemand[g] += m.Today.HouseholdWanted;
-                m.CloseDay(stock[g], dayDemand[g], GoodMarket.WorldPriceOn(m.Good, day + 1, seed));
+                m.CloseDay(stock[g], dayDemand[g], WorldPriceSource != null ? WorldPriceSource(m.Good) // Etappe 8: Weltpreis aus den Ländern
+                    : GoodMarket.WorldPriceOn(m.Good, day + 1, seed));
                 dayDemand[g] = 0f;
             }
             TradeTotal.ImportValue += ty.ImportValue;

@@ -2,7 +2,8 @@ namespace CityBuilder.Simulation.Economy
 {
     /// <summary>
     /// Buchungskategorie der Stadtkasse. Einnahmen stehen vor <see cref="RoadConstruction"/>,
-    /// Ausgaben ab dort (<see cref="Budget.IsIncome"/>). Neue Kategorien hinten bei ihrer Gruppe anfügen
+    /// Ausgaben ab dort (<see cref="Budget.IsIncome"/>); Ausnahme: die hinten angefügten Handelskategorien
+    /// (Etappe 8), deren Richtung <see cref="Budget.IsIncome"/> einzeln kennt. Neue Kategorien hinten anfügen
     /// und <see cref="Budget.Count"/> anpassen.
     /// </summary>
     public enum BudgetCategory
@@ -36,6 +37,19 @@ namespace CityBuilder.Simulation.Economy
         Interest,
         /// <summary>Bau von Dienstgebäuden (G4).</summary>
         ServiceConstruction,
+
+        // --- Etappe 8 Handel (hinten angefügt, damit bestehende Werte gleich bleiben; Einnahme/Ausgabe s. Budget.IsIncome)
+        /// <summary>Einnahme: Zölle auf Importe (Weltmarkt und Vertragsware).</summary>
+        Tariffs,
+        /// <summary>Einnahme: Verkauf von Vertragsware an Firmen bzw. Erlös aus Exportverträgen.</summary>
+        TradeSales,
+        /// <summary>Einnahme: Vertragsstrafen anderer Länder.</summary>
+        PenaltiesReceived,
+        /// <summary>Ausgabe: Einkauf von Vertragsware bzw. Bezahlung der Firmen für Exportware.</summary>
+        TradePurchases,
+        /// <summary>Ausgabe: eigene Vertragsstrafen und Kündigungsgebühren.</summary>
+        PenaltiesPaid,
+        // --- Ende Etappe 8
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -49,10 +63,12 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.ServiceConstruction + 1;
+        public const int Count = (int)BudgetCategory.PenaltiesPaid + 1; // Etappe 8: letzte Kategorie
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
-        public static bool IsIncome(BudgetCategory c) => c < BudgetCategory.RoadConstruction;
+        public static bool IsIncome(BudgetCategory c) =>
+            c < BudgetCategory.RoadConstruction
+            || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived; // Etappe 8
 
         public static BudgetCategory TaxCategory(TaxKind kind)
         {
@@ -84,6 +100,13 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.Services: return "Dienste";
                 case BudgetCategory.Interest: return "Zinsen";
                 case BudgetCategory.ServiceConstruction: return "Bau Dienste";
+                // --- Etappe 8 Handel
+                case BudgetCategory.Tariffs: return "Zölle";
+                case BudgetCategory.TradeSales: return "Handel: Verkauf";
+                case BudgetCategory.PenaltiesReceived: return "Vertragsstrafen (erhalten)";
+                case BudgetCategory.TradePurchases: return "Handel: Einkauf";
+                case BudgetCategory.PenaltiesPaid: return "Vertragsstrafen (gezahlt)";
+                // --- Ende Etappe 8
                 default: return c.ToString();
             }
         }
