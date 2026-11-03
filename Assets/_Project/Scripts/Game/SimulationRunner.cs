@@ -7,7 +7,7 @@ namespace CityBuilder.Game
     /// <summary>
     /// Brücke zwischen Unity und Simulation: erzeugt die Welt und führt pro Frame so viele <b>Verkehrsschritte</b>
     /// (<see cref="SimulationWorld.Substep"/>) aus, wie es die Spielgeschwindigkeit verlangt – je 120 Schritte folgt ein
-    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1/2/3 = 1 Spieltag in 36 / 12 / 6 Minuten.
+    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1–4 = 1 Spieltag in Echtzeit (3 h) / 36 / 6 / 2 Minuten.
     /// Überlast: höchstens <see cref="maxSimMillisecondsPerFrame"/> Rechenzeit je Frame; was nicht passt, entfällt
     /// (die Simulation läuft dann langsamer, der Frame friert nicht ein).
     /// </summary>
@@ -205,7 +205,8 @@ namespace CityBuilder.Game
             if (kb.spaceKey.wasPressedThisFrame) TogglePause();
             if (kb.digit1Key.wasPressedThisFrame) SetSpeed(1);
             if (kb.digit2Key.wasPressedThisFrame) SetSpeed(2);
-            if (kb.digit3Key.wasPressedThisFrame) SetSpeed(3);
+            // 4 Tempostufen, aber 4 ist Dienste: 3 schaltet zwischen 6 min und 2 min je Spieltag um
+            if (kb.digit3Key.wasPressedThisFrame) SetSpeed(SpeedIndex == 3 ? 4 : 3);
         }
     }
 }

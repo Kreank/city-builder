@@ -82,7 +82,7 @@ namespace CityBuilder.Game.UI.Windows
             ui.Section("Zeit & Kamera");
             using (ui.Fields())
             {
-                ui.Field("Leertaste · 1/2/3", "Pause · Tempo");
+                ui.Field("Leertaste · 1/2/3", "Pause · Tempo: 1 Echtzeit (Tag 3 h) · 2 = 36 min · 3 = 6 min, nochmal 3 = 2 min");
                 ui.Field("WASD (Shift)", "bewegen (schnell)");
                 ui.Field("Q/E · Mitteltaste", "drehen");
                 ui.Field("Mausrad", "zoomen");
