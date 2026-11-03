@@ -440,6 +440,7 @@ namespace CityBuilder.Game.UI.Hud
             // Versorgungswarnung – nur sichtbar, wenn ein Netz unterdeckt ist
             topBar.Add(SupplyChip(UtilityKind.Power, HudIconKind.Power, UtilityOverlayView.Overlay.Power));
             topBar.Add(SupplyChip(UtilityKind.Water, HudIconKind.Water, UtilityOverlayView.Overlay.Water));
+            topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
 
             // Info-Modus (C)
             var info = Btn(null, () => tool.SetMode(tool.CurrentMode == RoadTool.Mode.Inspect ? RoadTool.Mode.Straight : RoadTool.Mode.Inspect),
@@ -521,6 +522,16 @@ namespace CityBuilder.Game.UI.Hud
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water);
             RailButton(HudIconKind.Service, "Dienste-Abdeckung (⇧4 schaltet Polizei → Feuerwehr → … → Müll → aus)", () => serviceOverlay?.Cycle(),
                 () => serviceOverlay != null && serviceOverlay.Selected != null); // G4
+            // --- G3/G4 erweitert: Abwasser (auch per O), Wasserqualität, Medien (auch per ⇧4) – bewusst ohne neue Tasten
+            RailButton(HudIconKind.Pipe, "Abwasser (O schaltet Strom, Wasser, Abwasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Sewage),
+                () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage);
+            RailButton(HudIconKind.Water, "Wasserqualität – braun = durch Abwasser verschmutzt (fließt flussabwärts)",
+                () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.WaterQuality),
+                () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.WaterQuality);
+            RailButton(HudIconKind.Info, "Medien-Reichweite (Zeitung, Radio, TV)",
+                () => serviceOverlay?.Toggle(CityBuilder.Simulation.Services.ServiceKinds.Media),
+                () => serviceOverlay != null && serviceOverlay.Selected == CityBuilder.Simulation.Services.ServiceKinds.Media);
+            // --- Ende
             rail.Add(Container("cb-rail-sep"));
             RailButton(HudIconKind.Underground, "Unterirdisch (X) – Boden durchsichtig, Tunnel und Rohre sichtbar",
                 () => tool.ToggleUndergroundView(), () => tool.UndergroundView);
@@ -550,6 +561,8 @@ namespace CityBuilder.Game.UI.Hud
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue, "Bodenwert");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Strom");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Wasser");
+                Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Abwasser"); // G3 erw.
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.WaterQuality, "Wasserqualität"); // G3 erw.
                 Add(serviceOverlay != null && serviceOverlay.Current != null,
                     serviceOverlay != null && serviceOverlay.Current != null ? "Abdeckung " + CityBuilder.Simulation.Services.ServiceKinds.DisplayName(serviceOverlay.Current) : null); // G4
                 Add(tool.UndergroundView, "Unterirdisch");

@@ -66,6 +66,17 @@ namespace CityBuilder.Game.Inspect
             {
                 UtilityField(ui, world, b, UtilityKind.Power);
                 UtilityField(ui, world, b, UtilityKind.Water);
+                // --- G3 erweitert: Abwasser, Trinkwasser, Atomkraftwerk nebenan
+                UtilityField(ui, world, b, UtilityKind.Sewage);
+                if (world.WaterQuality != null && world.Utilities.IsSupplied(b, UtilityKind.Water))
+                {
+                    float q = world.WaterQuality.DrinkingWaterQuality(b);
+                    ui.Field("Trinkwasser", $"{q * 100f:0} % Qualität" + (q < WaterQualitySystem.BadDrinkingWater ? " · verschmutzt (Abwasser im Fluss an der Pumpe) → Gesundheit sinkt" : ""),
+                        q < WaterQualitySystem.BadDrinkingWater ? Tone.Warn : Tone.Good);
+                }
+                float concern = world.Utilities.ConcernAt(b.Position);
+                if (concern > 0f) ui.Field("Atomkraftwerk", $"in der Nähe · Sorge {concern * 100f:0} % (wirkt nach Ängstlichkeit)", Tone.Accent);
+                // --- Ende
             }
 
             ui.Section("Gebäude");
@@ -110,7 +121,7 @@ namespace CityBuilder.Game.Inspect
             }
             int without = s.TicksWithout(kind);
             string left = u.AbandonmentEnabled
-                ? $" · verlassen in ≈ {Duration(Mathf.Max(0, UtilitySystem.AbandonAfterTicks - without))}"
+                ? $" · verlassen in ≈ {Duration(Mathf.Max(0, (kind == UtilityKind.Sewage ? UtilitySystem.SewageAbandonAfterTicks : UtilitySystem.AbandonAfterTicks) - without))}"
                 : "";
             ui.Field(name, $"fehlt seit {Duration(without)}{left} · {need}", Tone.Warn);
         }
@@ -529,11 +540,30 @@ namespace CityBuilder.Game.Inspect
                 if (t.NoiseLevel > 0f) ui.Field("Lärm", $"{t.NoiseLevel * 100f:0} % im Umkreis {t.NoiseRadius:0} m");
                 if (t.Pollution > 0f) ui.Field("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
                 if (t.NeedsWater) ui.Field("Standort", "braucht Wasser in Reichweite");
+                // --- G3 erweitert: Abwasser, Pumpe, Atom
+                var wq = world.WaterQuality;
+                if (wq != null && t.Kind == UtilityKind.Sewage)
+                    ui.Field(t.Untreated ? "Eingeleitet" : "Geklärt", t.Untreated
+                        ? $"{wq.DischargeOf(f):0.#} m³/h ungeklärt ins Gewässer · verschmutzt flussabwärts"
+                        : $"{wq.TreatedBy(f):0.#} m³/h", t.Untreated && wq.DischargeOf(f) > 0f ? Tone.Warn : Tone.Good);
+                if (wq != null && t.Kind == UtilityKind.Water && t.NeedsWater)
+                {
+                    float pq = wq.PumpQuality(f);
+                    ui.Field("Wasserqualität", $"{pq * 100f:0} % am Ansaugpunkt", pq < WaterQualitySystem.BadDrinkingWater ? Tone.Warn : Tone.Good);
+                }
+                if (t.ConcernRadius > 0f)
+                {
+                    ui.Field("Akzeptanz", $"Anwohner im Umkreis {t.ConcernRadius:0} m sorgen sich (je nach Ängstlichkeit) · kein Abgas");
+                    int left = world.Utilities.OfflineDaysLeft(f);
+                    ui.Field("Betrieb", left > 0 ? $"nach Störfall abgeschaltet, noch {left} Tage" : $"läuft · Störfälle bisher {world.Utilities.Incidents}",
+                        left > 0 ? Tone.Warn : Tone.None);
+                }
+                // --- Ende
                 ui.Field("Zustand", "— (Verschleiß/Wartung später)", Tone.Muted);
             }
             if (utilityOverlay != null)
             {
-                var overlay = f.Kind == UtilityKind.Power ? UtilityOverlayView.Overlay.Power : UtilityOverlayView.Overlay.Water;
+                var overlay = f.Kind == UtilityKind.Power ? UtilityOverlayView.Overlay.Power : f.Kind == UtilityKind.Sewage ? UtilityOverlayView.Overlay.Sewage : UtilityOverlayView.Overlay.Water;
                 using (ui.Actions())
                     ui.ActionButton("Netz anzeigen", () => utilityOverlay.Toggle(overlay), ActionStyle.Secondary,
                         utilityOverlay.Current == overlay, true, "Info-Ansicht Strom/Wasser (O)");
@@ -565,7 +595,7 @@ namespace CityBuilder.Game.Inspect
                 string over = f.Utilization > 1f ? $" · überlastet → Wirkung × {f.LoadFactor:0.00}" : "";
                 ui.Field("Auslastung", $"{load} · Last {f.Load:0.#} {t.CapacityUnit}{over}", f.Utilization > 1f ? Tone.Accent : Tone.None);
                 ui.Field("Versorgt", $"{f.ServedBuildings} Gebäude");
-                ui.Field("Reichweite", t.Walking
+                ui.Field("Reichweite", t.Broadcast ? $"Funkradius {t.Range:0} m (Luftlinie, keine Zufahrt nötig)" : t.Walking
                     ? $"Fußweg {t.Range:0} m (Luftlinie)"
                     : $"{t.Range:0.#} min Fahrzeit übers Straßennetz (voll bis {ServiceSystem.FullEffectShare * 100f:0} %)" +
                       (f.HasAccess ? "" : " · keine Zufahrt"), !t.Walking && !f.HasAccess ? Tone.Warn : Tone.None);

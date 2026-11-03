@@ -168,6 +168,7 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Utilities.UtilityPanel>().Init(this, utilityOverlay);
             Ensure<CityBuilder.Game.Utilities.UtilityAlerts>().Init(runner); // Meldungen (Toasts) zur Versorgung
             Ensure<CityBuilder.Game.Citizens.CitizenAlerts>().Init(runner);  // Bedürfnismodell: Geburten/Hochzeiten als Tagesmeldung
+            Ensure<CityBuilder.Game.Services.MediaAlerts>().Init(runner);    // G4 erweitert: Schlagzeilen der Medien als Meldung
             // --- Ende G3
 
             // --- G4 Dienste: Werkzeug (Modus Service, Taste 4), Gebäude, Abdeckungs-Ansicht (⇧4), Fenster
