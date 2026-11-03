@@ -433,6 +433,16 @@ namespace CityBuilder.Game.Roads
 
         void OnGUI()
         {
+            if (CityBuilder.Game.UI.Panels.WorldLabels.Enabled)
+            {
+                // Neue UI: als UI-Toolkit-Beschriftung melden (Ebene in der GameHud), nicht selbst zeichnen
+                if (Event.current.type != EventType.Layout) return;
+                CityBuilder.Game.UI.Panels.WorldLabels.Begin(this);
+                foreach (var (world, text, error) in labels)
+                    CityBuilder.Game.UI.Panels.WorldLabels.Add(this, world, text, error ? CityBuilder.Game.UI.Panels.WorldLabelStyle.Error : CityBuilder.Game.UI.Panels.WorldLabelStyle.Normal,
+                        error ? 28f : 0f);
+                return;
+            }
             if (labels.Count == 0 || tool == null || tool.Camera == null) return;
             if (labelStyle == null)
             {

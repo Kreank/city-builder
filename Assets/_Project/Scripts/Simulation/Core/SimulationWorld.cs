@@ -7,6 +7,7 @@ using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
 using CityBuilder.Simulation.Utilities;
+using CityBuilder.Simulation.World;
 using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Core
@@ -35,12 +36,33 @@ namespace CityBuilder.Simulation.Core
         {
             Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             Environment = new EnvironmentLayers(Min, settings.SizeMeters, settings.EnvironmentCellSize);
+            // --- Welt (Etappe 5): Startregion bestimmt Gelände, Klima und Ressourcen der Stadtkarte
+            TerrainParams terrainParams = null;
+            var climate = ClimateParams.Default;
+            var resources = RegionResources.Default;
+            int terrainSeed = settings.TerrainSeed;
+            if (settings.GenerateWorld)
+            {
+                Planet = PlanetGenerator.Generate(settings.WorldSeed, settings.Planet);
+                int start = settings.StartRegion >= 0 && settings.StartRegion < Planet.Regions.Count
+                    ? settings.StartRegion : Planet.SuggestStartRegion();
+                Planet.SetStartRegion(start);
+                var region = Planet.StartRegion;
+                terrainParams = RegionMapping.TerrainFor(region, Planet);
+                climate = RegionMapping.ClimateFor(region);
+                resources = RegionMapping.ResourcesFor(region);
+                terrainSeed = unchecked(settings.TerrainSeed + region.Id * 7919);
+            }
             Terrain = settings.GenerateTerrain
-                ? TerrainMap.Generate(Min, settings.SizeMeters, settings.TerrainCellSize, settings.TerrainSeed)
+                ? TerrainMap.Generate(Min, settings.SizeMeters, settings.TerrainCellSize, terrainSeed, terrainParams)
                 : TerrainMap.Flat(Min, settings.SizeMeters, settings.TerrainCellSize);
+            Climate = new ClimateModel(climate, unchecked(terrainSeed * 31 + settings.WorldSeed), Clock);
+            Resources = ResourceMap.Generate(Min, settings.SizeMeters, settings.EnvironmentCellSize, resources, Terrain, terrainSeed);
+            // --- Ende Welt
             Roads.Ground = Terrain;
             Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
+            Roads.SegmentAdded += Resources.ClearUnderRoad; // Welt (Etappe 5): Straßen roden Wald, versiegeln Boden
             // Terraforming: Gelände unter Straßen, Gebäuden und Versorgungsbauwerken ist gesperrt (weich überblendet)
             Terrain.LockQuery = (min, max) =>
             {
@@ -91,6 +113,17 @@ namespace CityBuilder.Simulation.Core
             return result;
         }
 
+        // --- Welt (Etappe 5)
+        /// <summary>Fiktive Erde (nur mit <see cref="WorldSettings.GenerateWorld"/>, sonst null).</summary>
+        public Planet Planet { get; }
+        /// <summary>Region der Stadtkarte (null ohne Weltkarte).</summary>
+        public Region StartRegion => Planet?.StartRegion;
+        /// <summary>Klima der Stadt: Jahreszeit, Temperatur/Niederschlag je Tag, Ernte-/Heizfaktor (immer gesetzt, ohne Welt gemäßigt).</summary>
+        public ClimateModel Climate { get; }
+        /// <summary>Ressourcen-Raster der Stadtkarte (Boden, Wald, Erz, Kohle, Öl, Sand, Grundwasser) – immer gesetzt.</summary>
+        public ResourceMap Resources { get; }
+        // --- Ende Welt
+
         /// <summary>Verkehr (Spurgraph, Regeln, Fahrzeuge). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public TrafficSystem Traffic { get; private set; }
 
@@ -124,6 +157,10 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.LandValue);
             world.City.LotPreference = world.LandValue.GrowthPreference;
             // --- Ende G6
+
+            // --- Welt (Etappe 5): täglich Erneuerung der Vorkommen und Länder-Volkswirtschaften
+            world.AddSystem(new WorldSystem());
+            // --- Ende Welt
 
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);

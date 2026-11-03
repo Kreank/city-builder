@@ -54,8 +54,23 @@ namespace CityBuilder.Simulation.Environment
         /// <summary>
         /// Hügellandschaft mit Fluss: flache Mitte (Startgebiet), nach außen Hügel bis ~60 m, ein Fluss quer über die Karte.
         /// </summary>
-        public static TerrainMap Generate(Vector2 origin, float sizeMeters, float cellSize, int seed)
+        public static TerrainMap Generate(Vector2 origin, float sizeMeters, float cellSize, int seed) =>
+            Generate(origin, sizeMeters, cellSize, seed, null);
+
+        /// <summary>
+        /// Wie oben, mit Parametern aus der Region der Weltkarte (Etappe 5): Relief-Stärke, Fluss ja/nein/Breite,
+        /// Küste in einer Richtung. <c>null</c>/<see cref="TerrainParams.Default"/> = exakt das bisherige Gelände.
+        /// </summary>
+        public static TerrainMap Generate(Vector2 origin, float sizeMeters, float cellSize, int seed, TerrainParams parameters)
         {
+            // --- Welt (Etappe 5): Regionsparameter (Standard: Faktoren 1 → bitgleich zum alten Gelände)
+            var tp = parameters ?? TerrainParams.Default;
+            float relief = tp.Relief, riverWidth = tp.RiverWidth;
+            Vector2 coastDir = tp.CoastDirection.HasValue && tp.CoastDirection.Value.LengthSquared() > 1e-6f
+                ? Vector2.Normalize(tp.CoastDirection.Value) : Vector2.Zero;
+            bool coast = coastDir != Vector2.Zero;
+            float coastLine = 1f - 2f * Math.Clamp(tp.CoastShare, 0.05f, 0.3f);
+            // --- Ende Welt
             var t = new TerrainMap(origin, sizeMeters, cellSize) { WaterLevel = 0f };
             var rng = new Random(seed);
             float ox = (float)rng.NextDouble() * 1000f, oy = (float)rng.NextDouble() * 1000f;
@@ -71,13 +86,24 @@ namespace CityBuilder.Simulation.Environment
                 float hills = Fbm((p.X + ox) / 650f, (p.Y + oy) / 650f, 5);           // 0..1
                 float ridge = 1f - MathF.Abs(Fbm((p.X - oy) / 900f, (p.Y + ox) / 900f, 3) * 2f - 1f);
                 float edge = SmoothStep(250f, half * 0.9f, distCenter);            // Mitte flacher
-                float h = 6f + hills * 18f + edge * (ridge * ridge * 55f + hills * 20f);
+                float h = 6f + hills * 18f * relief + edge * (ridge * ridge * 55f + hills * 20f) * relief;
 
                 // Fluss: geschwungene Linie in y-Richtung
-                float riverX = riverOffset + MathF.Sin(p.Y / 420f + riverPhase) * 160f + MathF.Sin(p.Y / 170f) * 40f;
-                float d = MathF.Abs(p.X - riverX);
-                float bed = SmoothStep(30f, 110f, d);                               // 0 im Fluss, 1 außerhalb
-                h = Lerp(-4f, h, bed);
+                if (tp.River)
+                {
+                    float riverX = riverOffset + MathF.Sin(p.Y / 420f + riverPhase) * 160f + MathF.Sin(p.Y / 170f) * 40f;
+                    float d = MathF.Abs(p.X - riverX);
+                    float bed = SmoothStep(30f * riverWidth, 110f * riverWidth, d); // 0 im Fluss, 1 außerhalb
+                    h = Lerp(-4f, h, bed);
+                }
+                // Küste (Etappe 5): Meer auf der Seite der Region, die ans Meer grenzt; Ufer leicht geschwungen
+                if (coast)
+                {
+                    float s = Vector2.Dot(p, coastDir) / half;
+                    float wobble = (Fbm((p.X + 3000f) / 500f, (p.Y - 2000f) / 500f, 3) - 0.5f) * 0.25f;
+                    float sea = SmoothStep(coastLine - 0.04f, coastLine + 0.12f, s + wobble);
+                    h = Lerp(h, -7f, sea);
+                }
                 t.natural[y * t.Resolution + x] = t.current[y * t.Resolution + x] = h;
             }
             return t;

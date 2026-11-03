@@ -20,6 +20,7 @@ namespace CityBuilder.Game.UI
         void OnGUI()
         {
             if (runner == null || runner.World == null) return;
+            if (Panels.UiPanels.ToolkitActive) return; // neue UI: Hilfe-Fenster (F1, UI/Windows/HelpWindow) – IMGUI nur Rückfall
             if (box == null)
             {
                 box = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13, richText = true };

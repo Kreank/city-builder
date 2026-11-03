@@ -86,6 +86,7 @@ namespace CityBuilder.Game.Traffic
         void OnGUI()
         {
             if (tool == null || tool.CurrentMode != RoadTool.Mode.Traffic) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: s. UI/Windows (IMGUI nur Rückfall)
             if (header == null)
             {
                 header = new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, richText = true };
