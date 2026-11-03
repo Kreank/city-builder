@@ -266,9 +266,42 @@ namespace CityBuilder.Simulation.Citizens
                 // Bedürfnismodell: Neue meiden Häuser mit unzufriedenen Bewohnern
                 float sat = ResidentSatisfaction(b.Id);
                 if (sat >= 0f && sat < 0.45f && rng.Chance((0.45f - sat) * 2f)) continue;
-                CreateHousehold(b);
+                // --- Gateways (Hook): Zuzug nur über einen Anschluss; Zuzügler fahren vom Gateway zur neuen Wohnung
+                RoadNode gate = null;
+                if (MoveInGateway != null)
+                {
+                    gate = MoveInGateway(b, ComponentOf(b));
+                    if (gate == null) continue; // Wohnung nicht mit einem Anschluss verbunden → niemand kommt
+                }
+                var h = CreateHousehold(b);
+                if (gate != null) StartMoveInTrip(h, gate);
+                // --- Ende Gateways
             }
         }
+
+        // --- Gateways (Hook, s. Simulation/Gateways): Zuzug über Anschlüsse
+        /// <summary>
+        /// (Wohngebäude, Netzteil) → Einfahrtsknoten des Gateways, über den neue Haushalte kommen; null = kein Zuzug.
+        /// Nicht gesetzt = alte Regel (Zuzug ohne Außenanschluss, sofort in der Wohnung).
+        /// </summary>
+        public Func<Building, int, RoadNode> MoveInGateway { get; set; }
+        /// <summary>Haushalt ist über diesen Gateway-Knoten zugezogen (Statistik/Anzeige).</summary>
+        public event Action<Household, RoadNode> MovedInVia;
+
+        /// <summary>Erste Fahrt: ein Erwachsener fährt vom Gateway zur neuen Wohnung (Verkehrsmittel wie bei jeder Fahrt), der Rest ist schon da.</summary>
+        void StartMoveInTrip(Household h, RoadNode gate)
+        {
+            Citizen driver = null;
+            foreach (var m in h.MemberList) if (m.Age >= Citizen.AdultAge) { driver = m; break; }
+            if (driver != null)
+            {
+                driver.Location = Place.Outside(gate.Id);
+                driver.Activity = Activity.Outside;
+                StartTrip(driver, TripPurpose.ToHome, Place.Building(h.HomeId), clock.Tick);
+            }
+            MovedInVia?.Invoke(h, gate);
+        }
+        // --- Ende Gateways
 
         internal Household CreateHousehold(Building home)
         {

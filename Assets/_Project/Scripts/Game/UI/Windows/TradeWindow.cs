@@ -148,6 +148,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("Persönlichkeit", n.Personality.Describe());
                 ui.Field("Stärken", $"{CountryProfile.DisplayName(c.Profile.Primary)} / {CountryProfile.DisplayName(c.Profile.Secondary)}");
                 if (route != null) ui.Field("Handelsweg", route.ToString());
+                if (World?.Gateways != null && World.Gateways.HasHighway) ui.Field("In der Stadt", World.Gateways.TradeRouteText(n.Id)); // Außenanbindung
                 ui.Field("Zoll gegen uns", $"{t.TariffRate(n.Id, Player) * 100:0} %", t.TariffRate(n.Id, Player) > 0.1 ? Tone.Warn : Tone.None);
                 ui.Field("Unser Zoll", $"{t.TariffRate(Player, n.Id) * 100:0} %");
                 ui.Field("Handelsabkommen", t.HasAgreement(Player, n.Id) ? "ja (zollfrei)" : "nein", t.HasAgreement(Player, n.Id) ? Tone.Good : Tone.None);

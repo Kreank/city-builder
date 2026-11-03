@@ -27,8 +27,9 @@ namespace CityBuilder.Simulation.Persistence
         /// <summary>
         /// v2: Zeitmodell – Verkehrsschritt im laufenden Tick. v3 (Spielstart &amp; Startregion): Anteil freies Land + Stadtname;
         /// v1/v2-Stände laden mit freiem Land 0 (altes politische Modell).
+        /// v4: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse); v1–v3 laden mit Schaltern aus.
         /// </summary>
-        const int WorldSectionVersion = 3;
+        const int WorldSectionVersion = 4;
 
         // ------------------------------------------------------------ Speichern
 
@@ -132,7 +133,7 @@ namespace CityBuilder.Simulation.Persistence
             catch (SaveFormatException e) { throw new SaveLoadException($"Weltdaten beschädigt: {e.Message}", e); }
 
             SimulationWorld world;
-            try { world = SimulationWorld.CreateDefault(settings, seed); }
+            try { world = SimulationWorld.CreateDefault(settings, seed, newGame: false); } // Gateways: Autobahn kommt aus dem Stand
             catch (Exception e) when (e is ArgumentException || e is OverflowException || e is OutOfMemoryException || e is IndexOutOfRangeException)
             {
                 throw new SaveLoadException("Weltdaten ungültig (Welt kann nicht erzeugt werden).", e);
@@ -202,6 +203,10 @@ namespace CityBuilder.Simulation.Persistence
             // v3 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
             w.Float(s.Planet?.FreeLandShare ?? World.PlanetSettings.DefaultFreeLandShare);
             w.String(s.CityName);
+            // v4 Gateways
+            w.Bool(s.PrebuiltConnections);
+            w.Bool(s.RequireGatewayForMoveIn);
+            w.Bool(s.RequireGatewayForTrade);
         }
 
         static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick, out int substep)
@@ -240,6 +245,12 @@ namespace CityBuilder.Simulation.Persistence
             // Standardwert ohne eigene Planet-Einstellungen bleibt null (gleiche Bytes beim erneuten Speichern)
             if (s.Planet != null) s.Planet.FreeLandShare = free;
             else if (free != World.PlanetSettings.DefaultFreeLandShare) s.Planet = new World.PlanetSettings { FreeLandShare = free };
+            if (version >= 4) // Gateways (v1–v3: alles aus = Verhalten wie damals, keine vorgebaute Autobahn)
+            {
+                s.PrebuiltConnections = r.Bool();
+                s.RequireGatewayForMoveIn = r.Bool();
+                s.RequireGatewayForTrade = r.Bool();
+            }
             if (!(s.SizeMeters >= 64f && s.SizeMeters <= 65536f) || !(s.EnvironmentCellSize >= 1f) || !(s.TerrainCellSize >= 0.5f) || tick < 0)
                 throw new SaveFormatException("Welteinstellungen ungültig.");
             if (s.SizeMeters / s.TerrainCellSize > 8192f || s.SizeMeters / s.EnvironmentCellSize > 8192f)

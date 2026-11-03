@@ -462,6 +462,7 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(SupplyChip(UtilityKind.Power, HudIconKind.Power, UtilityOverlayView.Overlay.Power));
             topBar.Add(SupplyChip(UtilityKind.Water, HudIconKind.Water, UtilityOverlayView.Overlay.Water));
             topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
+            topBar.Add(GatewayChip()); // Außenanbindung: „Stadt an die Autobahn anschließen“
 
             // Info-Modus (C)
             // UX: Info = Stadtübersicht ein/aus (wechselt ins Auswählen); Auswahl selbst geht immer per Linksklick
@@ -537,6 +538,35 @@ namespace CityBuilder.Game.UI.Hud
                             $"{BuildLabels.Number(runner.World.Utilities.TotalDemand(kind))} {UtilityCatalog.Unit(kind)} · Klick: Info-Ansicht");
             return chip;
         }
+
+        // --- Außenanbindungen (Gateways): Warnchip, solange Wohngebiete an keinem Anschluss hängen; Klick fährt zum Zubringer
+        VisualElement GatewayChip()
+        {
+            var chip = El("cb-chip-warn", "cb-hidden");
+            chip.Add(Icon(HudIconKind.Highway));
+            var text = Text("", "cb-chip-warn__text");
+            chip.Add(text);
+            string hint = null;
+            OnClick(chip, () =>
+            {
+                var gw = runner.World.Gateways;
+                var cam = tool.Camera != null ? tool.Camera.GetComponent<CameraController>() : null;
+                if (gw == null || cam == null || gw.FeederEnds.Count == 0) return;
+                // nächstes Zubringer-Ende zur Kartenmitte anfahren
+                var best = gw.FeederEnds[0];
+                foreach (var p in gw.FeederEnds) if (p.Length() < best.Length()) best = p;
+                cam.FocusOn(SimConvert.ToWorld(best, runner.World.Terrain.HeightAt(best)));
+            });
+            slowRefresh.Add(() =>
+            {
+                hint = runner.World.Gateways?.ConnectionHint;
+                chip.EnableInClassList("cb-hidden", hint == null);
+                text.text = "Nicht angeschlossen";
+            });
+            Tip(chip, () => (hint ?? "") + " · Klick: zum Zubringer");
+            return chip;
+        }
+        // --- Ende Gateways
 
         static readonly string[] SeasonNames = { "Frühling", "Sommer", "Herbst", "Winter" };
 

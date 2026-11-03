@@ -245,6 +245,7 @@ namespace CityBuilder.Simulation.Economy
 
             // Unterhalt
             foreach (var s in roads.Segments)
+                if (!s.IsLocked) // Gateways: Fernstraßen der Welt kosten die Stadt keinen Unterhalt
                 d.Add(BudgetCategory.RoadUpkeep, RoadBuilder.SegmentValue(s) * EconomyRules.RoadUpkeepShare);
             if (utilities != null)
             {

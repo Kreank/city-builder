@@ -51,10 +51,10 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(1, TimeModel.TicksFor(45));
             Assert.Equal(2, TimeModel.TicksFor(45.5));
             Assert.Equal(24.0, TimeModel.GameMinutes(180), 6); // 3 min Verkehrszeit = 24 Spielminuten
-            // Tempo 1/2/3: 6 / 3 / 1,5 Minuten je Spieltag
-            Assert.Equal(360f, TimeModel.RealSecondsPerDay(1), 3);
-            Assert.Equal(180f, TimeModel.RealSecondsPerDay(2), 3);
-            Assert.Equal(90f, TimeModel.RealSecondsPerDay(3), 3);
+            // Tempo 1/2/3: 36 / 12 / 6 Minuten je Spieltag (Verkehr 5× / 15× / 30× Echtzeit)
+            Assert.Equal(2160f, TimeModel.RealSecondsPerDay(1), 2);
+            Assert.Equal(720f, TimeModel.RealSecondsPerDay(2), 2);
+            Assert.Equal(360f, TimeModel.RealSecondsPerDay(3), 2);
         }
 
         [Fact]
@@ -160,8 +160,8 @@ namespace CityBuilder.Simulation.Tests
             // Migration: Weltabschnitt v1 (vor dem Zeitmodell) hat keinen Verkehrsschritt → Tick-Grenze
             var c = Persistence.SaveGame.Capture(w);
             var ws = c.Find(Persistence.SaveGame.WorldSectionId);
-            Assert.Equal(3, ws.Version); // v3 (Spielstart): + freies Land (Float) + Stadtname (String, null = 1 Byte)
-            c.Set(ws.Id, 1, ws.Data.Take(ws.Data.Length - 4 - 5).ToArray());
+            Assert.Equal(4, ws.Version); // v3 (Spielstart): + freies Land (Float) + Stadtname (String, null = 1 Byte); v4: + 3 Gateway-Schalter
+            c.Set(ws.Id, 1, ws.Data.Take(ws.Data.Length - 4 - 5 - 3).ToArray());
             var old = Persistence.SaveGame.Restore(Persistence.SaveContainer.FromBytes(c.ToBytes()));
             Assert.True(old.AtTickBoundary);
             Assert.Equal(w.Clock.Tick, old.Clock.Tick);

@@ -43,6 +43,7 @@ namespace CityBuilder.Simulation.Persistence
             Add(w.Goods);                   // Firmen, Märkte, Lieferungen
             Add(w.Economy);                 // Stadtkasse
             Add(w.Trade);                   // Handel zwischen Ländern (nur mit Weltkarte), Grenzlager
+            Add(w.Gateways);                // Außenanbindungen: Anschlüsse, Autobahn/Zubringer, Bahnkorridor, Zählungen
             // --- neue Systeme hier anmelden (oder einfach per AddSystem – s. unten)
 
             // Weitere registrierte Systeme mit eigenem Zustand automatisch hinten anhängen

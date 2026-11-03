@@ -234,6 +234,9 @@ namespace CityBuilder.Game.Inspect
                 case SelectionKind.TransitDepot: // ÖPNV
                     if (world.Transit?.GetDepot(selection.Id) == null) SetSelection(Selection.None);
                     break;
+                case SelectionKind.Gateway: // Außenanbindung
+                    if (world.Gateways?.Get(selection.Id) == null) SetSelection(Selection.None);
+                    break;
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -301,6 +304,16 @@ namespace CityBuilder.Game.Inspect
                 {
                     var s = world.Transit?.GetStop(selection.Id);
                     if (s != null) primary.Ring(SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position) + 0.6f), 8f, width * 0.6f);
+                    break;
+                }
+                case SelectionKind.Gateway: // Außenanbindung
+                {
+                    var g = world.Gateways?.Get(selection.Id);
+                    if (g != null && g.HasLocation)
+                    {
+                        var p = InspectorPicking.GatewayPoint(world, g);
+                        primary.Ring(new Vector3(p.x, p.y - 7f, p.z), 30f, width);
+                    }
                     break;
                 }
                 case SelectionKind.Vehicle:
@@ -384,6 +397,11 @@ namespace CityBuilder.Game.Inspect
                 {
                     var d = world.Transit?.GetDepot(selection.Id);
                     return d != null ? SimConvert.ToWorld(d.Position, d.Height) : (Vector3?)null;
+                }
+                case SelectionKind.Gateway: // Außenanbindung
+                {
+                    var g = world.Gateways?.Get(selection.Id);
+                    return g != null && g.HasLocation ? InspectorPicking.GatewayPoint(world, g) : (Vector3?)null;
                 }
                 default: return null;
             }
