@@ -643,7 +643,10 @@ namespace CityBuilder.Simulation.Services
                 float cov = s.Coverage[GarbageChannel];
                 if (cov > 0f && links[GarbageChannel].TryGetValue(b.Id, out var bl) && bl.Assigned != null)
                 {
-                    float take = cov * MathF.Min(s.Garbage, MathF.Max(perDay * dt * GarbageCatchUp, 0.02f));
+                    // Dienstfahrzeuge: mit Müllwagen holt die Pauschale nur noch einen Anteil der laufenden Menge (kein Nachholen) –
+                    // der Rückstau wartet auf den Wagen. Anteil 1 = wie bisher (Nachholfaktor).
+                    float cap = GarbageBaseShare >= 1f ? MathF.Max(perDay * dt * GarbageCatchUp, 0.02f) : perDay * dt * GarbageBaseShare;
+                    float take = cov * MathF.Min(s.Garbage, cap);
                     s.Garbage -= take;
                     collected.TryGetValue(bl.Assigned.Id, out float sum);
                     collected[bl.Assigned.Id] = sum + take;
@@ -664,6 +667,38 @@ namespace CityBuilder.Simulation.Services
             }
             return changed;
         }
+
+        // --- Dienstfahrzeuge (Grundstufe, s. ServiceVehicleSystem): Müllwagen holen echt ab, die pauschale Abfuhr übernimmt nur noch
+        // einen Teil. Standard 1 = bitgleich wie vorher (Tests, ohne Dienstfahrzeuge); gesetzt vom ServiceVehicleSystem.
+        /// <summary>Anteil der pauschalen Müllabfuhr (Abdeckung × Nachholfaktor), der ohne Müllwagen-Besuch abgeholt wird.</summary>
+        public float GarbageBaseShare { get; set; } = 1f;
+
+        /// <summary>Dienst, dem das Gebäude in diesem Kanal zugeordnet ist (beste Wirkung mit freier Kapazität), null = keiner.</summary>
+        public ServiceFacility AssignedFacility(string channel, Building b)
+        {
+            int c = Array.IndexOf(Channels, channel);
+            if (c < 0 || b == null) return null;
+            return links[c].TryGetValue(b.Id, out var bl) ? bl.Assigned : null;
+        }
+
+        /// <summary>Müllwagen am Gebäude: nimmt bis zu <paramref name="max"/> t mit. Liefert die Menge.</summary>
+        public float CollectGarbage(Building b, float max)
+        {
+            if (b == null || max <= 0f || !states.TryGetValue(b.Id, out var s)) return 0f;
+            float take = MathF.Min(s.Garbage, max);
+            s.Garbage -= take;
+            if (s.Garbage < 1e-6f) s.Garbage = 0f;
+            if (take > 0f) CoverageVersion++;
+            return take;
+        }
+
+        /// <summary>Müllwagen entlädt an der Deponie (füllt sie) bzw. Verbrennungsanlage.</summary>
+        public void UnloadGarbage(ServiceFacility f, float amount)
+        {
+            if (f == null || amount <= 0f || f.Kind != ServiceKinds.Garbage) return;
+            if (f.Type.Storage > 0f) f.Stored = MathF.Min(f.Type.Storage, f.Stored + amount);
+        }
+        // --- Ende Dienstfahrzeuge
 
         static float BaseFireRisk(ZoneType z)
         {
