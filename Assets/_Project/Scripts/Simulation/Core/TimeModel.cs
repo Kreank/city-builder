@@ -19,8 +19,8 @@ namespace CityBuilder.Simulation.Core
     /// (Arbeitsbeginn-Fenster, Ankunft beendet erst die Fahrt).
     /// </para>
     /// <para>
-    /// Echtzeit (nur Unity-Seite, <c>SimulationRunner</c>): Tempo 1/2/3 = <see cref="TicksPerRealSecond"/> × 1/2/4
-    /// (1 Spieltag = 6 / 3 / 1,5 Minuten).
+    /// Echtzeit (nur Unity-Seite, <c>SimulationRunner</c>): Tempo 1/2/3 = <see cref="TicksPerRealSecond"/> × 1/3/6
+    /// (1 Spieltag = 36 / 12 / 6 Minuten).
     /// Die Verkehrsschritte eines Ticks werden über die Frames verteilt (<c>SimulationWorld.Substep</c>).
     /// </para>
     /// </summary>
@@ -67,12 +67,13 @@ namespace CityBuilder.Simulation.Core
 
         // ------------------------------------------------------------ Echtzeit (Unity-Seite, nur Darstellung/Takt)
 
-        /// <summary>Echtzeit je Spieltag bei Tempo 1 (6 Minuten).</summary>
-        public const float RealSecondsPerDayAtSpeed1 = 360f;
-        /// <summary>Kalender-Ticks je Echtzeitsekunde bei Tempo 1 (240 / 360 s = 0,67).</summary>
+        /// <summary>Echtzeit je Spieltag bei Tempo 1 (36 Minuten; Entscheidung des Spielers 2026-11-03: Verkehr sichtbar
+        /// nur ~5× schneller als echt statt 30×).</summary>
+        public const float RealSecondsPerDayAtSpeed1 = 2160f;
+        /// <summary>Kalender-Ticks je Echtzeitsekunde bei Tempo 1 (240 / 2160 s = 0,111 → 5 s Verkehrszeit je Sekunde).</summary>
         public const float TicksPerRealSecond = TicksPerDay / RealSecondsPerDayAtSpeed1;
-        /// <summary>Vervielfacher der Tempostufen (Pause, 1, 2, 3): 1 Tag = 6 / 3 / 1,5 Minuten.</summary>
-        public static readonly int[] SpeedMultipliers = { 0, 1, 2, 4 };
+        /// <summary>Vervielfacher der Tempostufen (Pause, 1, 2, 3): 1 Tag = 36 / 12 / 6 Minuten, Verkehr 5× / 15× / 30× Echtzeit.</summary>
+        public static readonly int[] SpeedMultipliers = { 0, 1, 3, 6 };
 
         // ------------------------------------------------------------ Umrechnungen
 

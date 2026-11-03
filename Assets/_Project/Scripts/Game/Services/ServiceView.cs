@@ -272,6 +272,8 @@ namespace CityBuilder.Game.Services
                 float fit = Mathf.Min(f.Type.Width / Mathf.Max(0.01f, b.size.x), f.Type.Depth / Mathf.Max(0.01f, b.size.z));
                 if (fit < 0.2f || fit > 5f) go.transform.localScale = Vector3.one * fit;
             }
+            // Eigene Assets: bewegliche Teile (Riesenrad „Wheel“) drehen sich
+            CityBuilder.Game.Assets.ModelSpinner.Attach(go, () => runner != null ? runner.AnimationTimeScale : 1f, 4f, "Wheel");
             return true;
         }
 

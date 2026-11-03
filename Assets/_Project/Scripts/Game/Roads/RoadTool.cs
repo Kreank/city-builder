@@ -152,6 +152,14 @@ namespace CityBuilder.Game.Roads
                 ground.Init(runner, groundRenderer, previewMaterial);
             }
             Ensure<ScenicPropsView>().Init(runner);
+            // --- Eigene Assets: Büsche/Felsen, Straßen-/Parkausstattung, Brückenpfeiler/Tunnelportale/Schilderbrücken/Baustellen,
+            // Bauernhöfe (Felder je Jahreszeit), Lärmschutzwände – alles aus dem OwnModelCatalog (fehlt ein Modell: wie bisher)
+            Ensure<CityBuilder.Game.Environment.NatureDetailView>().Init(runner);
+            Ensure<CityBuilder.Game.Environment.StreetFurnitureView>().Init(runner);
+            Ensure<InfrastructureDecoView>().Init(runner);
+            Ensure<CityBuilder.Game.Zoning.FarmView>().Init(runner);
+            if (litBase != null) Ensure<CityBuilder.Game.Environment.NoiseBarrierView>().Init(runner, litBase);
+            // --- Ende Eigene Assets
 
             // Zonen und Gebäude
             zoneView = Ensure<ZoneView>();

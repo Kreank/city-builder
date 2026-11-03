@@ -19,7 +19,66 @@ namespace CityBuilder.Game.Roads
         const float RailHeight = 0.09f;
         const float LineWidth = 0.15f;
         const float TrackGauge = 1.435f;
-        const float DeckThickness = 0.8f;
+        public const float DeckThickness = 0.8f;
+        /// <summary>Abstand der Brückenpfeiler (Bogenlänge), erster nach der halben Spannweite.</summary>
+        public const float BridgePillarSpacing = PillarSpacing;
+
+        // --- Eigene Assets: Brückenpfeiler als Blender-Modell (Models/Infrastructure/BridgePillar.fbx) statt Mesh-Quader
+        static int modelPillars = -1;
+        /// <summary>Zeichnet die <c>InfrastructureDecoView</c> die Pfeiler als Modell (dann baut das Segment-Mesh keine)?</summary>
+        public static bool ModelPillars
+        {
+            get
+            {
+                if (modelPillars < 0)
+                {
+                    var c = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+                    modelPillars = c != null && c.Palette != null && c.Find(CityBuilder.Game.Assets.OwnModelRoles.Infrastructure, "bridge_pillar") != null ? 1 : 0;
+                }
+                return modelPillars == 1;
+            }
+        }
+        /// <summary>Stelle eines Bauwerks-Details auf einem Segment (Pfeiler, Tunnelportal) für die Modell-Darstellung.</summary>
+        public struct StructureSpot
+        {
+            public SimVector2 Position;
+            /// <summary>Quer zur Straße (rechts) bzw. beim Portal: Richtung aus dem Tunnel heraus.</summary>
+            public SimVector2 Right, Out;
+            public float RoadHeight, GroundHeight;
+        }
+
+        /// <summary>
+        /// Pfeiler- und Portalstellen eines Segments – dieselben Regeln wie im Segment-Mesh (Pfeiler je
+        /// <see cref="BridgePillarSpacing"/> ab der halben Spannweite, nur ≥ 2 m über Gelände; Portal am Übergang Trog → Tunnel).
+        /// </summary>
+        public static void StructureSpots(RoadSegment segment, float structureTrimStart, float structureTrimEnd, IGround ground,
+            List<StructureSpot> pillars, List<StructureSpot> portals)
+        {
+            var curve = new Curve(segment.Start.Position, segment.Control, segment.End.Position, segment.HeightAt, ground);
+            float s0 = Mathf.Clamp(structureTrimStart, 0f, curve.Length * 0.5f);
+            float s1 = curve.Length - Mathf.Clamp(structureTrimEnd, 0f, curve.Length * 0.5f);
+            if (pillars != null && curve.MaxElevation > 0.6f)
+                for (float d = s0 + PillarSpacing * 0.5f; d < s1; d += PillarSpacing)
+                {
+                    curve.At(d, out var p, out var r, out float h, out float g);
+                    if (h - g < 2f) continue;
+                    pillars.Add(new StructureSpot { Position = p, Right = r, RoadHeight = h, GroundHeight = g });
+                }
+            if (portals != null && curve.MinElevation < -0.3f)
+                foreach (float d in curve.Crossings(-RoadBuilder.TunnelDepth))
+                {
+                    if (d < s0 || d > s1) continue;
+                    curve.At(d, out var p, out var r, out float h, out float g);
+                    // Richtung zur offenen Seite (Trog): dort liegt die Straße weniger tief unter dem Gelände
+                    curve.At(Mathf.Max(0f, d - 2f), out var pa, out _, out float ha, out float ga);
+                    curve.At(Mathf.Min(curve.Length, d + 2f), out var pb, out _, out float hb, out float gb);
+                    var along = pb - pa;
+                    along = along.LengthSquared() > 1e-6f ? SimVector2.Normalize(along) : new SimVector2(-r.Y, r.X);
+                    var dir = (ha - ga) > (hb - gb) ? -along : along;
+                    portals.Add(new StructureSpot { Position = p, Right = r, Out = dir, RoadHeight = h, GroundHeight = g });
+                }
+        }
+        // --- Ende Eigene Assets
         const float PillarSpacing = 36f;
 
         // ------------------------------------------------------------ Kurvenabtastung
@@ -441,6 +500,8 @@ namespace CityBuilder.Game.Roads
                 data.WallWhere(curve, s0, s1, -hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
                 data.WallWhere(curve, s0, s1, hw, deckBottom, parapet, concrete, 0.6f, float.MaxValue);
 
+                // Eigene Assets: mit Modell „BridgePillar“ zeichnet die InfrastructureDecoView die Pfeiler (gleiche Abstände)
+                if (!ModelPillars)
                 for (float d = s0 + PillarSpacing * 0.5f; d < s1; d += PillarSpacing)
                 {
                     curve.At(d, out var p, out var r, out float h, out float g);

@@ -44,6 +44,24 @@ namespace CityBuilder.Simulation.Citizens
         public Func<float> NewsTone { get; set; }
         // --- Ende
 
+        // --- Eigene Assets: Freizeitanlagen, Sport, Wahrzeichen (verbunden in CitizenServiceBinding.Connect; null bzw. 0 = neutral,
+        // ohne solche Bauwerke ändert sich nichts)
+        /// <summary>Abdeckung mit Freizeitanlagen (Spielplatz … Riesenrad) am Wohngebäude 0..1: Freizeit steigt nebenbei.</summary>
+        public Func<Building, float> LeisureCoverage { get; set; }
+        /// <summary>Abdeckung mit Sportanlagen (Sportplatz, Tennis, Freibad) 0..1: Gesundheits-Ziel steigt.</summary>
+        public Func<Building, float> SportCoverage { get; set; }
+        /// <summary>Wahrzeichen in der Nähe 0..1 („Stolz“): Zufriedenheit und Gemüt leicht höher.</summary>
+        public Func<Building, float> LandmarkPride { get; set; }
+        /// <summary>Freizeit je Bewertung bei voller Abdeckung (≈ +0,12 je Tag gegen −0,35 Abklingen).</summary>
+        public const float LeisureFacilityBonus = 0.012f;
+        /// <summary>Gesundheits-Ziel + so viel bei voller Sport-Abdeckung.</summary>
+        public const float SportHealthBonus = 0.1f;
+        /// <summary>Zufriedenheit + so viel bei vollem Stolz (Wahrzeichen in der Nähe).</summary>
+        public const float PrideSatisfactionBonus = 0.04f;
+        /// <summary>Gemüt-Ziel + so viel bei vollem Stolz.</summary>
+        public const float PrideMoodBonus = 0.03f;
+        // --- Ende Eigene Assets
+
         /// <summary>Multiplikator auf alle gewürfelten Lebensereignisse (Tests/Balancing).</summary>
         public float LifeEventRate = 1f;
 
@@ -61,6 +79,8 @@ namespace CityBuilder.Simulation.Citizens
             // G3/G4 erweitert: Trinkwasser (1 = sauber), Atom-Sorge, Medienreichweite, Abwasser fehlt
             public float DrinkingWater, Nuclear, Media;
             public bool SewageOut;
+            // Eigene Assets: Freizeitanlagen, Sport, Wahrzeichen-Stolz
+            public float Leisure, Sport, Pride;
         }
 
         readonly Dictionary<int, HomeContext> contexts = new Dictionary<int, HomeContext>();
@@ -90,6 +110,11 @@ namespace CityBuilder.Simulation.Citizens
             ctx.Nuclear = NuclearConcern == null ? 0f : Math.Clamp(NuclearConcern(b), 0f, 1f);
             ctx.Media = MediaReach == null ? 0f : Math.Clamp(MediaReach(b), 0f, 1f);
             // --- Ende
+            // --- Eigene Assets
+            ctx.Leisure = LeisureCoverage == null ? 0f : Math.Clamp(LeisureCoverage(b), 0f, 1f);
+            ctx.Sport = SportCoverage == null ? 0f : Math.Clamp(SportCoverage(b), 0f, 1f);
+            ctx.Pride = LandmarkPride == null ? 0f : Math.Clamp(LandmarkPride(b), 0f, 1f);
+            // --- Ende Eigene Assets
             var cov = ServiceCoverage;
             ctx.Police = Coverage(cov, ServiceIds.Police, b);
             ctx.Fire = Coverage(cov, ServiceIds.Fire, b);
@@ -153,9 +178,13 @@ namespace CityBuilder.Simulation.Citizens
                 Approach(n, NeedKind.Safety, safety, 0.25f);
                 Approach(n, NeedKind.Education, EducationTarget(c, ctx), 0.25f);
                 // G3 erweitert: schlechtes Trinkwasser (verschmutzter Fluss an der Pumpe) senkt die Gesundheit
-                Approach(n, NeedKind.Health, 0.65f * c.Health + 0.35f * ctx.Health - DrinkingWaterHealthPenalty * (1f - ctx.DrinkingWater), 0.3f);
+                float healthTarget = 0.65f * c.Health + 0.35f * ctx.Health - DrinkingWaterHealthPenalty * (1f - ctx.DrinkingWater);
+                if (ctx.Sport > 0f) healthTarget += SportHealthBonus * ctx.Sport; // Eigene Assets: Sportanlagen in Reichweite
+                Approach(n, NeedKind.Health, healthTarget, 0.3f);
                 // Freizeit sinkt mit der Zeit (≈ 0,35 je Tag), ein Park in Reichweite hilft ein wenig nebenbei (G4 erweitert: Medien auch)
-                n[(int)NeedKind.Leisure] = Math.Clamp(n[(int)NeedKind.Leisure] - 0.035f + 0.008f * ctx.Park + MediaLeisureBonus * ctx.Media, 0f, 1f);
+                float leisure = n[(int)NeedKind.Leisure] - 0.035f + 0.008f * ctx.Park + MediaLeisureBonus * ctx.Media;
+                if (ctx.Leisure > 0f) leisure += LeisureFacilityBonus * ctx.Leisure; // Eigene Assets: Freizeitanlagen
+                n[(int)NeedKind.Leisure] = Math.Clamp(leisure, 0f, 1f);
 
                 // Eindrücke vom Wohnort → Erinnerungen
                 int street = home.FrontSegmentId;
@@ -177,7 +206,12 @@ namespace CityBuilder.Simulation.Citizens
             Approach(n, NeedKind.Mobility, MobilityTarget(c, c.CommuteMeters), 0.3f);
 
             c.Satisfaction = SatisfactionOf(c);
+            // --- Eigene Assets: Stolz auf Wahrzeichen in der Nähe hebt Zufriedenheit und Gemüt ein wenig
+            float pride = home != null ? Context(home).Pride : 0f;
+            if (pride > 0f) c.Satisfaction = Math.Clamp(c.Satisfaction + PrideSatisfactionBonus * pride, 0f, 1f);
+            // --- Ende
             float moodTarget = 0.5f + 0.5f * MathF.Tanh(c.Memories.MoodSum() * 0.8f) + 0.2f * (c.Satisfaction - 0.6f) - (c.IsIll ? 0.1f : 0f);
+            if (pride > 0f) moodTarget += PrideMoodBonus * pride; // Eigene Assets
             // G4 erweitert: Medien verstärken die Stimmung leicht (schlechte Nachrichten drücken, gute heben) – nur wer erreicht wird
             if (home != null && NewsTone != null)
             {

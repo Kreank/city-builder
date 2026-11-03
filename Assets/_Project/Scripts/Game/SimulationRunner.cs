@@ -7,7 +7,7 @@ namespace CityBuilder.Game
     /// <summary>
     /// Brücke zwischen Unity und Simulation: erzeugt die Welt und führt pro Frame so viele <b>Verkehrsschritte</b>
     /// (<see cref="SimulationWorld.Substep"/>) aus, wie es die Spielgeschwindigkeit verlangt – je 120 Schritte folgt ein
-    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1/2/3 = 1 Spieltag in 5 / 2,5 / 1,25 Minuten.
+    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1/2/3 = 1 Spieltag in 36 / 12 / 6 Minuten.
     /// Überlast: höchstens <see cref="maxSimMillisecondsPerFrame"/> Rechenzeit je Frame; was nicht passt, entfällt
     /// (die Simulation läuft dann langsamer, der Frame friert nicht ein).
     /// </summary>
@@ -15,8 +15,9 @@ namespace CityBuilder.Game
     public sealed class SimulationRunner : MonoBehaviour
     {
         [SerializeField] float worldSize = 2048f;
-        [Tooltip("Kalender-Ticks (6 Spielminuten) pro Echtzeit-Sekunde bei Geschwindigkeit 1 (Standard aus TimeModel: 0,8 → 5 min je Spieltag).")]
-        [SerializeField] float ticksPerSecond = TimeModel.TicksPerRealSecond;
+        // Bewusst NICHT serialisiert: die Szene hatte noch einen alten Wert (10) gespeichert, der das Zeitmodell
+        // überschrieb (Tempo 1 lief ~15× zu schnell). Einzige Quelle ist TimeModel.
+        static float ticksPerSecond => TimeModel.TicksPerRealSecond;
         [Tooltip("Rechenzeit-Budget der Simulation je Frame (ms). Darüber wird die Simulation langsamer statt den Frame einzufrieren.")]
         [SerializeField] float maxSimMillisecondsPerFrame = 8f;
         [Header("Gelände")]
