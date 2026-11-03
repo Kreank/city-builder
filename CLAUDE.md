@@ -57,12 +57,14 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   NPC-Länder = Spiel-KI (Utility AI wie bei Bürgern, keine Sprach-KI zur Laufzeit).
 - Alles deterministisch (geseedeter RNG), Commands für Spieleraktionen (Multiplayer/Replays).
 
-## Entscheidung: Netze werden selbst verlegt (2026-11-03, Spieler)
-- **Straßen führen keine Leitungen/Rohre mehr automatisch mit** (löst die bisherige G3-Regel „Stadtstraßen tragen mit“
-  ab – Umbau steht an). Der Spieler verlegt **Wasserrohre, Abwasserkanäle** (unterirdisch, Einrasten entlang von Straßen)
-  und **Strom** (Hochspannung vom Kraftwerk → Umspannwerk → Ortsnetz entlang der Straßen) selbst.
-- Ein Gebäude ist angeschlossen, wenn eine passende Leitung/ein Rohr in Reichweite seiner Vorderseite liegt; es
-  bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein für alle Netzarten.
+## Entscheidung: Netze werden selbst verlegt (2026-11-03, Spieler – umgesetzt, s. „Strom & Wasser (G3)“)
+- **Straßen führen keine Leitungen/Rohre mehr automatisch mit** (hat die alte G3-Regel „Stadtstraßen tragen mit“
+  abgelöst). Der Spieler verlegt **Wasserrohre, Abwasserkanäle** (unterirdisch, Einrasten unter dem Gehweg) und **Strom**
+  (Hochspannung vom Kraftwerk → Umspannwerk → Ortsnetz als Freileitung oder Erdkabel entlang der Straßen) selbst.
+- Ein Gebäude ist angeschlossen, wenn eine passende Leitung/ein Rohr ≤ 12 m von seiner Zufahrt verläuft; es
+  bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein `ConnectionRules` für alle Netzarten.
+- Hilfe „Netz entlang Straßen verlegen“ (einzelne oder alle Stadtstraßen, normale Kosten, Vorschau) – v. a. für
+  bestehende Städte/alte Spielstände (Übergangsfrist 5 Tage nach dem Laden eines Stands v1).
 
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
@@ -486,19 +488,45 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bauwerke frei platziert und gedreht (`PlanFacility` → `BuildFacility`): nicht auf Straßen/Wasser/anderen Bauwerken,
   Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen.
   **Straßen dürfen Bauwerke nicht überbauen** (Bauwerks-Sperre, s. Straßen). Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
-  **Straßenfront (UX):** `UtilityFacilityType.NeedsRoadFront` für Kohle-/Gaskraftwerk, Wasserturm, Kläranlage
-  (Brennstoff/Personal/Schlamm). Steht so ein Bauwerk an einer Stadtstraße (Rand ≤ 8 m = Netzanschluss über die Straße),
+  **Straßenfront (UX):** `UtilityFacilityType.NeedsRoadFront` für Kohle-/Gaskraftwerk, Wasserturm, Kläranlage, Umspannwerk
+  (Brennstoff/Personal/Schlamm/Wartung). Steht so ein Bauwerk an einer Stadtstraße (Rand ≤ 8 m),
   muss die Vorderseite zu ihr zeigen, sonst `UtilityBuildError.NoRoadAccess`; Überland ohne Straße in der Nähe (Anschluss per
   Leitung) bleibt erlaubt, weil Brennstoff/Personal noch nicht simuliert sind. **Ausnahmen** ohne Front: Windrad, Solarpark
   (niemand fährt im Alltag hin), Pumpe, Atomkraftwerk, Abwasser-Auslass (richten sich nach dem Wasser). Der Netzanschluss
-  selbst bleibt „Straße ≤ 8 m an irgendeinem Rand“ (Kabel, keine Zufahrt). `PlanFacilityAligned(type, cursor, drehung)`
+  läuft nur über Leitungsenden am Rand (Straßen tragen nichts mehr). `PlanFacilityAligned(type, cursor, drehung)`
   richtet aus; `PlanMove(id, pos, front)`/`MoveFacility(plan)` verschiebt (Id/Leistung bleiben, 10 % Umzugspreis
   `MoveCostShare`, Masten auf der neuen Fläche werden umgelegt, Event `FacilityMoved`).
-- **Netze**: Stadtstraßen tragen Leitung und Rohr automatisch mit (wie Cities: Skylines – spart Kleinarbeit, Straßen
-  liegen ohnehin an jedem Gebäude); Autobahnen/Rampen nicht. Lücken schließen frei verlegte gerade Leitungen/Rohre
-  (`PlanLine` → `BuildLine`); Enden verbinden sich im Umkreis 3 m mit Leitungen (auch mittendrin), Bauwerken, Stadtstraßen,
-  Gebäuden. Bauwerke hängen an Stadtstraßen, deren Rand ≤ 8 m entfernt ist; Gebäude an ihrer Vorderstraße.
-  Zusammenhang per Union-Find, neu berechnet nur bei Änderung (Straßen-/Stadt-/Bauwerks-Version).
+- **Netze werden selbst verlegt** (Entscheidung des Spielers, ersetzt die alte Regel „Stadtstraßen tragen mit“):
+  `ConnectionRules.CarriedByRoads(kind)` = false für alle Arten. **Leitungsarten** `UtilityLineType` im `UtilityCatalog`
+  (`Id` = Speicher-Schlüssel, `LineTypeById`): `WaterPipe` 10 €/m, `SewerPipe` 12 €/m (unterirdisch), `HighVoltageLine`
+  30 €/m (Ebene `GridLevel.HighVoltage`, Masten 4×4 m, Spannweite 90 m, **keine Hausanschlüsse**), `OverheadLine`
+  15 €/m (Ortsnetz, Masten 2×2 m / 45 m wie bisher, brauchen Platz neben der Straße), `UndergroundCable` 40 €/m (Ortsnetz,
+  unterirdisch, kein Platzbedarf). `PlanLine(type, a, b)` → `BuildLine`; `PlanLine(kind, …)` nimmt `DefaultLineType`
+  (Strom = Freileitung). `UtilityLine.Type` (Kind/Level abgeleitet). Enden verbinden sich im Umkreis 3 m mit Leitungen
+  **derselben Art und Ebene** (auch mittendrin) und mit Bauwerken, die die Art annehmen (`UtilitySystem.Accepts`).
+  **Gebäude** hängen an jeder Leitung mit `ConnectsBuildings` ≤ `ConnectionRules.BuildingReach` 12 m von der Zufahrt
+  (bzw. Leitungsende im Gebäude); `ConnectedLine(b, kind)` = Hausanschluss. **Einrasten** (`ResolveLinePoint(type, …)`):
+  Rohre/Kanäle/Erdkabel unter dem Gehweg (`SidewalkInset` 2,5 m innerhalb des Straßenrands, Seite des Mauszeigers),
+  Freileitungen/Hochspannung auf der Straßenmitte (Masten rücken neben die Straße; ein Strang versorgt beide Seiten).
+  Zusammenhang per Union-Find, neu berechnet nur bei Änderung (Straßen-/Stadt-/Bauwerks-Version), alles nach Id sortiert.
+- **Strom mit Spannungsebenen** (`UtilitySystem.PowerGrid.cs`): Kraftwerk → **Hochspannung** → **Umspannwerk**
+  (`UtilityCatalog.Substation`, `FacilityRole.Substation`, 20 MW, 24×20 m, 18 000 €, Zufahrt; Modell später über
+  `OwnModelCatalog` „Substation“ → `power_substation`, bis dahin Platzhalter) → **Ortsnetz** → Gebäude. Das Umspannwerk hat
+  zwei Knoten (Oberseite Hochspannung, Unterseite Ortsnetz; `NetworkId` = Ortsnetz, `UpstreamNetworkId`, `Load`). Große
+  Kraftwerke speisen nur in die Hochspannung; **Wind/Solar** (`FeedsLocalGrid`) speisen ins Ortsnetz, wenn ein Ortsnetz-Ende
+  sie berührt, sonst in die Hochspannung (Entscheidung: kleine Erzeuger brauchen kein Umspannwerk, wie Bürgersolar).
+  Bilanz: Fehlmenge jedes Ortsnetzes (Bedarf − eigene Erzeugung) verteilt sich nach Kapazität auf seine Umspannwerke,
+  je Umspannwerk ≤ Kapazität (**begrenzt die Last**); reicht die Hochspannung nicht, bekommt jedes Umspannwerk denselben
+  Anteil; im Ortsnetz dann wie bisher älteste Gebäude zuerst. Ortsnetz ohne Umspannwerk/Erzeuger = unversorgt. Keine
+  Rückspeisung ins Hochspannungsnetz. `UtilityNetwork`: `Level`, `Generation`, `Imported`, `TransformerCapacity`,
+  `Substations`, `HasSource`; `TotalProduction` = Erzeugung (ohne Doppelzählung), `TotalDemand` = Gebäude (ohne Hochspannung).
+  `IsRequired(Power)` zählt Umspannwerke nicht.
+- **„Netz entlang Straßen verlegen“** (`UtilitySystem.AlongRoads.cs`): `PlanAlongRoads(type, segmentIds = null)` /
+  `PlanAlongRoad(type, segId)` → `AlongRoadsPlan` (Stücke, Kosten/Länge der gültigen, `Existing` übersprungen, `Invalid` mit
+  `FirstInvalid`, `BuildingsReached`, Fehler `InsufficientFunds`/`TooShort`) → `BuildAlongRoads(plan)` zu den normalen
+  Meterpreisen. Unterirdisch: unter dem rechten Gehweg, bei breiten Straßen (Gegenseite > 11,5 m) beidseits, an den Knoten
+  kurze Stücke zur Mitte (alle Stränge treffen sich dort); oberirdisch auf der Mitte; Kurven in Sehnen ≤ 1,5 m Fehler.
+  Freileitung an bebauter Straße: Stücke ohne Maststandort sind ungültig (kein Abriss) → Erdkabel.
 - **Strommasten** sind Simulationsobjekte (`UtilityLine.Poles`, berechnet in `UtilityPoles.cs` beim `PlanLine`;
   Vorschau `LinePlan.Poles` mit Fehler je Mast). Regeln: Grundfläche 2×2 m + 0,5 m Rand nie auf Fahrbahn/Gehweg
   (`RoadType.HalfWidth`, nur über überdeckten Tunneln erlaubt), Wasser, Bauwerken oder Gebäuden; Spannweite
@@ -513,7 +541,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   **Straße/Bauwerk später durch einen Mast:** Leitung wird mit denselben Enden neu trassiert (`Revision++`,
   `ReroutedLines`); geht das nicht, wird sie abgerissen (`LineRemoved`, `LinesRemovedByConstruction`) – Straßenbau
   hat Vorrang, die Leitung soll aber nach Möglichkeit erhalten bleiben.
-  Wasserrohre haben keine Masten und dürfen weiter unter Straßen liegen.
+  Unterirdische Leitungen (Rohre, Kanäle, Erdkabel) haben keine Masten und dürfen unter Straßen liegen. Grundfläche und
+  Spannweite je Leitungsart (`UtilityLineType.PoleSize/MaxSpan/PoleFootprintHalf`, `PoleBlocks` für Platzprüfungen).
 - **Bilanz** je Netz: Erzeugung gegen Bedarf (Bedarf aus Haushalten/Jobs-Kapazität, Industrie mehr). Unterdeckung:
   älteste Gebäude (kleinste Id) zuerst, kleinere können noch nachrutschen; der Rest ist unversorgt.
 - **Abfrage für die Stadt**: `world.Utilities.IsSupplied(b)`, `IsSupplied(b, kind)`, `GetStatus(b)` (ja/nein + Ticks ohne),
@@ -528,9 +557,23 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Leitungsende, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar; Vorschau im Werkzeug zeigt die Masten, ungültige rot),
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
+  **Netze selbst verlegt:** Werkzeuge `UtilityAction.HighVoltageLine`, `PowerLine` (= Freileitung Ortsnetz), `PowerCable`,
+  `WaterPipe`, `SewagePipe`, `AlongRoads` (Art wählbar: Erdkabel/Freileitung/Wasserrohr/Kanal; Straße unter dem Mauszeiger oder
+  „Alle Stadtstraßen“, Vorschau-Striche mit Kosten, Klick bzw. „Jetzt verlegen“ baut; Esc bricht „alle“ ab, über
+  `RoadTool.RegisterOperation`); unterirdische Arten schalten die Unterirdisch-Ansicht ein. Bauleiste „Versorgung“: Kacheln
+  Umspannwerk (MW), Hochspannung, Freileitung, Erdkabel, Wasserrohr, Abwasserkanal, „Entlang Straßen“ + Zeile „Entlang Straßen“.
+  `UtilityView`: Hochspannung als Stahlmast 26 m mit zwei Traversen, Freileitung als Holzmast 9 m, Erdkabel orange 1,2 m tief,
+  Hausanschlüsse unterirdisch (blau/braun/orange) bzw. Seil vom nächsten Mast zum Haus. Fenster/Inspektor: „Hochspannung n“ /
+  „Ortsnetz n“ mit Erzeugung, über Umspannwerke bezogen, Kapazität; Gebäude: Anschluss (Art, Abstand) oder „kein Anschluss“;
+  Umspannwerk: Last/Kapazität in MW, Hochspannungs- und Ortsnetz. Unterdeckungs-Meldung nur für Netze mit Quelle.
+  **Speichern:** Abschnitt `utilities` v2 (Leitungsart, Umspannwerk-Oberseite/Last, Netzebene/Umspannwerte, Übergangsfrist);
+  v1 → Leitungen = bisherige Art (Strom = Freileitung), Netze werden neu aufgebaut, `MigrationGraceTicks` 5 Tage ohne Ausfallzählung.
 - Später (Abwasser/Atom: s. „G3 erweitert“): Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
   Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
-  Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
+  Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), **Rohrdurchmesser/Kapazität**
+  (Haupt- vs. Verteilleitung – bewusst später: ohne Druck-/Durchflussmodell wäre es nur ein zweiter Preis; sinnvoll erst mit
+  Leitungskapazität je Strang und Engpass-Anzeige), Rückspeisung Ortsnetz → Hochspannung, Umspannwerk-Größen, Spannungsfall
+  über lange Ortsnetze, Masten an Kreuzungen zusammenlegen („Entlang Straßen“ setzt je Stück eigene Endmasten),
   (Wasserqualität: erledigt, s. „G3 erweitert“). **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
@@ -542,7 +585,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   **Abwasser-Auslass** (1500 m³/h, billig, `Untreated`, muss ans Ufer). Startphase wie Strom/Wasser: erst verlangt, wenn es eine
   Kläranlage/einen Auslass gibt; dann fließt es in `IsSatisfied` (Versorgung, Zustand, Stufen) ein; verlassen nach 4 Tagen
   (`SewageAbandonAfterTicks`). **Kanäle werden selbst verlegt** (Entscheidung des Spielers): Straßen führen sie nicht mit.
-- **`ConnectionRules`** (wiederverwendbarer Baustein, bisher nur Abwasser – Wasser/Strom folgen): `CarriedByRoads(kind)`,
+- **`ConnectionRules`** (gemeinsamer Baustein für Strom-Ortsnetz, Wasser, Abwasser, s. G3): `CarriedByRoads(kind)` = false,
   Gebäude angeschlossen, wenn ein Kanal ≤ `BuildingReach` 12 m von der Zufahrt (`Building.Entrance`) verläuft (auch mittendrin);
   Leitungen/Bauwerke verbinden sich weiter über Enden (3 m). `UtilitySystem.ConnectedLine(b, kind)`, `HouseConnection(...)` für
   den sichtbaren Hausanschluss (`UtilityView`, unterirdisch, braun, 1,5 m unter den Wasserrohren).
@@ -565,7 +608,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Overlay.WaterQuality`, nur Verschmutzung sichtbar), Kanal-Chip oben, Inspektor: Abwasser/Trinkwasser/Atom-Sorge am Gebäude,
   geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
 - Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
-  Fischsterben/Tourismus, Grundwasser-Verschmutzung, Wasser/Strom auf `ConnectionRules` umstellen (Hochspannung → Umspannwerk → Ortsnetz).
+  Fischsterben/Tourismus, Grundwasser-Verschmutzung. (Wasser/Strom auf `ConnectionRules`: erledigt, s. G3.)
 
 ## Medien (G4 erweitert)
 - Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
@@ -1126,10 +1169,13 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
      (im Editor noch nicht visuell abgenommen). ✅ Fußwege in Verkehrszeit (echtes Gehtempo, s. „Zeitmodell“). Später: Abkürzungen durch Parks,
      freie Fußwege/Plätze, Ampelphasen an Zebrastreifen, inkrementeller Gehweg-Neubau (✅ ÖPNV verbunden: Wartende, Fußwege zur/von der Haltestelle)
-   - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
+   - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (selbst verlegt), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
      ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,
-     Atomkraftwerk mit Akzeptanz und Störfall. Später: schwankende Erzeugung, Wasser/Strom auf ConnectionRules
+     Atomkraftwerk mit Akzeptanz und Störfall.
+     ✅ Netze selbst verlegt: Wasserrohre, Strom mit Hochspannung → Umspannwerk → Ortsnetz (Freileitung/Erdkabel),
+     Hausanschluss in 12 m, „Entlang Straßen verlegen“, Spielstand v2 mit Migration (im Editor noch nicht visuell
+     abgenommen). Später: schwankende Erzeugung, Rohrdurchmesser/Leitungskapazität, Rückspeisung, Umspannwerk-Modell
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
      (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. Später: Brände/Kriminalität

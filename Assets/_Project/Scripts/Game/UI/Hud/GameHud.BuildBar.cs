@@ -78,7 +78,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Roads, HudIconKind.Road, "Straßen", "Stadtstraßen: Gerade/Kurve (R), Kreisverkehr (K), Ausbauen (U), Richtung (I) · Tab Typ wechseln");
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
-            CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Strom und Wasser (J): Kraftwerke, Pumpen, Leitungen, Rohre");
+            CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Versorgung (J): Kraftwerke, Umspannwerke, Pumpen · Hochspannung, Ortsnetz (Freileitung/Erdkabel), Rohre, Kanäle selbst verlegen");
             CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll · ⇧4 Abdeckungs-Ansicht");
             CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
@@ -428,7 +428,7 @@ namespace CityBuilder.Game.UI.Hud
 
         void BuildUtilityPanel()
         {
-            Header("Versorgung", ", und . drehen · Leitungen in Kette, RMB beendet · Stadtstraßen leiten Strom und Wasser mit");
+            Header("Versorgung", ", und . drehen · Leitungen in Kette, RMB beendet · Netze selbst verlegen: Kraftwerk → Hochspannung → Umspannwerk → Ortsnetz → Haus");
             if (utilityTool == null) { panelBody.Add(Info(() => "Versorgungs-Werkzeug fehlt.")); return; }
             var u = runner.World.Utilities;
 
@@ -450,41 +450,72 @@ namespace CityBuilder.Game.UI.Hud
             if (envOverlay != null) // G3 erweitert: Wasserverschmutzung
                 tools.Add(PBtn("Wasserqualität", () => envOverlay.Toggle(CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality),
                     () => envOverlay.Current == CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality, "Verschmutzung der Gewässer (braun = verschmutzt)"));
-            tools.Add(PBtn("Unterirdisch", tool.ToggleUndergroundView, () => tool.UndergroundView, "Unterirdisch-Ansicht (X) – Rohre liegen unter dem Gelände"));
+            tools.Add(PBtn("Unterirdisch", tool.ToggleUndergroundView, () => tool.UndergroundView, "Unterirdisch-Ansicht (X) – Rohre, Kanäle und Erdkabel liegen unter dem Gelände"));
             panelBody.Add(tools);
+
+            // --- Netze selbst verlegt: Zeile „Entlang Straßen verlegen“ (nur sichtbar, wenn das Werkzeug aktiv ist)
+            var along = Container("cb-tool-row");
+            along.Add(PLabel("Entlang Straßen"));
+            foreach (var type in UtilityTool.AlongTypes)
+            {
+                var t = type;
+                along.Add(PBtn(ShortLineName(t), () => utilityTool.SelectAlong(t), () => utilityTool.AlongType == t,
+                    $"{t.DisplayName} entlang der Straßen verlegen ({t.CostPerMeter:0} €/m)"));
+            }
+            along.Add(PBtn("Alle Stadtstraßen", utilityTool.ToggleAlongAll, () => utilityTool.AlongAll,
+                "Vorschau für alle Stadtstraßen mit Gesamtkosten – Klick in die Karte oder „Jetzt verlegen“ baut (Esc bricht ab)"));
+            along.Add(PBtn("Jetzt verlegen", () => utilityTool.BuildAlongNow(), null, "Verlegt die aktuelle Vorschau zu den normalen Kosten"));
+            along.Add(Container("cb-spacer"));
+            along.Add(PValue(() => UtilityTool.AlongText(utilityTool.AlongPreview, utilityTool.AlongAll), "cb-muted"));
+            panelSlowRefresh.Add(() => along.style.display =
+                utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.AlongRoads ? DisplayStyle.Flex : DisplayStyle.None);
+            panelBody.Add(along);
+            // --- Ende
 
             var tiles = Container("cb-tiles");
             foreach (var type in UtilityCatalog.All)
             {
                 var t = type;
                 string unit = UtilityCatalog.Unit(t.Kind);
-                tiles.Add(Tile(BuildLabels.FacilityName(t), $"{BuildLabels.Number(t.Capacity)} {unit}",
+                string power = t.IsSubstation ? $"{BuildLabels.Number(t.Capacity / 1000f)} MW" : $"{BuildLabels.Number(t.Capacity)} {unit}";
+                tiles.Add(Tile(BuildLabels.FacilityName(t), power,
                     t.Kind == UtilityKind.Power ? PowerSwatch : t.Kind == UtilityKind.Sewage ? SewageSwatch : WaterSwatch,
                     t.Kind == UtilityKind.Power ? HudIconKind.Power : t.Kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water,
                     () => utilityTool.SelectFacility(t),
                     () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Facility && utilityTool.SelectedType == t,
-                    $"{t.DisplayName} · Leistung {BuildLabels.Number(t.Capacity)} {unit} · Fläche {t.Width:0}×{t.Depth:0} m · " +
+                    $"{t.DisplayName} · {(t.IsSubstation ? "Umspannkapazität" : "Leistung")} {power} · Fläche {t.Width:0}×{t.Depth:0} m · " +
                     $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (Stadtkasse)" +
                     (t.NeedsWater ? " · muss am Wasser stehen" : "") +
+                    // --- Netze selbst verlegt: Rolle im Stromnetz
+                    (t.IsSubstation ? " · verbindet Hochspannung und Ortsnetz, begrenzt die Last des Ortsnetzes · Zufahrt zur Straße" : "") +
+                    (t.Kind == UtilityKind.Power && !t.IsSubstation
+                        ? (t.FeedsLocalGrid ? " · klein: speist direkt ins Ortsnetz (oder in die Hochspannung)" : " · speist nur in die Hochspannung → Umspannwerk")
+                        : "") +
                     // --- G3 erweitert: Atom/Abwasser
                     (t.ConcernRadius > 0f ? $" · kein Abgas, aber Anwohner im Umkreis {t.ConcernRadius:0} m sorgen sich · seltener Störfall" : "") +
                     (t.Untreated ? " · billig, leitet ungeklärt ins Gewässer → verschmutzt flussabwärts (Pumpen, Ufer)" : "") +
                     (t.Kind == UtilityKind.Sewage && !t.Untreated ? " · klärt Abwasser vollständig" : "")));
             }
             tiles.Add(Container("cb-tile-sep"));
-            tiles.Add(Tile("Stromleitung", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Power):0} €/m", PowerSwatch, HudIconKind.Power,
-                () => utilityTool.Select(UtilityTool.UtilityAction.PowerLine),
-                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.PowerLine,
-                $"Freie Stromleitung für Lücken/Überland · Masten neben der Straße, höchstens {UtilitySystem.MaxPoleSpan:0} m Abstand, belegen Platz"));
-            tiles.Add(Tile("Wasserrohr", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Water):0} €/m", WaterSwatch, HudIconKind.Pipe,
-                () => utilityTool.Select(UtilityTool.UtilityAction.WaterPipe),
-                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.WaterPipe,
-                "Wasserrohr (liegt unterirdisch, schaltet die Unterirdisch-Ansicht ein)"));
+            float reach = ConnectionRules.BuildingReach;
+            LineTile(tiles, UtilityTool.UtilityAction.HighVoltageLine, PowerSwatch, HudIconKind.Power,
+                $"Hochspannung vom Kraftwerk zum Umspannwerk · große Masten (Spannweite bis {UtilityCatalog.HighVoltageLine.MaxSpan:0} m) · keine Hausanschlüsse");
+            LineTile(tiles, UtilityTool.UtilityAction.PowerLine, PowerSwatch, HudIconKind.Power,
+                $"Ortsnetz als Freileitung vom Umspannwerk entlang der Straße · billig · kleine Masten neben der Straße brauchen Platz " +
+                $"(Abstand ≤ {UtilitySystem.MaxPoleSpan:0} m, kein Abriss) · Gebäude ≤ {reach:0} m angeschlossen, Seil zum Haus");
+            LineTile(tiles, UtilityTool.UtilityAction.PowerCable, PowerSwatch, HudIconKind.Underground,
+                $"Ortsnetz als Erdkabel unter dem Gehweg · teurer, braucht keinen Platz · Gebäude ≤ {reach:0} m angeschlossen");
+            LineTile(tiles, UtilityTool.UtilityAction.WaterPipe, WaterSwatch, HudIconKind.Pipe,
+                $"Wasserrohr selbst verlegen (Straßen führen kein Wasser mit) · unter dem Gehweg einrasten · Gebäude ≤ {reach:0} m angeschlossen");
             // --- G3 erweitert: Abwasserkanal
-            tiles.Add(Tile("Abwasserkanal", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Sewage):0} €/m", SewageSwatch, HudIconKind.Pipe,
-                () => utilityTool.Select(UtilityTool.UtilityAction.SewagePipe),
-                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.SewagePipe,
-                $"Abwasserkanal (unterirdisch, selbst verlegen – Straßen führen ihn nicht mit) · Gebäude mit Zufahrt ≤ {ConnectionRules.BuildingReach:0} m vom Kanal sind angeschlossen · am besten entlang der Straßen, Kette bis zur Kläranlage/zum Auslass"));
+            LineTile(tiles, UtilityTool.UtilityAction.SewagePipe, SewageSwatch, HudIconKind.Pipe,
+                $"Abwasserkanal (unterirdisch, selbst verlegen) · Gebäude mit Zufahrt ≤ {reach:0} m vom Kanal sind angeschlossen · am besten entlang der Straßen, Kette bis zur Kläranlage/zum Auslass");
+            // --- Netze selbst verlegt: Hilfe für bestehende Städte und normales Bauen
+            tiles.Add(Tile("Entlang Straßen", "Vorschau + Kosten", PowerSwatch, HudIconKind.Road,
+                () => utilityTool.SelectAlong(utilityTool.AlongType),
+                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.AlongRoads,
+                "Netz entlang Straßen verlegen: Erdkabel, Freileitung, Wasserrohr oder Kanal automatisch entlang der Straße unter dem Mauszeiger " +
+                "oder aller Stadtstraßen – zu den normalen Kosten, Vorschau mit Kosten und neu angeschlossenen Gebäuden"));
             // --- Ende
             panelBody.Add(tiles);
 
@@ -496,6 +527,23 @@ namespace CityBuilder.Game.UI.Hud
             panelSlowRefresh.Add(() => upkeep.text = $"Unterhalt {BuildLabels.Money(u.TotalUpkeepPerDay)}/Tag (nur Anzeige)");
             info.Add(upkeep);
             panelBody.Add(info);
+        }
+
+        /// <summary>Kachel eines Leitungs-Werkzeugs (Name, Preis je Meter aus der Leitungsart).</summary>
+        void LineTile(VisualElement tiles, UtilityTool.UtilityAction action, Color swatch, HudIconKind icon, string tip)
+        {
+            var t = UtilityTool.LineTypeOf(action);
+            tiles.Add(Tile(ShortLineName(t), $"{t.CostPerMeter:0} €/m", swatch, icon,
+                () => utilityTool.Select(action),
+                () => utilityTool.Active && utilityTool.Current == action, tip));
+        }
+
+        static string ShortLineName(UtilityLineType t)
+        {
+            if (t == UtilityCatalog.HighVoltageLine) return "Hochspannung";
+            if (t == UtilityCatalog.OverheadLine) return "Freileitung";
+            if (t == UtilityCatalog.UndergroundCable) return "Erdkabel";
+            return t.DisplayName;
         }
 
         Label BalanceLabel(UtilitySystem u, UtilityKind kind)

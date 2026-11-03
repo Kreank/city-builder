@@ -24,9 +24,12 @@ namespace CityBuilder.Simulation.Utilities
     /// </summary>
     public sealed partial class UtilitySystem
     {
-        /// <summary>Größte Spannweite zwischen zwei Masten (und vom Leitungsende zum ersten Mast).</summary>
+        /// <summary>
+        /// Größte Spannweite zwischen zwei Masten (und vom Leitungsende zum ersten Mast) der Freileitung im Ortsnetz.
+        /// Je Leitungsart: <see cref="UtilityLineType.MaxSpan"/> (Hochspannung weiter).
+        /// </summary>
         public const float MaxPoleSpan = 45f;
-        /// <summary>Kantenlänge der quadratischen Mast-Grundfläche.</summary>
+        /// <summary>Kantenlänge der quadratischen Mast-Grundfläche (Freileitung; je Art <see cref="UtilityLineType.PoleSize"/>).</summary>
         public const float PoleSize = 2f;
         /// <summary>Freier Rand um die Grundfläche.</summary>
         public const float PoleMargin = 0.5f;
@@ -56,10 +59,29 @@ namespace CityBuilder.Simulation.Utilities
             return null;
         }
 
-        /// <summary>Darf an dieser Stelle ein Mast stehen? (für Vorschau/Tests; None = ja)</summary>
-        public UtilityBuildError CheckPole(Vector2 p) => CheckPole(p, out _, out _);
+        /// <summary>
+        /// Berührt die Grundfläche (inkl. Rand, je Leitungsart: Hochspannung größer) eines Masts den Kreis um p mit
+        /// <paramref name="margin"/>? Für Platzprüfungen (Grundstücke, andere Bauwerke).
+        /// </summary>
+        public bool PoleBlocks(Vector2 p, float margin)
+        {
+            foreach (var l in lines.Values)
+            {
+                if (!l.Type.HasPoles) continue;
+                float r = margin + l.PoleFootprintHalf, r2 = r * r;
+                foreach (var q in l.Poles)
+                    if (Vector2.DistanceSquared(p, q) <= r2) return true;
+            }
+            return false;
+        }
 
-        UtilityBuildError CheckPole(Vector2 p, out RoadSegment road, out float roadT)
+        /// <summary>Darf an dieser Stelle ein Mast (Freileitung, kleiner Mast) stehen? (für Vorschau/Tests; None = ja)</summary>
+        public UtilityBuildError CheckPole(Vector2 p) => CheckPole(p, PoleFootprintHalf, out _, out _);
+
+        /// <summary>Darf an dieser Stelle ein Mast der Leitungsart stehen? (None = ja)</summary>
+        public UtilityBuildError CheckPole(Vector2 p, UtilityLineType type) => CheckPole(p, type.PoleFootprintHalf, out _, out _);
+
+        UtilityBuildError CheckPole(Vector2 p, float footprintHalf, out RoadSegment road, out float roadT)
         {
             road = null;
             roadT = 0f;
@@ -68,45 +90,47 @@ namespace CityBuilder.Simulation.Utilities
             float best = float.MaxValue;
             foreach (var s in roads.Segments)
             {
-                float reach = s.Type.HalfWidth + PoleFootprintHalf;
+                float reach = s.Type.HalfWidth + footprintHalf;
                 Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var lo, out var hi);
                 if (p.X < lo.X - reach || p.Y < lo.Y - reach || p.X > hi.X + reach || p.Y > hi.Y + reach) continue;
                 float t = s.ClosestT(p);
                 float d = Vector2.Distance(s.Evaluate(t), p) - s.Type.HalfWidth;
-                if (d >= PoleFootprintHalf - 1e-3f || s.IsCoveredAt(t)) continue; // Tunnel liegt unter dem Mast
+                if (d >= footprintHalf - 1e-3f || s.IsCoveredAt(t)) continue; // Tunnel liegt unter dem Mast
                 if (d < best) { best = d; road = s; roadT = t; }
             }
             if (road != null) return UtilityBuildError.PoleOnRoad;
 
-            float h = PoleSize * 0.5f;
+            float h = footprintHalf - PoleMargin; // halbe Mastkante
             if (terrain.IsWater(p) || terrain.IsWater(p + new Vector2(h, h)) || terrain.IsWater(p + new Vector2(-h, h)) ||
                 terrain.IsWater(p + new Vector2(h, -h)) || terrain.IsWater(p + new Vector2(-h, -h)))
                 return UtilityBuildError.PoleOnWater;
-            if (FacilityAt(p, PoleFootprintHalf) != null) return UtilityBuildError.PoleOnFacility;
-            if (OtherStructureAt != null && OtherStructureAt(p, PoleFootprintHalf)) return UtilityBuildError.PoleOnFacility; // G4-Hook
-            float m = PoleFootprintHalf;
+            if (FacilityAt(p, footprintHalf) != null) return UtilityBuildError.PoleOnFacility;
+            if (OtherStructureAt != null && OtherStructureAt(p, footprintHalf)) return UtilityBuildError.PoleOnFacility; // G4-Hook
+            float m = footprintHalf;
             if (city.BuildingAt(p) != null || city.BuildingAt(p + new Vector2(m, m)) != null || city.BuildingAt(p + new Vector2(-m, m)) != null ||
                 city.BuildingAt(p + new Vector2(m, -m)) != null || city.BuildingAt(p + new Vector2(-m, -m)) != null)
                 return UtilityBuildError.PoleOnBuilding;
             return UtilityBuildError.None;
         }
 
-        /// <summary>Berührt diese Straße die Mast-Grundfläche bei <paramref name="p"/>?</summary>
-        static bool RoadBlocksPole(RoadSegment s, Vector2 p)
+        /// <summary>Berührt diese Straße die Mast-Grundfläche (halbe Kante + Rand = <paramref name="footprintHalf"/>) bei <paramref name="p"/>?</summary>
+        static bool RoadBlocksPole(RoadSegment s, Vector2 p, float footprintHalf)
         {
-            float reach = s.Type.HalfWidth + PoleFootprintHalf;
+            float reach = s.Type.HalfWidth + footprintHalf;
             Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var lo, out var hi);
             if (p.X < lo.X - reach || p.Y < lo.Y - reach || p.X > hi.X + reach || p.Y > hi.Y + reach) return false;
             float t = s.ClosestT(p);
-            return Vector2.Distance(s.Evaluate(t), p) - s.Type.HalfWidth < PoleFootprintHalf - 1e-3f && !s.IsCoveredAt(t);
+            return Vector2.Distance(s.Evaluate(t), p) - s.Type.HalfWidth < footprintHalf - 1e-3f && !s.IsCoveredAt(t);
         }
 
         /// <summary>
-        /// Berechnet die Masten einer Stromleitung von <paramref name="a"/> nach <paramref name="b"/>.
+        /// Berechnet die Masten einer Stromleitung von <paramref name="a"/> nach <paramref name="b"/> (Grundfläche und
+        /// Spannweite je Leitungsart: Hochspannung große Masten mit weiter Spannweite, Freileitung kleine Masten).
         /// Liefert den ersten Fehler (None = alle Masten gültig); ungültige Masten stehen mit Fehler in der Liste.
         /// </summary>
-        UtilityBuildError PlanPoles(Vector2 a, Vector2 b, List<PolePlan> poles)
+        UtilityBuildError PlanPoles(Vector2 a, Vector2 b, List<PolePlan> poles, UtilityLineType type)
         {
+            float footprintHalf = type.PoleFootprintHalf, maxSpan = type.MaxSpan;
             poles.Clear();
             float length = Vector2.Distance(a, b);
             if (length < 1e-3f) return UtilityBuildError.TooShort;
@@ -117,7 +141,7 @@ namespace CityBuilder.Simulation.Utilities
             bool TryAt(float s, out Vector2 pos, out UtilityBuildError why)
             {
                 pos = a + dir * s;
-                why = CheckPole(pos, out var road, out float t);
+                why = CheckPole(pos, footprintHalf, out var road, out float t);
                 if (why == UtilityBuildError.None) return true;
                 if (why != UtilityBuildError.PoleOnRoad || road == null) return false;
                 var tangent = road.Tangent(t);
@@ -127,16 +151,16 @@ namespace CityBuilder.Simulation.Utilities
                 float offset = Vector2.Dot(pos - center, normal);
                 // Seite: auf der die Leitung liegt; mittig auf der Straße → rechts in Leitungsrichtung (gleichbleibend)
                 float preferred = MathF.Abs(offset) > 0.5f ? MathF.Sign(offset) : (Vector2.Dot(normal, right) >= 0f ? 1f : -1f);
-                float distance = road.Type.HalfWidth + PoleRoadGap + PoleSize * 0.5f;
+                float distance = road.Type.HalfWidth + PoleRoadGap + type.PoleSize * 0.5f;
                 foreach (float side in new[] { preferred, -preferred })
                 {
                     var q = center + normal * (side * distance);
-                    if (CheckPole(q) == UtilityBuildError.None) { pos = q; why = UtilityBuildError.None; return true; }
+                    if (CheckPole(q, footprintHalf, out _, out _) == UtilityBuildError.None) { pos = q; why = UtilityBuildError.None; return true; }
                 }
                 return false;
             }
 
-            float maxSlide = MathF.Min(length, MaxPoleSpan);
+            float maxSlide = MathF.Min(length, maxSpan);
 
             // Erster Mast: vom Anfang zur Mitte suchen
             Vector2 first = default;
@@ -158,7 +182,7 @@ namespace CityBuilder.Simulation.Utilities
             // Letzter Mast: vom Ende rückwärts suchen
             Vector2 last = default;
             float lastS = -1f;
-            float lowest = MathF.Max(firstS + MinPoleGap, length - MaxPoleSpan);
+            float lowest = MathF.Max(firstS + MinPoleGap, length - maxSpan);
             for (int i = 0; length - i * PoleStep >= lowest - 1e-3f; i++)
             {
                 float s = length - i * PoleStep;
@@ -171,11 +195,11 @@ namespace CityBuilder.Simulation.Utilities
             var error = UtilityBuildError.None;
             var prev = first;
             float prevS = firstS;
-            int maxShift = (int)(MaxPoleSpan * 0.5f / PoleStep);
-            for (int guard = 0; Vector2.Distance(prev, target) > MaxPoleSpan + 1e-3f && guard < 1000; guard++)
+            int maxShift = (int)(maxSpan * 0.5f / PoleStep);
+            for (int guard = 0; Vector2.Distance(prev, target) > maxSpan + 1e-3f && guard < 1000; guard++)
             {
                 float remaining = targetS - prevS;
-                int spans = Math.Max(2, (int)MathF.Ceiling(remaining / (MaxPoleSpan - 2f)));
+                int spans = Math.Max(2, (int)MathF.Ceiling(remaining / (maxSpan - 2f)));
                 float ideal = prevS + remaining / spans;
                 bool found = false;
                 for (int k = 0; k <= maxShift && !found; k++)
@@ -185,7 +209,7 @@ namespace CityBuilder.Simulation.Utilities
                         if (k == 0 && sign > 0) continue;
                         float s = ideal + sign * k * PoleStep;
                         if (s <= prevS + PoleStep * 0.5f || s >= targetS - PoleStep * 0.5f) continue;
-                        if (TryAt(s, out var pos, out _) && Vector2.Distance(prev, pos) <= MaxPoleSpan + 1e-3f)
+                        if (TryAt(s, out var pos, out _) && Vector2.Distance(prev, pos) <= maxSpan + 1e-3f)
                         {
                             poles.Add(new PolePlan { Position = pos });
                             prev = pos;
@@ -197,7 +221,7 @@ namespace CityBuilder.Simulation.Utilities
                 if (found) continue;
                 // Kein Standort in Reichweite: Mast an der Idealstelle als ungültig zeigen und weiterplanen (Vorschau)
                 var at = a + dir * ideal;
-                var why = CheckPole(at);
+                var why = CheckPole(at, footprintHalf, out _, out _);
                 if (why == UtilityBuildError.None) why = UtilityBuildError.PoleOnRoad; // nur seitlich frei, aber zu weit
                 poles.Add(new PolePlan { Position = at, Error = why });
                 if (error == UtilityBuildError.None) error = why;
@@ -216,23 +240,23 @@ namespace CityBuilder.Simulation.Utilities
         }
 
         /// <summary>
-        /// Leitungen mit einem Mast, auf den <paramref name="blocked"/> zutrifft, werden neu trassiert (Masten
-        /// verschoben); ist keine gültige Trasse mehr möglich, wird die Leitung abgerissen.
+        /// Leitungen mit einem Mast, auf den <paramref name="blocked"/> (Standort, halbe Grundfläche + Rand) zutrifft,
+        /// werden neu trassiert (Masten verschoben); ist keine gültige Trasse mehr möglich, wird die Leitung abgerissen.
         /// </summary>
-        void RerouteLines(Func<Vector2, bool> blocked)
+        void RerouteLines(Func<Vector2, float, bool> blocked)
         {
             List<UtilityLine> hit = null;
             foreach (var l in lines.Values)
             {
-                if (l.Kind != UtilityKind.Power) continue;
+                if (!l.Type.HasPoles) continue;
                 foreach (var p in l.Poles)
-                    if (blocked(p)) { (hit ?? (hit = new List<UtilityLine>())).Add(l); break; }
+                    if (blocked(p, l.PoleFootprintHalf)) { (hit ?? (hit = new List<UtilityLine>())).Add(l); break; }
             }
             if (hit == null) return;
             var plans = new List<PolePlan>();
             foreach (var l in hit)
             {
-                if (PlanPoles(l.A, l.B, plans) == UtilityBuildError.None)
+                if (PlanPoles(l.A, l.B, plans, l.Type) == UtilityBuildError.None)
                 {
                     l.Poles = PolePositions(plans);
                     l.Revision++;

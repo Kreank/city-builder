@@ -85,6 +85,14 @@ namespace CityBuilder.Simulation.Tests
             w.Utilities.TryBuildFacility(UtilityCatalog.WindTurbine, new Vector2(-600, -80));
             var line = w.Utilities.PlanLine(UtilityKind.Power, new Vector2(-600, -60), new Vector2(-500, -10));
             if (line.IsValid) w.Utilities.BuildLine(line);
+            // Netze selbst verlegt: Umspannwerk, Hochspannung, Erdkabel entlang aller Stadtstraßen (Zustände im Determinismus-Test)
+            var sub = w.Utilities.TryBuildFacility(UtilityCatalog.Substation, new Vector2(700, -230));
+            if (sub != null)
+            {
+                var hv = w.Utilities.PlanLine(UtilityCatalog.HighVoltageLine, new Vector2(700, -138), new Vector2(700, -220));
+                if (hv.IsValid) w.Utilities.BuildLine(hv);
+            }
+            w.Utilities.BuildAlongRoads(w.Utilities.PlanAlongRoads(UtilityCatalog.UndergroundCable));
             w.Services.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-100, -40));
             w.Services.TryBuild(ServiceCatalog.Clinic, new Vector2(100, -40));
             w.Services.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(-500, 220));
@@ -380,6 +388,50 @@ namespace CityBuilder.Simulation.Tests
             Run(b, SimulationClock.TicksPerDay);               // und läuft weiter: Firmen entstehen für vorhandene Gebäude neu
             Assert.NotEmpty(b.Goods.Firms);
             Assert.True(b.LandValue.Cycles >= 1);
+        }
+
+        /// <summary>
+        /// Netze selbst verlegt: alter Abschnitt „utilities“ v1 (ohne Leitungsarten, Straßen trugen Strom/Wasser) →
+        /// Leitung gilt als bisherige Art (Freileitung im Ortsnetz), Übergangsfrist, Netze nach neuen Regeln, Stadt über
+        /// „Entlang Straßen verlegen“ wieder versorgbar.
+        /// </summary>
+        [Fact]
+        public void Migration_UtilitiesV1_LinesKeepOldKind_GraceAndAlongRoads()
+        {
+            var a = BuildCity(days: 1);
+            byte[] v1;
+            using (var ms = new MemoryStream())
+            {
+                var w = new SaveWriter(ms);
+                w.Int(1); w.Int(2);                       // nächste Bauwerk-/Leitungs-Id
+                w.Int(-1); w.Int(-1); w.Int(-1);          // Neuaufbau-Versionen
+                w.Int(1); w.Int(0);                       // StructureVersion, StatusVersion
+                w.Bool(true); w.Int(0); w.Bool(false);    // Verlassen an, 0 verlassen, kein Abgas
+                w.Int(0); w.Int(0);                       // neu trassiert / abgerissen
+                w.Bool(true); w.Float(0.002f); w.Int(0); w.Int(-1); // Störfälle
+                w.IntDictionary(new Dictionary<int, int>(), w.Int);
+                w.Int(0); w.Int(0);                       // keine Bauwerke (StableMap: 0 Plätze, 0 frei)
+                w.Int(1); w.Bool(true);                   // 1 Leitung (v1: ohne Leitungsart)
+                w.Int(1); w.Name(UtilityKind.Power); w.Vector2(new Vector2(-900, 900)); w.Vector2(new Vector2(-800, 900));
+                w.Int(-1); w.Int(0); w.Int(0);            // Netz, Revision, keine Masten
+                w.Int(0);                                 // freie Plätze
+                w.Int(0);                                 // kein Versorgungsstatus
+                w.Int(0);                                 // keine Netze
+                w.Flush();
+                v1 = ms.ToArray();
+            }
+            var c = SaveGame.Capture(a);
+            c.Set("utilities", 1, v1);
+            var b = SaveGame.Load(c.ToBytes());
+            var u = b.Utilities;
+            Assert.Same(UtilityCatalog.OverheadLine, u.GetLine(1).Type);
+            Assert.Equal(UtilitySystem.MigrationGraceAfterV1, u.MigrationGraceTicks);
+            Run(b, 20);
+            Assert.True(u.MigrationGraceTicks < UtilitySystem.MigrationGraceAfterV1);
+            var plan = u.PlanAlongRoads(UtilityCatalog.UndergroundCable);
+            Assert.True(plan.IsValid, plan.Error.ToString());
+            Assert.True(plan.BuildingsReached > 0);
+            Assert.True(u.BuildAlongRoads(plan) > 0);
         }
 
         [Fact]

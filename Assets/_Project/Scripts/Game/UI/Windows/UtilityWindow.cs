@@ -59,6 +59,8 @@ namespace CityBuilder.Game.UI.Windows
             }
             ui.Note($"Ohne Versorgung länger als {UtilitySystem.AbandonAfterTicks / SimulationClock.TicksPerDay} Tage → Gebäude wird verlassen " +
                     "(erst, wenn es mind. einen Versorger dieser Art gibt).");
+            ui.Note($"Netze selbst verlegen: Straßen führen nichts mit. Ein Gebäude ist angeschlossen, wenn Ortsnetz/Rohr/Kanal ≤ " +
+                    $"{ConnectionRules.BuildingReach:0} m an seiner Zufahrt vorbeiführt – „Entlang Straßen“ in der Bauleiste verlegt ganze Straßen auf einmal.");
         }
 
         static void Section(Ui ui, UtilitySystem u, UtilityKind kind)
@@ -73,9 +75,18 @@ namespace CityBuilder.Game.UI.Windows
             }
             if (!u.IsRequired(kind))
                 ui.Message("Noch kein Versorger gebaut", $"Gebäude bleiben vorerst ohne {UtilityCatalog.KindName(kind)} (folgenlos).", Tone.Accent);
+            if (kind == UtilityKind.Power)
+            {
+                float cap = 0f, load = 0f;
+                int count = 0;
+                foreach (var s in u.Substations) { cap += s.Type.Capacity; load += s.Load; count++; }
+                ui.Note(count == 0
+                    ? "Kein Umspannwerk: Kraftwerk → Hochspannung → Umspannwerk → Ortsnetz → Gebäude (Wind/Solar dürfen direkt ins Ortsnetz)."
+                    : $"{count} Umspannwerke · Last {BuildLabels.Number(load / 1000f)} von {BuildLabels.Number(cap / 1000f)} MW");
+            }
 
-            var nets = u.Networks(kind).Where(n => n.Facilities > 0 || n.Buildings > 0)
-                .OrderByDescending(n => n.Facilities > 0).ThenByDescending(n => n.Demand).ToList();
+            var nets = u.Networks(kind).Where(n => n.Facilities > 0 || n.Buildings > 0 || n.Substations > 0)
+                .OrderByDescending(n => n.Level == GridLevel.HighVoltage).ThenByDescending(n => n.HasSource).ThenByDescending(n => n.Demand).ToList();
             if (nets.Count == 0) { ui.Note("Keine Netze."); return; }
             using (ui.Card())
             {
@@ -83,13 +94,36 @@ namespace CityBuilder.Game.UI.Windows
                 foreach (var n in nets)
                 {
                     if (shown++ >= MaxRows) { ui.Note($"… und {nets.Count - MaxRows} weitere Netze"); break; }
-                    Tone tone = n.Facilities == 0 ? Tone.Bad : n.HasShortage ? Tone.Warn : Tone.Good;
-                    string state = n.Facilities == 0 ? "kein Versorger angeschlossen" : n.HasShortage ? $"Unterdeckung ({n.Coverage * 100f:0} %)" : "ausreichend";
-                    ui.Meter($"Netz {n.Id + 1}", state, n.Facilities == 0 ? 0f : n.Coverage, tone);
-                    ui.Note($"Erzeugung {n.Production:0} {unit} · Bedarf {n.Demand:0} {unit} · versorgt {n.SuppliedBuildings}/{n.Buildings} Gebäude · " +
-                            $"{n.Facilities} Bauwerke · {n.Lines} Leitungen");
+                    Tone tone = !n.HasSource ? Tone.Bad : n.HasShortage ? Tone.Warn : Tone.Good;
+                    ui.Meter(NetName(n), NetState(n), n.HasSource ? n.Coverage : 0f, tone);
+                    ui.Note(NetDetails(n, unit));
                 }
             }
+        }
+
+        /// <summary>„Netz 3“ bzw. beim Strom „Hochspannung 1“ / „Ortsnetz 3“.</summary>
+        public static string NetName(UtilityNetwork n) =>
+            n.Kind == UtilityKind.Power ? $"{UtilityCatalog.LevelName(n.Level)} {n.Id + 1}" : $"Netz {n.Id + 1}";
+
+        public static string NetState(UtilityNetwork n)
+        {
+            if (!n.HasSource)
+                return n.Kind == UtilityKind.Power && n.Level == GridLevel.Distribution
+                    ? "kein Umspannwerk/Erzeuger angeschlossen"
+                    : "kein Versorger angeschlossen";
+            return n.HasShortage ? $"Unterdeckung ({n.Coverage * 100f:0} %)" : "ausreichend";
+        }
+
+        public static string NetDetails(UtilityNetwork n, string unit)
+        {
+            if (n.Kind == UtilityKind.Power && n.Level == GridLevel.HighVoltage)
+                return $"Erzeugung {n.Generation:0} {unit} · an Umspannwerke {n.Delivered:0} von {n.Demand:0} {unit} angefordert · " +
+                       $"{n.Substations} Umspannwerke ({BuildLabels.Number(n.TransformerCapacity / 1000f)} MW) · {n.Facilities} Kraftwerke · {n.Lines} Leitungen";
+            if (n.Kind == UtilityKind.Power)
+                return $"Verfügbar {n.Production:0} {unit} (eigene Erzeugung {n.Generation:0}, über Umspannwerke {n.Imported:0} von " +
+                       $"{n.TransformerCapacity:0}) · Bedarf {n.Demand:0} {unit} · versorgt {n.SuppliedBuildings}/{n.Buildings} Gebäude · {n.Lines} Leitungen";
+            return $"Erzeugung {n.Production:0} {unit} · Bedarf {n.Demand:0} {unit} · versorgt {n.SuppliedBuildings}/{n.Buildings} Gebäude · " +
+                   $"{n.Facilities} Bauwerke · {n.Lines} Leitungen";
         }
     }
 }

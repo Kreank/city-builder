@@ -8,8 +8,9 @@ namespace CityBuilder.Game.Utilities
 {
     /// <summary>
     /// Zeichnet Versorger-Bauwerke als einfache Platzhalter aus Grundkörpern (Kraftwerkshallen, Schornsteine,
-    /// Kühlturm, Windrad mit drehendem Rotor, Solarfelder, Pumpe, Wasserturm), Stromleitungen mit Masten (Standorte aus
-    /// der Simulation) und durchhängenden Seilen sowie Wasserrohre (nur in der Unterirdisch-Ansicht sichtbar).
+    /// Kühlturm, Windrad mit drehendem Rotor, Solarfelder, Pumpe, Wasserturm, Umspannwerk), Hochspannungsleitungen (große
+    /// Stahlmasten) und Freileitungen (Holzmasten) mit Masten an den Simulations-Standorten und durchhängenden Seilen sowie
+    /// Wasserrohre, Abwasserkanäle und Erdkabel (nur in der Unterirdisch-Ansicht sichtbar) und die Hausanschlüsse.
     /// </summary>
     public sealed class UtilityView : MonoBehaviour
     {
@@ -84,7 +85,7 @@ namespace CityBuilder.Game.Utilities
                 Sync(u);
             }
             if (pipeRoot != null) pipeRoot.gameObject.SetActive(ground != null && ground.Underground);
-            // --- Abwasser (G3 erweitert): Hausanschlüsse (Zufahrt → Kanal), nur unterirdisch sichtbar
+            // --- Hausanschlüsse (Zufahrt → Rohr/Kanal/Erdkabel nur unterirdisch sichtbar, Freileitung: Seil immer)
             if (u.StructureVersion != builtConnections || runner.World.City.Version != builtConnectionsCity)
             {
                 builtConnections = u.StructureVersion;
@@ -98,29 +99,67 @@ namespace CityBuilder.Game.Utilities
             foreach (var r in rotors) if (r != null) r.Rotate(0f, 0f, spin, Space.Self);
         }
 
-        // --- Abwasser (G3 erweitert): Hausanschlüsse nach ConnectionRules (Zufahrt → nächster Punkt des Kanals)
-        Transform connectionRoot;
+        // --- Hausanschlüsse nach ConnectionRules (Netze selbst verlegt): Zufahrt → nächster Punkt der Leitung.
+        // Unterirdisch (nur in der Unterirdisch-Ansicht): Wasser blau, Abwasser braun, Erdkabel orange.
+        // Freileitung: Seil vom nächsten Mast zum Haus (immer sichtbar).
+        Transform connectionRoot, dropRoot;
         int builtConnections = -1, builtConnectionsCity = -1;
 
         void SyncHouseConnections(UtilitySystem u)
         {
             if (connectionRoot == null) connectionRoot = NewRoot("House Connections");
+            if (dropRoot == null) dropRoot = NewRoot("House Drops (Overhead)");
             for (int i = connectionRoot.childCount - 1; i >= 0; i--) Destroy(connectionRoot.GetChild(i).gameObject);
-            var color = new Color(0.5f, 0.36f, 0.2f);
-            float depth = UtilityTool.PipeDepth + 1.5f; // wie die Abwasserkanäle
+            for (int i = dropRoot.childCount - 1; i >= 0; i--) Destroy(dropRoot.GetChild(i).gameObject);
             foreach (var b in runner.World.City.Buildings)
             {
                 if (!b.IsConstructed) continue;
-                var line = u.ConnectedLine(b, UtilityKind.Sewage);
-                if (line == null || !ConnectionRules.HouseConnection(line, b, out var from, out var to)) continue;
-                var a = SimConvert.ToWorld(from, Ground(from) - depth * 0.6f);
-                var c = SimConvert.ToWorld(to, Ground(to) - depth);
-                var delta = c - a;
-                if (delta.sqrMagnitude < 1e-4f) continue;
-                Part(connectionRoot, cylinder, (a + c) * 0.5f, Quaternion.FromToRotation(Vector3.up, delta.normalized),
-                    new Vector3(0.5f, delta.magnitude * 0.5f, 0.5f), color, local: false);
+                foreach (var kind in new[] { UtilityKind.Power, UtilityKind.Water, UtilityKind.Sewage })
+                {
+                    var line = u.ConnectedLine(b, kind);
+                    if (line == null) continue;
+                    if (line.Type.HasPoles)
+                    {
+                        if (ConnectionRules.OverheadDrop(line, b, out var pole, out var house)) HouseDrop(line, b, pole, house);
+                        continue;
+                    }
+                    if (!ConnectionRules.HouseConnection(line, b, out var from, out var to)) continue;
+                    float depth = UtilityTool.DepthOf(line.Type);
+                    var a = SimConvert.ToWorld(from, Ground(from) - depth * 0.6f);
+                    var c = SimConvert.ToWorld(to, Ground(to) - depth);
+                    var delta = c - a;
+                    if (delta.sqrMagnitude < 1e-4f) continue;
+                    Part(connectionRoot, cylinder, (a + c) * 0.5f, Quaternion.FromToRotation(Vector3.up, delta.normalized),
+                        new Vector3(0.4f, delta.magnitude * 0.5f, 0.4f), PipeColor(line.Type), local: false);
+                }
             }
         }
+
+        /// <summary>Hausanschluss der Freileitung: Seil mit leichtem Durchhang von der Mastspitze zur Hauswand.</summary>
+        void HouseDrop(UtilityLine line, CityBuilder.Simulation.Zoning.Building b, SimVector2 pole, SimVector2 house)
+        {
+            var top = SimConvert.ToWorld(pole, Mathf.Max(Ground(pole), runner.World.Terrain.WaterLevel) + UtilityTool.WireHeightOf(line.Type) - 0.8f);
+            var wall = SimConvert.ToWorld(house - b.Front * 0.5f, b.Height + 4.5f);
+            var go = new GameObject("Hausanschluss");
+            go.transform.SetParent(dropRoot, false);
+            var lr = go.AddComponent<LineRenderer>();
+            lr.sharedMaterial = wireMaterial;
+            lr.useWorldSpace = true;
+            lr.widthMultiplier = 0.06f;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            const int n = 6;
+            lr.positionCount = n + 1;
+            float sag = Vector3.Distance(top, wall) * 0.04f;
+            for (int i = 0; i <= n; i++)
+            {
+                float t = i / (float)n;
+                lr.SetPosition(i, Vector3.Lerp(top, wall, t) + Vector3.down * (sag * 4f * t * (1f - t)));
+            }
+        }
+
+        static Color PipeColor(UtilityLineType t) =>
+            t == UtilityCatalog.UndergroundCable ? new Color(0.95f, 0.55f, 0.1f)
+            : t.Kind == UtilityKind.Sewage ? new Color(0.5f, 0.36f, 0.2f) : new Color(0.2f, 0.5f, 0.95f);
         // --- Ende
 
         // ------------------------------------------------------------ Abgleich mit der Simulation
@@ -147,7 +186,7 @@ namespace CityBuilder.Game.Utilities
                 }
                 if (!lineObjects.ContainsKey(l.Id))
                 {
-                    lineObjects[l.Id] = l.Kind == UtilityKind.Power ? BuildPowerLine(l) : BuildPipe(l);
+                    lineObjects[l.Id] = l.Type.HasPoles ? BuildPowerLine(l) : BuildPipe(l);
                     lineRevisions[l.Id] = l.Revision;
                 }
             }
@@ -272,6 +311,24 @@ namespace CityBuilder.Game.Utilities
                     Part(root, cylinder, new Vector3(0f, 0.6f, 3.5f), Quaternion.Euler(90f, 0f, 0f), new Vector3(1.4f, 2.5f, 1.4f), new Color(0.4f, 0.3f, 0.2f));
                     break;
                 // --- Ende
+                // --- Umspannwerk (Netze selbst verlegt): Platzhalter, bis Substation.fbx im OwnModelCatalog liegt
+                case "power_substation":
+                {
+                    var steel = new Color(0.55f, 0.57f, 0.6f);
+                    var trafo = new Color(0.35f, 0.42f, 0.38f);
+                    Box(root, new Vector3(0f, 1f, d * 0.5f - 0.6f), new Vector3(w, 2f, 0.3f), new Color(0.3f, 0.3f, 0.3f)); // Zaun vorn
+                    for (int i = 0; i < 2; i++)
+                    {
+                        float x = -5f + i * 10f;
+                        Box(root, new Vector3(x, 2.2f, -1f), new Vector3(5f, 4.4f, 4f), trafo);           // Transformator
+                        Cyl(root, new Vector3(x, 5.2f, -1f), 0.5f, 1.6f, new Color(0.75f, 0.7f, 0.6f)); // Durchführung
+                    }
+                    for (int i = 0; i < 3; i++) Box(root, new Vector3(-8f + i * 8f, 6f, -7f), new Vector3(0.6f, 12f, 0.6f), steel); // Portal
+                    Box(root, new Vector3(0f, 11.7f, -7f), new Vector3(17f, 0.6f, 0.6f), steel);
+                    Box(root, new Vector3(6f, 1.6f, 6f), new Vector3(6f, 3.2f, 4f), new Color(0.75f, 0.74f, 0.7f));   // Schalthaus
+                    break;
+                }
+                // --- Ende
                 default:
                     Box(root, new Vector3(0f, 5f, 0f), new Vector3(w * 0.8f, 10f, d * 0.8f), concrete);
                     break;
@@ -350,7 +407,8 @@ namespace CityBuilder.Game.Utilities
         /// </summary>
         GameObject BuildPowerLine(UtilityLine l)
         {
-            var root = new GameObject($"Stromleitung #{l.Id}").transform;
+            bool high = l.Type == UtilityCatalog.HighVoltageLine;
+            var root = new GameObject($"{l.Type.DisplayName} #{l.Id}").transform;
             root.SetParent(lineRoot, false);
             var dir = l.B - l.A;
             var forward = new Vector3(dir.X, 0f, dir.Y).normalized;
@@ -358,8 +416,9 @@ namespace CityBuilder.Game.Utilities
             var rot = Quaternion.LookRotation(forward);
             var right = rot * Vector3.right;
             var steel = new Color(0.45f, 0.46f, 0.48f);
+            var wood = new Color(0.42f, 0.3f, 0.2f);
             var concrete = new Color(0.6f, 0.59f, 0.56f);
-            float h = UtilityTool.WireHeight;
+            float h = UtilityTool.WireHeightOf(l.Type);
             var poles = l.Poles;
             var tops = new Vector3[poles.Count];
 
@@ -371,10 +430,22 @@ namespace CityBuilder.Game.Utilities
                 pylon.SetParent(root, false);
                 pylon.SetPositionAndRotation(basePos, rot);
                 // Fundament = belegte Grundfläche (Platzverbrauch sichtbar machen)
-                float foot = UtilitySystem.PoleSize;
+                float foot = l.Type.PoleSize;
                 Box(pylon, new Vector3(0f, 0.15f, 0f), new Vector3(foot, 0.3f, foot), concrete);
-                Box(pylon, new Vector3(0f, h * 0.5f, 0f), new Vector3(0.6f, h, 0.6f), steel);
-                Box(pylon, new Vector3(0f, h - 0.6f, 0f), new Vector3(6f, 0.35f, 0.35f), steel);
+                if (high)
+                {
+                    // Hochspannung: Stahlgittermast als schlanker Turm mit zwei Traversen
+                    Box(pylon, new Vector3(0f, h * 0.5f, 0f), new Vector3(1.6f, h, 1.6f), steel);
+                    Box(pylon, new Vector3(0f, h * 0.15f, 0f), new Vector3(3.4f, h * 0.3f, 3.4f), steel);
+                    Box(pylon, new Vector3(0f, h - 0.6f, 0f), new Vector3(14f, 0.5f, 0.5f), steel);
+                    Box(pylon, new Vector3(0f, h - 6.6f, 0f), new Vector3(10f, 0.5f, 0.5f), steel);
+                }
+                else
+                {
+                    // Ortsnetz: Holzmast mit Querträger
+                    Box(pylon, new Vector3(0f, h * 0.5f, 0f), new Vector3(0.35f, h, 0.35f), wood);
+                    Box(pylon, new Vector3(0f, h - 0.5f, 0f), new Vector3(2.6f, 0.2f, 0.2f), wood);
+                }
                 tops[i] = basePos + Vector3.up * (h - 0.8f);
             }
             if (poles.Count == 0) return root.gameObject;
@@ -384,12 +455,15 @@ namespace CityBuilder.Game.Utilities
             bool startDrop = SimVector2.Distance(l.A, poles[0]) > 1f;
             bool endDrop = SimVector2.Distance(l.B, poles[poles.Count - 1]) > 1f;
 
-            // Zwei Seile links/rechts am Querträger, mit Durchhang
-            foreach (float side in new[] { -2.6f, 2.6f })
+            // Seile links/rechts an den Traversen, mit Durchhang (Hochspannung: zwei Ebenen)
+            var sides = high ? new[] { -6.5f, 6.5f, -4.5f, 4.5f } : new[] { -1.1f, 1.1f };
+            for (int si = 0; si < sides.Length; si++)
             {
+                float side = sides[si];
+                float drop = high && si >= 2 ? 6f : 0f;
                 var points = new List<Vector3>();
                 if (startDrop) points.Add(EndPoint(l.A));
-                for (int i = 0; i < tops.Length; i++) points.Add(tops[i] + right * side);
+                for (int i = 0; i < tops.Length; i++) points.Add(tops[i] + right * side + Vector3.down * drop);
                 if (endDrop) points.Add(EndPoint(l.B));
                 if (points.Count < 2) continue;
 
@@ -398,7 +472,7 @@ namespace CityBuilder.Game.Utilities
                 var lr = go.AddComponent<LineRenderer>();
                 lr.sharedMaterial = wireMaterial;
                 lr.useWorldSpace = true;
-                lr.widthMultiplier = 0.12f;
+                lr.widthMultiplier = high ? 0.16f : 0.08f;
                 lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 const int perSpan = 8;
                 lr.positionCount = (points.Count - 1) * perSpan + 1;
@@ -423,14 +497,16 @@ namespace CityBuilder.Game.Utilities
 
         GameObject BuildPipe(UtilityLine l)
         {
-            var root = new GameObject($"{UtilityCatalog.LineName(l.Kind)} #{l.Id}").transform;
+            var root = new GameObject($"{l.Type.DisplayName} #{l.Id}").transform;
             root.SetParent(pipeRoot, false);
-            var color = l.Kind == UtilityKind.Sewage ? new Color(0.5f, 0.36f, 0.2f) : new Color(0.2f, 0.5f, 0.95f); // Abwasser braun
+            var color = PipeColor(l.Type); // Wasser blau, Abwasser braun, Erdkabel orange
+            float thick = l.Type == UtilityCatalog.UndergroundCable ? 0.6f : 1.2f;
+            float depth = UtilityTool.DepthOf(l.Type); // Erdkabel flach, Kanal tiefer als Wasser
             int n = Mathf.Max(1, Mathf.CeilToInt(l.Length / 8f));
             Vector3 Point(int i)
             {
                 var p = SimVector2.Lerp(l.A, l.B, i / (float)n);
-                return SimConvert.ToWorld(p, Ground(p) - UtilityTool.PipeDepth - (l.Kind == UtilityKind.Sewage ? 1.5f : 0f)); // Kanal tiefer als Wasser
+                return SimConvert.ToWorld(p, Ground(p) - depth);
             }
             var prev = Point(0);
             for (int i = 1; i <= n; i++)
@@ -440,7 +516,7 @@ namespace CityBuilder.Game.Utilities
                 var delta = next - prev;
                 if (delta.sqrMagnitude > 1e-4f)
                     Part(root, cylinder, mid, Quaternion.FromToRotation(Vector3.up, delta.normalized),
-                        new Vector3(1.2f, delta.magnitude * 0.5f + 0.1f, 1.2f), color, local: false);
+                        new Vector3(thick, delta.magnitude * 0.5f + 0.1f, thick), color, local: false);
                 prev = next;
             }
             return root.gameObject;

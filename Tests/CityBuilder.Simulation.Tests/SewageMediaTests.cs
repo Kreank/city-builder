@@ -34,8 +34,20 @@ namespace CityBuilder.Simulation.Tests
             var pump = w.Utilities.TryBuildFacility(UtilityCatalog.WaterPump, pos);
             Assert.NotNull(pump);
             var to = pos.Y < 0f && pos.Y > -300f ? new Vector2(RoadEnd, pos.Y) : new Vector2(RoadEnd, 0);
+            WaterMain(w);
             Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Water, pos, to));
             return pump;
+        }
+
+        /// <summary>
+        /// Umgestellt (Netze selbst verlegt): Straßen führen kein Wasser mehr mit – Hauptleitung unter Uferstraße und
+        /// Hauptstraße (einmal je Welt); die Pumpe hängt per Rohr daran.
+        /// </summary>
+        static void WaterMain(SimulationWorld w)
+        {
+            if (w.Utilities.Lines.Any(l => l.Kind == UtilityKind.Water && l.A == new Vector2(RoadEnd, -300))) return;
+            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Water, new Vector2(RoadEnd, -300), new Vector2(RoadEnd, 0)));
+            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Water, new Vector2(RoadEnd, 0), new Vector2(-300, 0)));
         }
 
         static void Road(SimulationWorld w, Vector2 a, Vector2 b)
@@ -124,7 +136,7 @@ namespace CityBuilder.Simulation.Tests
                 Assert.Equal(inReach, u.IsSupplied(b, UtilityKind.Sewage));
             }
             Assert.Contains(houses, b => !u.IsSupplied(b, UtilityKind.Sewage)); // weiter östlich: kein Kanal
-            Assert.Null(u.ConnectedLine(houses[0], UtilityKind.Water)); // Wasser bleibt (noch) straßengeführt
+            Assert.Null(u.ConnectedLine(houses[0], UtilityKind.Water)); // kein Wasserrohr verlegt → kein Wasseranschluss
         }
 
         static void WaterTicks(SimulationWorld w, int runs)

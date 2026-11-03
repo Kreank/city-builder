@@ -109,22 +109,33 @@ namespace CityBuilder.Game.Inspect
             float demand = u.DemandOf(b, kind); // G5: Industrie nach Rezept
             string need = $"Bedarf {demand:0.#} {UtilityCatalog.Unit(kind)}";
             if (!b.IsConstructed) { ui.Field(name, "– (im Bau, noch kein Bedarf)", Tone.Muted); return; }
+            // Netze selbst verlegt: Hausanschluss (Leitung ≤ 12 m von der Zufahrt)
+            var line = u.ConnectedLine(b, kind);
+            string conn = line != null
+                ? $" · Anschluss {line.Type.DisplayName} in {line.DistanceTo(b.Entrance):0} m"
+                : $" · kein Anschluss ({(kind == UtilityKind.Power ? "Ortsnetz" : UtilityCatalog.LineName(kind))} ≤ {ConnectionRules.BuildingReach:0} m von der Zufahrt verlegen)";
             if (s.Has(kind))
             {
                 var net = u.NetworkOf(b, kind);
-                ui.Field(name, $"versorgt · {need}{(net != null ? $" · Netz {net.Id + 1}" : "")}", Tone.Good);
+                ui.Field(name, $"versorgt · {need}{(net != null ? $" · {CityBuilder.Game.UI.Windows.UtilityWindow.NetName(net)}" : "")}{conn}", Tone.Good);
                 return;
             }
             if (!u.IsRequired(kind))
             {
-                ui.Field(name, $"nicht versorgt – noch kein Versorger in der Stadt (folgenlos) · {need}", Tone.Muted);
+                ui.Field(name, $"nicht versorgt – noch kein Versorger in der Stadt (folgenlos) · {need}{conn}", Tone.Muted);
                 return;
             }
             int without = s.TicksWithout(kind);
             string left = u.AbandonmentEnabled
                 ? $" · verlassen in ≈ {Duration(Mathf.Max(0, (kind == UtilityKind.Sewage ? UtilitySystem.SewageAbandonAfterTicks : UtilitySystem.AbandonAfterTicks) - without))}"
                 : "";
-            ui.Field(name, $"fehlt seit {Duration(without)}{left} · {need}", Tone.Warn);
+            string why = "";
+            if (line != null)
+            {
+                var n = u.NetworkOf(b, kind);
+                if (n != null) why = $" · {CityBuilder.Game.UI.Windows.UtilityWindow.NetName(n)}: {CityBuilder.Game.UI.Windows.UtilityWindow.NetState(n)}";
+            }
+            ui.Field(name, $"fehlt seit {Duration(without)}{left} · {need}{conn}{why}", Tone.Warn);
         }
 
         void ResidentsTab(Ui ui, SimulationWorld world, Building b)
@@ -534,6 +545,7 @@ namespace CityBuilder.Game.Inspect
         {
             var t = f.Type;
             string unit = UtilityCatalog.Unit(f.Kind);
+            if (t.IsSubstation) { SubstationBody(ui, world, f); return; } // Netze selbst verlegt
             using (ui.Grid(3))
             {
                 ui.Stat("Leistung", BuildLabels.Number(f.Output), unit);
@@ -545,15 +557,17 @@ namespace CityBuilder.Game.Inspect
             using (ui.Fields())
             {
                 ui.Field("Aktuell", $"{f.Output:0.#} {unit} von {t.Capacity:0.#} {unit}");
-                var nets = world.Utilities.Networks(f.Kind);
-                var net = f.NetworkId >= 0 && f.NetworkId < nets.Count ? nets[f.NetworkId] : null;
-                if (net != null)
+                var net = world.Utilities.NetworkOf(f);
+                if (net != null && (net.Lines > 0 || net.Buildings > 0))
                 {
-                    ui.Field("Netz", $"{net.Id + 1}: Erzeugung {net.Production:0.#} / Bedarf {net.Demand:0.#} {unit}" +
-                                     (net.HasShortage ? " · Unterdeckung" : ""), net.HasShortage ? Tone.Warn : Tone.Good);
-                    ui.Field("Im Netz", $"{net.Facilities} Bauwerke · {net.SuppliedBuildings}/{net.Buildings} Gebäude versorgt · {net.Lines} Leitungen");
+                    ui.Field(CityBuilder.Game.UI.Windows.UtilityWindow.NetName(net),
+                        $"Erzeugung {net.Generation:0.#} · verfügbar {net.Production:0.#} / Bedarf {net.Demand:0.#} {unit}" +
+                        (net.HasShortage ? " · Unterdeckung" : ""), net.HasShortage ? Tone.Warn : Tone.Good);
+                    ui.Field("Im Netz", $"{net.Facilities} Erzeuger · {net.Substations} Umspannwerke · {net.SuppliedBuildings}/{net.Buildings} Gebäude versorgt · {net.Lines} Leitungen");
                 }
-                else ui.Field("Netz", "nicht angeschlossen", Tone.Warn);
+                else ui.Field("Netz", f.Kind == UtilityKind.Power
+                    ? (t.FeedsLocalGrid ? "nicht angeschlossen – Ortsnetz oder Hochspannung an den Rand verlegen" : "nicht angeschlossen – Hochspannung zum Umspannwerk verlegen")
+                    : $"nicht angeschlossen – {UtilityCatalog.LineName(f.Kind)} an den Rand verlegen", Tone.Warn);
             }
 
             ui.Section("Bauwerk");
@@ -595,6 +609,55 @@ namespace CityBuilder.Game.Inspect
                     ui.ActionButton("Netz anzeigen", () => utilityOverlay.Toggle(overlay), ActionStyle.Secondary,
                         utilityOverlay.Current == overlay, true, "Info-Ansicht Strom/Wasser (O)");
             }
+        }
+
+        /// <summary>Umspannwerk (Netze selbst verlegt): Last/Kapazität, Hochspannungsnetz oben, Ortsnetz unten.</summary>
+        void SubstationBody(Ui ui, SimulationWorld world, UtilityFacility f)
+        {
+            var t = f.Type;
+            var u = world.Utilities;
+            var hv = u.UpstreamNetworkOf(f);
+            var local = u.NetworkOf(f);
+            float share = t.Capacity > 0f ? f.Load / t.Capacity : 0f;
+            using (ui.Grid(3))
+            {
+                ui.Stat("Last", BuildLabels.Number(f.Load / 1000f), "MW");
+                ui.Stat("Kapazität", BuildLabels.Number(t.Capacity / 1000f), "MW");
+                ui.Stat("Auslastung", $"{share * 100f:0} %", null, share >= 0.999f ? Tone.Warn : Tone.None);
+            }
+            ui.Section("Netz");
+            using (ui.Fields())
+            {
+                bool hvOk = hv != null && hv.Lines > 0;
+                ui.Field("Hochspannung", hvOk
+                        ? $"{CityBuilder.Game.UI.Windows.UtilityWindow.NetName(hv)} · Erzeugung {hv.Generation:0} kW · angefordert {hv.Demand:0} kW" +
+                          (hv.HasShortage ? $" · Unterdeckung ({hv.Coverage * 100f:0} %)" : "")
+                        : "nicht angeschlossen – Hochspannung vom Kraftwerk an den Rand verlegen",
+                    !hvOk || hv.Generation <= 0f ? Tone.Warn : hv.HasShortage ? Tone.Warn : Tone.Good);
+                bool localOk = local != null && (local.Lines > 0 || local.Buildings > 0);
+                ui.Field("Ortsnetz", localOk
+                        ? $"{CityBuilder.Game.UI.Windows.UtilityWindow.NetName(local)} · Bedarf {local.Demand:0} kW · verfügbar {local.Production:0} kW · " +
+                          $"versorgt {local.SuppliedBuildings}/{local.Buildings} Gebäude"
+                        : "nicht angeschlossen – Freileitung oder Erdkabel an einen anderen Rand verlegen",
+                    !localOk ? Tone.Warn : local.HasShortage ? Tone.Warn : Tone.Good);
+                if (localOk && local.Substations > 1)
+                    ui.Field("Im Ortsnetz", $"{local.Substations} Umspannwerke · zusammen {BuildLabels.Number(local.TransformerCapacity / 1000f)} MW (Last nach Kapazität verteilt)");
+                if (share >= 0.999f)
+                    ui.Field("Hinweis", "Umspannwerk voll ausgelastet – zweites Umspannwerk ins Ortsnetz oder Ortsnetz teilen", Tone.Warn);
+            }
+            ui.Section("Bauwerk");
+            using (ui.Fields())
+            {
+                ui.Field("Größe", $"{t.Width:0}×{t.Depth:0} m · Boden {f.Height:0.0} m");
+                ui.Field("Kosten / Unterhalt", $"{BuildLabels.Money(t.Cost)} / {BuildLabels.Money(t.UpkeepPerDay)} je Tag (Stadtkasse)");
+                if (t.NoiseLevel > 0f) ui.Field("Lärm", $"{t.NoiseLevel * 100f:0} % im Umkreis {t.NoiseRadius:0} m");
+                ui.Field("Vorderseite", "braucht Zufahrt zur Straße (Wartung)", Tone.Muted);
+            }
+            MoveAction(ui, SelectionKind.Facility, f.Id, t.Cost);
+            if (utilityOverlay != null)
+                using (ui.Actions())
+                    ui.ActionButton("Netz anzeigen", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Power), ActionStyle.Secondary,
+                        utilityOverlay.Current == UtilityOverlayView.Overlay.Power, true, "Info-Ansicht Strom (O)");
         }
 
         // ------------------------------------------------------------ Dienstgebäude (G4)
