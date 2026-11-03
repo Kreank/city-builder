@@ -26,7 +26,7 @@ namespace CityBuilder.Game.UI.Windows
         public override float OpenScore => Tool.CurrentMode == RoadTool.Mode.Traffic ? 100f : 0f;
 
         /// <summary>× beendet den Verkehrs-Modus.</summary>
-        public override void Close() => Tool.SetMode(RoadTool.Mode.Straight);
+        public override void Close() => Tool.SetMode(RoadTool.SelectMode); // UX: zurück zum Auswählen
 
         /// <summary>Esc hebt nur die Auswahl auf (das RoadTool macht dasselbe) – der Modus bleibt.</summary>
         public override bool HandleEscape()

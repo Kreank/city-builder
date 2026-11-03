@@ -42,6 +42,8 @@ namespace CityBuilder.Simulation.Goods
         public long ArriveTick { get; internal set; }
         /// <summary>Fährt als sichtbarer Lkw.</summary>
         public bool IsTruck { get; internal set; }
+        /// <summary>Etappe 8: Vertragsware (Import aus dem Grenzlager bzw. Export in einen Vertrag).</summary>
+        public bool IsContract { get; internal set; }
         /// <summary>Fahrt-Id im Verkehr (negativ, damit sie nicht mit Bürgerfahrten kollidiert; 0 = Platzhalter).</summary>
         public int TripId { get; internal set; }
         /// <summary>Verkehrszeit beim Start des Lkw (s) – für die echten Transportkosten.</summary>

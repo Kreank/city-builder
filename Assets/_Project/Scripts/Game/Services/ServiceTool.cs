@@ -121,7 +121,7 @@ namespace CityBuilder.Game.Services
             var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.digit4Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
-                tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Service);
+                tool.ToggleMode(RoadTool.Mode.Service); // UX: erneut 4 = Auswählen
             if (!Active) return;
             if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
             if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
@@ -145,6 +145,7 @@ namespace CityBuilder.Game.Services
         void Hide()
         {
             if (ghost != null) ghost.SetActive(false);
+            frontMarker?.Hide();
             if (ring != null) ring.enabled = false;
             foreach (var l in reachPieces) l?.Clear();
             cachedPlan = null;
@@ -163,12 +164,12 @@ namespace CityBuilder.Game.Services
                 cachedType = SelectedType;
                 cachedRoadVersion = roads.Version;
                 cachedStructureVersion = s.StructureVersion;
-                cachedPlan = s.Plan(SelectedType, p, Rotation);
+                cachedPlan = s.PlanAligned(SelectedType, p, Rotation); // UX: Vorderseite zur Straße, Rotation = Zusatzdrehung
                 BuildReachPreview(cachedPlan);
             }
             var plan = cachedPlan;
             var t = SelectedType;
-            ShowGhost(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid);
+            ShowGhost(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid, t.NeedsRoadFront);
 
             if (t.Walking)
             {
@@ -186,8 +187,9 @@ namespace CityBuilder.Game.Services
             }
             else ring.enabled = false;
 
-            string range = t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit";
-            string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {Rotation:0}°";
+            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
+            string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°"; // UX
+            string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
             SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 10f));
             if (clicked && plan.IsValid)
@@ -203,8 +205,8 @@ namespace CityBuilder.Game.Services
             foreach (var l in reachPieces) l.Clear();
             cachedPlan = null;
             var f = Services.FacilityAt(p, 2f);
-            if (f == null) { ghost.SetActive(false); return; }
-            ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 7f, false);
+            if (f == null) { ghost.SetActive(false); frontMarker?.Hide(); return; }
+            ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 7f, false, false);
             SetLabel($"{f.Type.DisplayName} abreißen (+{f.Type.Cost * Simulation.Economy.EconomyRules.DemolitionRefundShare:0} €)", true, SimConvert.ToWorld(f.Position, f.Height + 12f));
             if (clicked) Services.Demolish(f.Id); // Abrisserlös 25 %
         }
@@ -250,14 +252,20 @@ namespace CityBuilder.Game.Services
             }
         }
 
-        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid)
+        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront)
         {
             ghost.SetActive(true);
             ghost.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height + tall * 0.5f),
                 Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
             ghost.transform.localScale = new Vector3(width, tall, depth);
             ghostRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
+            // UX: Vorderseite (Zufahrt) als Streifen + Pfeil
+            if (frontMarker == null) frontMarker = new CityBuilder.Game.UI.PlacementGhost(transform, "Service Front");
+            if (showFront) frontMarker.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial);
+            else frontMarker.Hide();
         }
+
+        CityBuilder.Game.UI.PlacementGhost frontMarker;
 
         void SetLabel(string text, bool error, Vector3 world)
         {
@@ -276,7 +284,7 @@ namespace CityBuilder.Game.Services
                 case ServiceBuildError.OverlapsRoad: return "Steht auf einer Straße";
                 case ServiceBuildError.OverlapsFacility: return "Überschneidet ein anderes Bauwerk";
                 case ServiceBuildError.OverlapsPole: return "Strommast im Weg";
-                case ServiceBuildError.NoRoadAccess: return $"Keine Zufahrt: Stadtstraße höchstens {ServiceSystem.RoadReach:0} m entfernt nötig";
+                case ServiceBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {ServiceSystem.RoadReach:0} m";
                 case ServiceBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 default: return null;
             }
@@ -350,6 +358,9 @@ namespace CityBuilder.Game.Services
                 case "park_large": return "Park L";
                 case "landfill": return "Müllhalde";
                 case "incinerator": return "Verbrennung";
+                case "media_newspaper": return "Zeitung";
+                case "media_radio": return "Radio";
+                case "media_tv": return "TV-Turm";
                 default: return t.DisplayName;
             }
         }

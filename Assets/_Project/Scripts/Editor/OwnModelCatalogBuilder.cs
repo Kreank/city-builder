@@ -25,6 +25,8 @@ namespace CityBuilder.Editor
         {
             { "CoalPlant", "power_coal" }, { "GasPlant", "power_gas" }, { "WindTurbine", "power_wind" },
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
+            // G3 erweitert: Atomkraftwerk; die Kläranlage liegt als Modell unter Models/Services (Schlüssel mit Ordner)
+            { "NuclearPlant", "power_nuclear" }, { "Services/SewagePlant", "sewage_plant" },
         };
 
         /// <summary>G4: Id des Dienstgebäudes (<c>ServiceCatalog</c>) → Dateinamen unter Models/Services (erster vorhandener gilt).</summary>
@@ -36,6 +38,15 @@ namespace CityBuilder.Editor
             { "library", new[] { "Library" } },
             { "park_small", new[] { "ParkSmall", "Park" } }, { "park_large", new[] { "ParkLarge", "Park" } },
             { "landfill", new[] { "Landfill" } }, { "incinerator", new[] { "Incinerator" } },
+            // G4 erweitert: Medien
+            { "media_newspaper", new[] { "Newspaper" } }, { "media_radio", new[] { "RadioStation" } }, { "media_tv", new[] { "TVTower" } },
+        };
+
+        /// <summary>ÖPNV: Id → Datei unter Models (mit Unterordner, ohne .fbx; erster vorhandener gilt).</summary>
+        static readonly Dictionary<string, string[]> TransportFiles = new Dictionary<string, string[]>
+        {
+            { "bus_depot", new[] { "Transport/BusDepot" } },
+            { "bus_stop", new[] { "Props/BusStop" } },
         };
 
         static bool scheduled;
@@ -75,7 +86,8 @@ namespace CityBuilder.Editor
             var entries = new List<OwnModelCatalog.Entry>();
             foreach (var kv in FacilityFiles)
             {
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Utilities/{kv.Key}.fbx");
+                string file = kv.Key.Contains("/") ? kv.Key : "Utilities/" + kv.Key; // Schlüssel mit Ordner = anderer Unterordner
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{file}.fbx");
                 if (model == null) continue;
                 entries.Add(new OwnModelCatalog.Entry { Id = kv.Value, Model = model });
                 Debug.Log($"[OwnModels] {kv.Value} ← {kv.Key}.fbx, Größe {Bounds(model).size}");
@@ -100,9 +112,39 @@ namespace CityBuilder.Editor
             catalog.Services = services.ToArray();
             // --- Ende G4
 
+            // --- Fußgänger: alle FBX unter Models/People (Id = Dateiname, s. OwnModelCatalog.People)
+            var people = new List<OwnModelCatalog.Entry>();
+            if (AssetDatabase.IsValidFolder($"{ModelsRoot}/People"))
+                foreach (string guid in AssetDatabase.FindAssets("t:GameObject", new[] { $"{ModelsRoot}/People" }))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!path.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase)) continue;
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (model == null) continue;
+                    people.Add(new OwnModelCatalog.Entry { Id = Path.GetFileNameWithoutExtension(path), Model = model });
+                    Debug.Log($"[OwnModels] Person {Path.GetFileNameWithoutExtension(path)} ← {path}, Größe {Bounds(model).size}");
+                }
+            people.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+            catalog.People = people.ToArray();
+            // --- Ende Fußgänger
+
+            // --- ÖPNV (Depot, Haltestelle); fehlt das Modell, zeichnet TransitView Platzhalter
+            var transport = new List<OwnModelCatalog.Entry>();
+            foreach (var kv in TransportFiles)
+                foreach (var candidate in kv.Value)
+                {
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{candidate}.fbx");
+                    if (model == null) continue;
+                    transport.Add(new OwnModelCatalog.Entry { Id = kv.Key, Model = model });
+                    Debug.Log($"[OwnModels] {kv.Key} ← {candidate}.fbx, Größe {Bounds(model).size}");
+                    break;
+                }
+            catalog.Transport = transport.ToArray();
+            // --- Ende ÖPNV
+
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste → {CatalogPath}");
+            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste, {transport.Count} ÖPNV, {people.Count} Personen → {CatalogPath}");
         }
 
         static Material EnsurePaletteMaterial()

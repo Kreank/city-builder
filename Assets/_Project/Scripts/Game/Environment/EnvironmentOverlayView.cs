@@ -12,7 +12,7 @@ namespace CityBuilder.Game.Environment
     public sealed class EnvironmentOverlayView : MonoBehaviour
     {
         /// <summary><see cref="Resource"/> = Ressourcen-Raster der Welt (Etappe 5), Art in <see cref="CurrentResourceId"/>, F3 schaltet durch.</summary>
-        public enum Overlay { None, Noise, AirPollution, LandValue, Resource }
+        public enum Overlay { None, Noise, AirPollution, LandValue, Resource, WaterQuality } // WaterQuality: G3 erweitert (Knopf in der Ansichtsleiste, keine Taste)
 
         [SerializeField] SimulationRunner runner;
         [SerializeField] Material overlayMaterial;
@@ -130,6 +130,17 @@ namespace CityBuilder.Game.Environment
                 return;
             }
             // --- Ende G6
+            // --- G3 erweitert: Wasserverschmutzung (nur Wasserzellen), braun = verschmutzt
+            if (Current == Overlay.WaterQuality)
+            {
+                var wq = runner.World.WaterQuality?.Pollution;
+                if (wq == null || wq.Width != env.Noise.Width) { Toggle(Overlay.WaterQuality); return; }
+                if (wq == shownLayer && wq.Version == shownVersion) return;
+                if (waterGradient == null) waterGradient = DefaultGradient(new Color(0.55f, 0.75f, 0.35f), new Color(0.4f, 0.22f, 0.08f));
+                RefreshTexture(wq, waterGradient);
+                return;
+            }
+            // --- Ende
             var layer = Current == Overlay.Noise ? env.Noise : env.AirPollution;
             if (layer == shownLayer && layer.Version == shownVersion) return;
 
@@ -192,6 +203,7 @@ namespace CityBuilder.Game.Environment
             GUI.Box(rect, $"<b>{kind.DisplayName}</b> (F3 weiter){region} · gesamt {runner.World.Resources.TotalAmount(kind.Id):N0} {kind.Unit}", legendStyle);
         }
         // --- Ende Welt
+        Gradient waterGradient; // G3 erweitert: Wasserqualität
         // --- G6 Bodenwert
         Gradient landValueGradient;
 

@@ -21,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */ }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -32,6 +32,7 @@ namespace CityBuilder.Game.UI.Hud
         static readonly Color TrafficSwatch = BuildLabels.Hex(0x2BB3A3);
         static readonly Color DangerSwatch = BuildLabels.Hex(0xF08A4B);
         static readonly Color ServiceSwatch = BuildLabels.Hex(0x7A6FD6); // G4
+        static readonly Color SewageSwatch = BuildLabels.Hex(0x8A6A3E); // G3 erweitert: Abwasser
 
         VisualElement buildBar, hint, buildPanel, panelBody;
         Label hintText, panelTitle, panelHint;
@@ -67,11 +68,19 @@ namespace CityBuilder.Game.UI.Hud
             buildBar.Add(buildPanel);
 
             var cats = El("cb-panel", "cb-catbar");
+            // UX: „Auswählen“ ganz links – Standard, nichts in der Maus; aktiv im Auswählen-Modus, Kategorien klappen zu
+            var select = Btn(null, tool.ReturnToSelect, () => tool.IsSelectMode,
+                "Auswählen: nichts bauen, Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst oder Versorger · Esc/Rechtsklick aus jedem Werkzeug",
+                null, "cb-cat");
+            select.Add(Icon(HudIconKind.Cursor, "cb-icon--l"));
+            select.Add(Text("Auswählen", "cb-cat__label"));
+            cats.Add(select);
             CategoryButton(cats, Category.Roads, HudIconKind.Road, "Straßen", "Stadtstraßen: Gerade/Kurve (R), Kreisverkehr (K), Ausbauen (U), Richtung (I) · Tab Typ wechseln");
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Strom und Wasser (J): Kraftwerke, Pumpen, Leitungen, Rohre");
             CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll · ⇧4 Abdeckungs-Ansicht");
+            CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
             CategoryButton(cats, Category.Traffic, HudIconKind.TrafficLight, "Verkehr", "Verkehrsregeln (T), Stau-Ansicht (V), Verkehrsaufkommen");
             var bulldoze = CategoryButton(cats, Category.Bulldoze, HudIconKind.Bulldoze, "Abriss", "Abriss (B): Straßen, Leitungen und Bauwerke");
@@ -103,6 +112,7 @@ namespace CityBuilder.Game.UI.Hud
                     return utilityTool != null && utilityTool.Current == UtilityTool.UtilityAction.Remove ? Category.Bulldoze : Category.Utilities;
                 case RoadTool.Mode.Service:
                     return serviceTool != null && serviceTool.Current == ServiceTool.ServiceAction.Remove ? Category.Bulldoze : Category.Services;
+                case RoadTool.Mode.Transit: return TransitCategory(); // ÖPNV
                 case RoadTool.Mode.Bulldoze: return Category.Bulldoze;
                 case RoadTool.Mode.Inspect: return null;
                 default: return tool.SelectedType.Category == RoadCategory.City ? Category.Roads : Category.Highway;
@@ -111,6 +121,8 @@ namespace CityBuilder.Game.UI.Hud
 
         void SelectCategory(Category c)
         {
+            // UX: aktive Kategorie erneut anklicken = zurück zum Auswählen
+            if (currentCategory == c) { tool.ReturnToSelect(); return; }
             var mode = tool.CurrentMode;
             switch (c)
             {
@@ -136,6 +148,7 @@ namespace CityBuilder.Game.UI.Hud
                     if (terraform != null) terraform.Activate(terraform.Mode);
                     else tool.SetMode(RoadTool.Mode.Terraform);
                     break;
+                case Category.Transit: SelectTransitCategory(); break; // ÖPNV
                 case Category.Traffic: if (mode != RoadTool.Mode.Traffic) tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Category.Bulldoze: if (mode != RoadTool.Mode.Bulldoze) tool.SetMode(RoadTool.Mode.Bulldoze); break;
             }
@@ -186,6 +199,12 @@ namespace CityBuilder.Game.UI.Hud
                 text = "Unter Straßen und Gebäuden ist das Gelände gesperrt";
                 error = true;
             }
+            // UX: Rückweg zum Auswählen immer nennen; im Auswählen-Modus kurz erklären (Verschieben läuft → dessen Hinweis)
+            var mover = tool.GetComponent<CityBuilder.Game.Inspect.FacilityMover>();
+            string back = mover != null && mover.Moving ? "Verschieben: Klick setzt · , . drehen · Esc/Rechtsklick bricht ab"
+                : tool.IsSelectMode ? null : tool.ReturnHint;
+            if (back != null && !error) text = text == null ? back : text + "  ·  " + back;
+            else if (back != null && text == null) text = back;
 
             hint.EnableInClassList("cb-hidden", text == null);
             if (text == null) return;
@@ -212,6 +231,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Terrain: BuildTerrainPanel(); break;
                 case Category.Traffic: BuildTrafficPanel(); break;
                 case Category.Bulldoze: BuildBulldozePanel(); break;
+                case Category.Transit: BuildTransitPanel(); break; // ÖPNV
             }
             refreshNow = true;
         }
@@ -424,7 +444,12 @@ namespace CityBuilder.Game.UI.Hud
                     () => utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Info-Ansicht Strom (O)"));
                 tools.Add(PBtn("Wasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Water),
                     () => utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Info-Ansicht Wasser (O)"));
+                tools.Add(PBtn("Abwasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Sewage),
+                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Info-Ansicht Abwasser (O)")); // G3 erweitert
             }
+            if (envOverlay != null) // G3 erweitert: Wasserverschmutzung
+                tools.Add(PBtn("Wasserqualität", () => envOverlay.Toggle(CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality),
+                    () => envOverlay.Current == CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality, "Verschmutzung der Gewässer (braun = verschmutzt)"));
             tools.Add(PBtn("Unterirdisch", tool.ToggleUndergroundView, () => tool.UndergroundView, "Unterirdisch-Ansicht (X) – Rohre liegen unter dem Gelände"));
             panelBody.Add(tools);
 
@@ -434,13 +459,17 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 string unit = UtilityCatalog.Unit(t.Kind);
                 tiles.Add(Tile(BuildLabels.FacilityName(t), $"{BuildLabels.Number(t.Capacity)} {unit}",
-                    t.Kind == UtilityKind.Power ? PowerSwatch : WaterSwatch,
-                    t.Kind == UtilityKind.Power ? HudIconKind.Power : HudIconKind.Water,
+                    t.Kind == UtilityKind.Power ? PowerSwatch : t.Kind == UtilityKind.Sewage ? SewageSwatch : WaterSwatch,
+                    t.Kind == UtilityKind.Power ? HudIconKind.Power : t.Kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water,
                     () => utilityTool.SelectFacility(t),
                     () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Facility && utilityTool.SelectedType == t,
                     $"{t.DisplayName} · Leistung {BuildLabels.Number(t.Capacity)} {unit} · Fläche {t.Width:0}×{t.Depth:0} m · " +
-                    $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (nur Anzeige, noch keine Stadtkasse)" +
-                    (t.NeedsWater ? " · muss am Wasser stehen" : "")));
+                    $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (Stadtkasse)" +
+                    (t.NeedsWater ? " · muss am Wasser stehen" : "") +
+                    // --- G3 erweitert: Atom/Abwasser
+                    (t.ConcernRadius > 0f ? $" · kein Abgas, aber Anwohner im Umkreis {t.ConcernRadius:0} m sorgen sich · seltener Störfall" : "") +
+                    (t.Untreated ? " · billig, leitet ungeklärt ins Gewässer → verschmutzt flussabwärts (Pumpen, Ufer)" : "") +
+                    (t.Kind == UtilityKind.Sewage && !t.Untreated ? " · klärt Abwasser vollständig" : "")));
             }
             tiles.Add(Container("cb-tile-sep"));
             tiles.Add(Tile("Stromleitung", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Power):0} €/m", PowerSwatch, HudIconKind.Power,
@@ -451,11 +480,18 @@ namespace CityBuilder.Game.UI.Hud
                 () => utilityTool.Select(UtilityTool.UtilityAction.WaterPipe),
                 () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.WaterPipe,
                 "Wasserrohr (liegt unterirdisch, schaltet die Unterirdisch-Ansicht ein)"));
+            // --- G3 erweitert: Abwasserkanal
+            tiles.Add(Tile("Abwasserkanal", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Sewage):0} €/m", SewageSwatch, HudIconKind.Pipe,
+                () => utilityTool.Select(UtilityTool.UtilityAction.SewagePipe),
+                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.SewagePipe,
+                $"Abwasserkanal (unterirdisch, selbst verlegen – Straßen führen ihn nicht mit) · Gebäude mit Zufahrt ≤ {ConnectionRules.BuildingReach:0} m vom Kanal sind angeschlossen · am besten entlang der Straßen, Kette bis zur Kläranlage/zum Auslass"));
+            // --- Ende
             panelBody.Add(tiles);
 
             var info = Container("cb-info-row");
             info.Add(BalanceLabel(u, UtilityKind.Power));
             info.Add(BalanceLabel(u, UtilityKind.Water));
+            info.Add(BalanceLabel(u, UtilityKind.Sewage)); // G3 erweitert
             var upkeep = Text("", "cb-muted");
             panelSlowRefresh.Add(() => upkeep.text = $"Unterhalt {BuildLabels.Money(u.TotalUpkeepPerDay)}/Tag (nur Anzeige)");
             info.Add(upkeep);
@@ -506,7 +542,7 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 if (lastKind != null && t.Kind != lastKind) tiles.Add(Container("cb-tile-sep"));
                 lastKind = t.Kind;
-                string range = t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit";
+                string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
                 tiles.Add(Tile(ServiceTool.ShortName(t), $"{BuildLabels.Number(t.Capacity)} {t.CapacityUnit}", ServiceSwatch, HudIconKind.Service,
                     () => serviceTool.SelectType(t),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t,
@@ -643,6 +679,7 @@ namespace CityBuilder.Game.UI.Hud
                     () => serviceTool.Select(ServiceTool.ServiceAction.Remove),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Remove,
                     "Polizei, Schule, Park … anklicken – 25 % der Baukosten zurück"));
+            AddTransitBulldozeTile(tiles); // ÖPNV
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt."));
         }

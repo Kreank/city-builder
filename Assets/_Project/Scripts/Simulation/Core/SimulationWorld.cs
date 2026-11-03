@@ -145,6 +145,9 @@ namespace CityBuilder.Simulation.Core
             // --- G3 Strom & Wasser (nach Lärm und Stadt: stempelt nach dem Neuzeichnen des Lärms, liest fertige Gebäude)
             world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Utilities);
+            // Abwasser/Wasserqualität (G3 erweitert): direkt nach der Versorgung (liest die Kanalnetz-Bilanz desselben Durchlaufs)
+            world.WaterQuality = new WaterQualitySystem(world.Utilities, world.Terrain, world.Min, world.Settings.SizeMeters, world.Settings.EnvironmentCellSize);
+            world.AddSystem(world.WaterQuality);
             // --- Ende G3
 
             // --- G4 Dienste (nach der Versorgung: hängt sich an deren Grundstücks-/Bau-Sperren an, stempelt Lärm nach dem NoiseSystem)
@@ -152,12 +155,24 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Services);
             // Bedürfnismodell ↔ Dienste: Abdeckung, Müll, Parks als Freizeitziel, Schülerzahlen
             CitizenServiceBinding.Connect(world.Citizens, world.Services);
+            // Medien (G4 erweitert): Schlagzeilen aus echten Stadtdaten; Bürger ↔ Wasserqualität/Atom/Medien
+            world.Media = new MediaSystem(world);
+            world.AddSystem(world.Media);
+            CitizenUtilityBinding.Connect(world.Citizens, world.Utilities, world.WaterQuality, world.Services, world.Media);
             // --- Ende G4
+
+            // --- ÖPNV (nach den Diensten: hängt sich an deren Bau-/Grundstückssperren an; Busse fahren im Verkehr)
+            world.Transit = new Transit.TransitSystem(world.Roads, world.Terrain, world.City, world.Traffic, world.Clock,
+                world.Utilities, world.Services, world.Min, world.Max);
+            world.AddSystem(world.Transit);
+            world.Citizens.ConnectTransit(world.Transit);
+            // --- Ende ÖPNV
 
             // --- G6 Bodenwert & Ausbaustufen (nach Diensten: liest Abdeckung, Müll, Zufriedenheit; vor der Kasse: Grundsteuer)
             world.LandValue = new LandValue.LandValueSystem(world);
             world.AddSystem(world.LandValue);
             world.City.LotPreference = world.LandValue.GrowthPreference;
+            world.LandValue.WaterPollutionNear = p => world.WaterQuality.PollutionNear(p, CityBuilder.Simulation.LandValue.LandValueRules.ShoreZeroDistance); // G3 erw.: Ufer
             // --- Ende G6
 
             // --- Welt (Etappe 5): täglich Erneuerung der Vorkommen und Länder-Volkswirtschaften
@@ -180,9 +195,24 @@ namespace CityBuilder.Simulation.Core
             world.Services.Budget = world.Economy;          // G4: Baukosten Dienste
             world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
             world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
+            world.Transit.Budget = world.Economy;            // ÖPNV: Baukosten
+            world.Economy.RegisterUpkeep(world.Transit);     // ÖPNV: Unterhalt Depots/Busse/Haltestellen
+            var economy = world.Economy;
+            world.Transit.FareSink = amount => economy.Earn(CityBuilder.Simulation.Economy.BudgetCategory.TransitFares, amount); // ÖPNV: Fahrgeld
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
+
+            // --- Etappe 8 Handel zwischen Ländern (nur mit Weltkarte): Weltpreis aus den Ländern, Verträge über das Grenzlager,
+            // Zölle/Strafen in der Stadtkasse; läuft nach dem WorldSystem (Länder sind schon einen Tag weiter)
+            if (world.Planet?.Economy != null)
+            {
+                world.Trade = new Trade.TradeSystem(world.Planet, world.Clock, unchecked(seed * 31 + world.Settings.WorldSeed));
+                world.Trade.AttachCity(world.Goods, world.Economy);
+                world.AddSystem(world.Trade);
+                if (world.Media != null) CityBuilder.Simulation.Trade.TradeMedia.Connect(world.Trade, world.Media); // Schlagzeilen zum Handel
+            }
+            // --- Ende Etappe 8
             return world;
         }
 
@@ -198,11 +228,22 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Dienste (G4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceSystem Services { get; private set; }
 
+        /// <summary>Abwasser-Bilanz und Wasserqualität (G3 erweitert). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public WaterQualitySystem WaterQuality { get; private set; }
+
+        /// <summary>Medien-Schlagzeilen (G4 erweitert). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public MediaSystem Media { get; private set; }
+
         /// <summary>G6 Bodenwert, Ausbaustufen, Gebäudezustand. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public LandValue.LandValueSystem LandValue { get; private set; }
 
         /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public GoodsSystem Goods { get; private set; }
+        /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Transit.TransitSystem Transit { get; private set; }
+
+        /// <summary>Etappe 8: Handel zwischen Ländern (null ohne Weltkarte). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Trade.TradeSystem Trade { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }

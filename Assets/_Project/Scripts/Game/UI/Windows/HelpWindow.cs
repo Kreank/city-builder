@@ -48,16 +48,20 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("L", "Gelände formen");
                 ui.Field("J", "Versorgung (Strom, Wasser)");
                 ui.Field("4 · ⇧4", "Dienste · Abdeckungs-Ansicht durchschalten");
+                ui.Field("5 · F6", "ÖPNV (Haltestelle, Linie zeichnen, Busdepot) · Linienübersicht");
             }
             ui.Section("Ansehen");
             using (ui.Fields())
             {
-                ui.Field("C · F", "Info-Modus · Fahrzeug/Bürger verfolgen");
+                ui.Field("Esc · Rechtsklick", "Vorgang abbrechen, sonst zurück zum Auswählen (Standard: Linksklick wählt aus)");
+                ui.Field("C · F", "Stadtübersicht · Fahrzeug/Bürger verfolgen");
+                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot verschieben (, . drehen, Klick setzt)");
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");
                 ui.Field("M", "Stadtkasse");
                 ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen)");
+                ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
                 ui.Field("F1", "diese Hilfe");
             }
             ui.Section("Zeit & Kamera");

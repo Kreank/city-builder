@@ -84,7 +84,10 @@ namespace CityBuilder.Game.Zoning
         void LateUpdate()
         {
             if (runner == null || runner.World == null || cube == null) return;
-            HighlightZones = tool != null && (tool.CurrentMode == RoadTool.Mode.Zone || tool.CurrentMode == RoadTool.Mode.Inspect);
+            // UX: Auswählen ist jetzt der Standard – kräftige Zonen nur im Zonen-Werkzeug und in der Stadtübersicht
+            var inspector = tool != null ? tool.GetComponent<CityBuilder.Game.Inspect.InspectorPanel>() : null;
+            HighlightZones = tool != null && (tool.CurrentMode == RoadTool.Mode.Zone ||
+                                              (tool.CurrentMode == RoadTool.Mode.Inspect && inspector != null && inspector.ShowOverview));
 
             var city = runner.World.City;
             // Neu befüllen, wenn sich Gebäude geändert haben (im Bau: laufend, damit sie wachsen)

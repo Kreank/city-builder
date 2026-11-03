@@ -57,6 +57,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   NPC-Länder = Spiel-KI (Utility AI wie bei Bürgern, keine Sprach-KI zur Laufzeit).
 - Alles deterministisch (geseedeter RNG), Commands für Spieleraktionen (Multiplayer/Replays).
 
+## Entscheidung: Netze werden selbst verlegt (2026-11-03, Spieler)
+- **Straßen führen keine Leitungen/Rohre mehr automatisch mit** (löst die bisherige G3-Regel „Stadtstraßen tragen mit“
+  ab – Umbau steht an). Der Spieler verlegt **Wasserrohre, Abwasserkanäle** (unterirdisch, Einrasten entlang von Straßen)
+  und **Strom** (Hochspannung vom Kraftwerk → Umspannwerk → Ortsnetz entlang der Straßen) selbst.
+- Ein Gebäude ist angeschlossen, wenn eine passende Leitung/ein Rohr in Reichweite seiner Vorderseite liegt; es
+  bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein für alle Netzarten.
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
@@ -69,7 +76,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -96,6 +103,21 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Unterirdisch-Ansicht (X, automatisch beim Bauen unter 0 m) macht den Boden durchsichtig.
 - `RoadTemplates`: Raute, Kleeblatt, Dreieck – Quadrant 4 wird beschrieben und um 90° gedreht (A↔B tauschen).
 - `RoadNetwork.SegmentReplaced` (Zerteilen/Umbau/Umdrehen) → Verkehrsregeln wandern mit.
+- **Bauwerks-Sperre (UX-Runde)** `Simulation/Roads/StructureRules.cs`: Straßen reißen Dienste, Versorger und Busdepots
+  **nicht** mehr ab. Bauwerksarten melden sich mit einer Zeile an: `roads.RegisterStructures(() => blocks)` (je Bauwerk ein
+  `StructureBlock` = Art, Id, Name, `Footprint`, Höhe; angemeldet: `ServiceSystem` „service“, `UtilitySystem` „utility“,
+  `TransitSystem` „depot“ – Haltestellen nicht). `RoadBuilder.Plan` (damit auch Kurve, Doppelbau, Kreisverkehr, Vorlagen)
+  prüft am Ende von `Validate` per `RoadFront.FindBlocking` (Fahrbahn inkl. Gehweg, ebenerdig; Brücken/Tunnel > 3 m
+  Elevation gehen drüber/drunter, 0,25 m Toleranz) → `RoadBuildError.OverlapsStructure` + `RoadPlan.BlockedBy`
+  (ebenso `RoundaboutPlan`/`TemplatePlan`/`DualCarriagewayPlan.BlockedBy`). Ausbau auf breiteren Typ: `CheckReplace` →
+  `ReplaceBlocker`. Werkzeug: Vorschau rot, Bauwerk rot hervorgehoben, Hinweis „Straße überschneidet <Name> – anders führen
+  oder Gebäude verschieben“. **Zonen bleiben wie bisher** (Straße entfernt Zone + Gebäude), Strommasten werden weiter
+  umgelegt, Wasserrohre unter Straßen unverändert.
+- **Front-Ausrichtung** (`RoadFront`): `FindAccess(roads, footprint, reach)` = Zufahrt an der **Mitte der Vorderseite**
+  (ebenerdige Stadtstraße vor ihr – Kegel ±60° um `Front` –, Rand ≤ reach); `TryAlign(roads, cursor, w, d, drehung, radius)`
+  dreht die Vorderseite zur nächsten Stadtstraße (Normale der Tangente, auch in Kurven), Vorderkante 0,5 m vor dem Gehweg
+  (`SnapGap`), Mitte folgt dem Cursor entlang der Straße; Zusatzdrehung rückt das Bauwerk so weit ab, dass die Ecken frei
+  bleiben. Neue Bauwerksarten nutzen beides mit einer Zeile.
 - **Knoten-Geometrie** rein in der Simulation (`JunctionGeometry`, getestet in `JunctionGeometryTests`):
   `Classify` → `Junction` (ab 3 Straßen oder Typwechsel: Kreuzungsfläche), `Bend` (Grad 2, gleicher Typ, Knick
   > 0,5°: Eckstück mit vollem Querschnitt als Bézier, Innenradius ≥ halbe Breite + 1 m), `None` (gerade Fortsetzung,
@@ -189,15 +211,16 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kinder/Schüler bleiben vorerst zu Hause (ab 12 Jahren Freizeit im Viertel, s. Bedürfnismodell).
 - Fahrten: Anteil `CarShare` (35 %, Einpendler 60 %) × `TrafficSystem.Demand` fährt als echtes Auto
   (`TrafficSystem.RequestTrip` von Zufahrt/Außenanschluss zu Zufahrt/Außenanschluss), höchstens 70 % von `MaxVehicles`.
-  Rest = Platzhalter (zu Fuß/ÖPNV, Fahrzeit aus Luftlinie, 15 km/h). Ankunft meldet `TrafficSystem.TripEnded`
+  Rest = Platzhalter (zu Fuß/Rad, Fahrzeit aus Luftlinie, 15 km/h) bzw. seit ÖPNV Stufe 1 Bus (s. „ÖPNV“). Ankunft meldet `TrafficSystem.TripEnded`
   (auch bei Abbruch → Bürger kommt trotzdem an; Sicherheitsnetz 3 Tage). Handler dürfen dort keine Fahrten starten.
   **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
 - Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
+  Fußgänger (Platzhalter-Fahrten, Park, Laden, Haustür) zeichnet `PeopleView` (s. „Fußgänger“).
 - Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
   Mitglieder abgeleitet, nicht gespeichert. Familienstand je Bürger: `Citizen.Relationship`/`PartnerId` (Bedürfnismodell).
 - Lesende Abfragen: `CitizenSystem.CitizenForTrip(tripId)` / `VehicleOf(citizen)`, `Citizen.TripStartTick`,
-  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`; `Vehicle.StartTime` (Verkehrszeit beim Start).
+  `PlannedArrivalTick` (Platzhalter-Fahrt), `HasCarTrip`, `BusyUntilTick` (Ende der Tätigkeit); `Vehicle.StartTime` (Verkehrszeit beim Start).
 
 ## Bürgerverhalten (Bedürfnisse)
 - Dateien in `Simulation/Citizens`: `Needs.cs` (Bedürfnisse, Gewichte je Lebensphase, `ServiceIds`), `Personality.cs`,
@@ -260,9 +283,61 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **HUD:** `Game/Citizens/CitizenAlerts` (Begleiter am RoadTool) meldet einmal je Spieltag Geburten/Hochzeiten des
   Vortags mit einem Beispielsatz (`HudMessages.Info`, Schlüssel „citizens-daily“).
 - Später: Kinder gehen wirklich zur Schule (Tagesablauf), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
-  aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter (Stau → „eher ÖPNV“ wirkt bisher
-  auf den Platzhalter „zu Fuß/ÖPNV“). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
+  aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter ✅ (s. „ÖPNV“: Stau → eher Bus). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
   für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
+
+## Fußgänger (sichtbare Bürger)
+- **Simulation** `Simulation/People` (rein, getestet in `PedestrianTests`): `SidewalkGraph` = ungerichtetes Gehwegnetz aus dem
+  Straßennetz (nur Typen mit Gehweg beidseits; neu gebaut bei `RoadNetwork.Version`). Knoten = Gehweg-Enden je Arm (links/
+  rechts vom Knoten weg), Kanten = Gehweg entlang des Segments (`SampledCurve.OffsetAt` mit dem `Offset` der Gehweg-Spur =
+  Fahrbahnrand + halbe Gehwegbreite, zwischen den Trimm-Abständen), Gehwegecke (Mitte zwischen Bordstein und Außenkante aus
+  `JunctionGeometry.Layout`, im Knick entlang des versetzten Eckstücks), **Querung** (Zebrastreifen am Armende quer über die
+  Fahrbahn, Bordstein → Fahrbahnhöhe) nur an Kreuzungsflächen (`NodeShape.Junction`) und Sackgassen-Enden, +6 m Zuschlag.
+  Wegfindung A* (Luftlinie). Zugang: `TryAccessAtT` (Seite aus der Lage des Gebäudes), `TryNearestAccess`, `TryAccessAtNode`.
+  `PedestrianRoute` = Linienzug mit Höhe (Gehweg +0,2 m, Fahrbahn +0,05 m) und Belag je Punkt.
+- `PedestrianPlanner` (je Welt): Endpunkte (Haustür = Zufahrt − 1 m, Park = Tor an der Straßenseite + Luftlinie zur Parkmitte,
+  Außenanschluss, freier Punkt), Routen-Cache je Start/Ziel (geleert bei Netzänderung, max. 30 000), `RouteBudget` (neue
+  Routen je Frame). `Pose(citizen, time, activitySince)` → `PedestrianPose` (Hidden/Walking/Standing/Waiting, Ort, Höhe,
+  Richtung, m/Tick): Platzhalter-Fahrt (kein Auto) linear über die Route zwischen `TripStartTick` und `PlannedArrivalTick`
+  (Tempo = Routenlänge / Fahrzeit → Ankunft passt immer zur Simulation); Park: Hinweg (wenn der Beginn beobachtet wurde),
+  Platz je Bürger auf der Parkfläche mit kleiner Runde, Rückweg in den letzten `ParkWalkTicks` vor `Citizen.BusyUntilTick`
+  (gleiche Formel wie das Bürgersystem); Spaziergang im Viertel = 40 m auf dem eigenen Gehweg hin und her; Einkauf = die
+  letzten 3 Ticks vor dem Laden; Ankunft zu Hause = 2 Ticks vor der Haustür. Neu lesend: `Citizen.BusyUntilTick`.
+- **ÖPNV-Erweiterungsstelle:** `PedestrianPlanner.Transit` bzw. in Unity `PeopleView.TransitHook`
+  (`Func<Citizen, double, TransitPose>`): `TransitPose.WaitingAt(stop, h, facing)` (steht am Haltestellenpunkt),
+  `InVehicle` (unsichtbar), `Walk(from, fromPoint, to, toPoint, start, end)` (Fußweg über die Gehwege, Place.None = Punkt).
+  **Verbunden** über `TransitPedestrians` (Simulation/People, liest nur `CitizenSystem.RideOf`/`TransitSystem`; `PeopleView`
+  nimmt sie, wenn `TransitHook` null ist): Fahrgast wartet → zuerst Fußweg Tür → Haltestelle in **Verkehrszeit** ab
+  `Passenger.StartTime` (Gehweglänge ÷ `TransitRules.WalkSpeed` 1,3 m/s, 1 Tick = `TrafficSystem.Dt` 0,25 s → echtes
+  Gehtempo), dann Stehen auf dem Gehweg der Halteseite (`WaitPoint`: 0,6 m zum Bordstein, ±2,5 m gestreut, Blick zur Straße;
+  `StopSide.Both` → Seite nach Id). Im Bus → unsichtbar. Nach dem Aussteigen Fußweg vom Gehweg des Ziel-Halts zum Ziel in den
+  letzten Ticks vor `PlannedArrivalTick` (Formel wie `CitizenSystem.OnRideEnded`: Luftlinie ÷ 1 500 m/Tick, + 3 außerhalb).
+  Die Fahrt entfernt das Bürgersystem beim Aussteigen – `TransitPedestrians.Observe` merkt sie sich je Frame. Statistische
+  Fahrgäste (`TransitRealShare`) und unbeobachtete Fahrten: unsichtbar.
+  **Zeitbasis im Bürgersystem** (nur dokumentiert, nicht umgebaut): `TransitSystem.StartRide` lässt sofort warten (Fußweg zur
+  Haltestelle ohne Dauer; die Planung `TransitOption.AccessMeters`/`PerceivedSeconds` rechnet ihn aber in Verkehrszeit) – die
+  Darstellung zeigt ihn trotzdem in Verkehrszeit; wer einsteigt, bevor er sichtbar ankommt, verschwindet unterwegs. Dauer in
+  Spielticks (Zeitraffer) haben: Platzhalter-Fußwege (`CitizenSystem.StartTrip`: `dist / OtherMetersPerTick`), Fußweg vom
+  Ziel-Halt (`OnRideEnded`: `rest / OtherMetersPerTick`) und Parkwege (`TryLeisure`: `walk`). Für echtes Gehtempo müssten diese
+  drei Stellen in Verkehrszeit rechnen (z. B. Ankunft über `traffic.Time` + Strecke ÷ 1,3 m/s statt `ArriveTick`), bzw.
+  `StartRide` erst nach dem Zugangsweg in die Warteschlange stellen.
+- **Darstellung** `Game/People/PeopleView` (Begleiter am RoadTool): je Frame alle Bürger mit billiger Vorprüfung (Start/Ziel
+  in Reichweite), dann Pose, Sichtkegel, bis `FarDistance` 520 m (Kamera höher → nichts), höchstens `MaxVisible` 3 000 (nächste
+  zuerst); bis `NearDistance` 170 m volle Figur (Beine/Arme schwingen um Hüfte/Schulter, Wippen, Senioren gebeugt, Schatten),
+  darüber 2 Quader ohne Schatten. Neue Routen höchstens 24 je Frame. `Graphics.RenderMeshInstanced`, ein Material je Farbe.
+  Seitliche Streuung ±0,85 m (auf Zebrastreifen ±0,5 m), Schrittfrequenz in Echtzeit. Freizeitbeginn beobachtet die View
+  (Wechsel in `Activity.Leisure`), die Simulation speichert ihn nicht.
+- **Figuren** `PeopleFigures`: Platzhalter aus Quadern, 1,75 m (Kleinkind 0,55×, Kind 0,74×, Jugendliche 0,93×, Kopf relativ
+  größer), Farben nach Bürger-Id (Haut 5, Haare 5 bzw. grau/weiß bei Senioren, Oberteil 12 / Kinder kräftig / Senioren gedeckt,
+  Hose 6). Eigene Modelle (`OwnModelCatalog.People`, s. „Eigene Assets“) ersetzen die Platzhalter: je Gruppe zufällig nach Id,
+  fehlt die Gruppe, Erwachsene skaliert.
+- **Inspektor:** Fußgänger anklickbar (`InspectorPicking`: Kugel um die zuletzt gezeichnete Körpermitte, Vorrang wie Fahrzeuge)
+  → Bürger; Ring um die Person und Verfolgen (`PeopleView.TryGetPosition`).
+- **Zeitverzerrung:** 1 Tick = 6 Spielminuten = 0,1 s Echtzeit bei Tempo 1. Platzhalter-Fußwege dauern meist 1–2 Ticks →
+  Fußgänger laufen sichtbar im Zeitraffer (z. B. 600 m in 0,2 s). Deutlich länger sichtbar sind Park, Spaziergang, Laden, Tür.
+  Echt wirkende Gehgeschwindigkeit bräuchte Fußwege in Verkehrszeit (wie Autos) im Bürgersystem – offen.
+- Leistung (Testprojekt, Info): Raster 13×13 Straßen (312 Segmente) → Gehwegnetz 17 ms, 500 Routen 75 ms (inkl. JIT).
+  Unity noch nicht gestartet (Optik, Frame-Zeiten ungeprüft).
 
 ## Spiel-UI (UI Toolkit, Phase 1)
 - `Game/UI/Hud/GameHud` (+ `GameHud.BuildBar.cs`), Begleiter am `RoadTool` (zuletzt angehängt). Erzeugt zur Laufzeit
@@ -271,9 +346,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
-  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
-  Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
+  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien → Werkzeugzeile + Kacheln + Infozeile;
+  aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
+  Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
 - Icons: `HudIcon` zeichnet per Painter2D (24er-Raster, Farbe = `color`), keine Bilddateien.
@@ -318,11 +394,33 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Baukasten: `Ui.Image(texture, w, h, onClick, onHover)`, `GameWindow.FrameClass` (z. B. `cb-window--wide`).
 - Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
-## Inspektor (Info-Modus, Taste C)
+## Auswählen-Modus & Verschieben (UX-Runde)
+- **Standard = Auswählen** (`RoadTool.SelectMode` = der vorhandene `Mode.Inspect`; bewusst kein neuer Enum-Wert, damit
+  Inspektor/Picking/Views und Werkzeuge anderer Agenten unverändert passen). Start in diesem Modus, keine Bauvorschau,
+  Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst, Versorger, Haltestelle/Depot.
+- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5) →
+  Auswählen (`RoadTool.ToggleMode`); R bleibt Gerade ↔ Kurve. Aktive Kategorie in der Bauleiste erneut anklicken → Auswählen.
+  In Zonen/Gelände hat Rechtsklick eigene Bedeutung, dort nur Esc. Laufende Vorgänge melden Begleiter mit
+  `RoadTool.RegisterOperation(busy, esc, rechtsklick)` (Leitungskette, Buslinie zeichnen, Verschieben): dann bricht Esc/RMB
+  nur diesen Vorgang ab. Esc, das ein Fenster verbraucht (`WindowHost.EscapeConsumedFrame`), wirkt nicht zusätzlich.
+  Hinweiszeile: `RoadTool.ReturnHint` („Esc/Rechtsklick: zurück zum Auswählen“).
+- **Bauleiste:** Knopf „Auswählen“ (Icon `HudIconKind.Cursor`) ganz links, aktiv im Auswählen-Modus; dort ist keine
+  Kategorie offen. **Inspektor-Panel** öffnet sich erst mit einer Auswahl (`InspectorPanel.WantsPanel`); Stadtübersicht
+  nur über Info-Knopf oben bzw. C (`RoadTool.ToggleCityInfo` → `InspectorPanel.ShowOverview`); × schließt, Modus bleibt.
+  Zonen kräftig: Zonen-Werkzeug oder Stadtübersicht.
+- **Verschieben** `Game/Inspect/FacilityMover` (Begleiter): Dienst/Versorger/Busdepot auswählen → „Verschieben (Y)“ im
+  Inspektor oder Taste **Y** (einziger freier Buchstabe, gedrucktes Zeichen der Belegung) → Geist mit Vorderseiten-Pfeil folgt der
+  Maus mit denselben Platzregeln inkl. Ausrichtung, `,`/`.` drehen, Klick setzt (Stadtkasse 10 %), Esc/RMB bricht ab.
+  Depots: `TransitSystem.SnapDepot` + `PlanMoveDepot`/`MoveDepot`.
+- **Vorschau:** `Game/UI/PlacementGhost` (Quader + Streifen an der Vorderkante + Pfeil zur Zufahrt) in Dienst-, Versorgungs- und
+  Verschieben-Werkzeug; auch als rote Hervorhebung des Bauwerks, das eine geplante Straße blockiert.
+
+## Inspektor (Auswählen-Modus, Übersicht Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
   Liest nur. Klick = Strahl gegen Gebäude (Grundstück × `VisualHeight`), Versorgungsbauwerke (Fläche × grobe
-  Platzhalterhöhe) und Fahrzeuge (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
-  Geländepunkt unter der Maus. Rechtsklick/„Übersicht“ hebt auf, „← Zurück“ geht den Verlauf zurück.
+  Platzhalterhöhe), Fahrzeuge und Fußgänger (Kugel um die interpolierte Position, kleiner Vorrang vor Gebäuden); Rückfall:
+  Geländepunkt unter der Maus. Rechtsklick/Klick ins Leere hebt auf (Panel schließt, außer die Stadtübersicht ist offen),
+  „← Zurück“ geht den Verlauf zurück.
 - Auswahl = Art + Id (`Selection`), jedes Frame neu nachgeschlagen; verschwundenes Fahrzeug → Auswahl springt zum
   Fahrer (Bürger). Hervorhebung: gelber Umriss (Boden + Dach) bzw. Ring ums Fahrzeug; bei Bürgern zusätzlich
   Wohnung (grün) und Arbeitsplatz/Ziel (blau). **Verfolgen** (F oder Häkchen) für Fahrzeug/Bürger über
@@ -347,8 +445,16 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
   Leistung Strom kW / Wasser m³/h, Baukosten/Unterhalt bucht die Stadtkasse ab, s. u.), `UtilitySystem` (alle 30 min).
 - Bauwerke frei platziert und gedreht (`PlanFacility` → `BuildFacility`): nicht auf Straßen/Wasser/anderen Bauwerken,
-  Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen,
-  Straße durchs Bauwerk reißt es ab. Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
+  Pumpe braucht Wasser in Reichweite (Gelände `IsWater`), Fläche wird eingeebnet, Gebäude darunter werden abgerissen.
+  **Straßen dürfen Bauwerke nicht überbauen** (Bauwerks-Sperre, s. Straßen). Auf Bauwerksflächen wächst nichts (`CitySystem.LotBlocker`-Hook).
+  **Straßenfront (UX):** `UtilityFacilityType.NeedsRoadFront` für Kohle-/Gaskraftwerk, Wasserturm, Kläranlage
+  (Brennstoff/Personal/Schlamm). Steht so ein Bauwerk an einer Stadtstraße (Rand ≤ 8 m = Netzanschluss über die Straße),
+  muss die Vorderseite zu ihr zeigen, sonst `UtilityBuildError.NoRoadAccess`; Überland ohne Straße in der Nähe (Anschluss per
+  Leitung) bleibt erlaubt, weil Brennstoff/Personal noch nicht simuliert sind. **Ausnahmen** ohne Front: Windrad, Solarpark
+  (niemand fährt im Alltag hin), Pumpe, Atomkraftwerk, Abwasser-Auslass (richten sich nach dem Wasser). Der Netzanschluss
+  selbst bleibt „Straße ≤ 8 m an irgendeinem Rand“ (Kabel, keine Zufahrt). `PlanFacilityAligned(type, cursor, drehung)`
+  richtet aus; `PlanMove(id, pos, front)`/`MoveFacility(plan)` verschiebt (Id/Leistung bleiben, 10 % Umzugspreis
+  `MoveCostShare`, Masten auf der neuen Fläche werden umgelegt, Event `FacilityMoved`).
 - **Netze**: Stadtstraßen tragen Leitung und Rohr automatisch mit (wie Cities: Skylines – spart Kleinarbeit, Straßen
   liegen ohnehin an jedem Gebäude); Autobahnen/Rampen nicht. Lücken schließen frei verlegte gerade Leitungen/Rohre
   (`PlanLine` → `BuildLine`); Enden verbinden sich im Umkreis 3 m mit Leitungen (auch mittendrin), Bauwerken, Stadtstraßen,
@@ -383,13 +489,60 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Leitungsende, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar; Vorschau im Werkzeug zeigt die Masten, ungültige rot),
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
-- Später: Abwasser/Kläranlage, Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
+- Später (Abwasser/Atom: s. „G3 erweitert“): Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
   Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
   Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
-  Wasserqualität/Verschmutzung flussabwärts. **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
+  (Wasserqualität: erledigt, s. „G3 erweitert“). **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
   Leitungen am selben Punkt zusammenlegen.
+
+## Abwasser, Wasserqualität & Atomkraftwerk (G3 erweitert)
+- **Abwasser** = dritte Netzart `UtilityKind.Sewage` im `UtilitySystem` (Status `HasSewage`/`TicksWithoutSewage`). Gebäude
+  erzeugen 0,9 × Wasserbedarf (`UtilityCatalog.SewageShareOfWater`); Abnahme durch **Kläranlage** (500 m³/h, klärt voll) und
+  **Abwasser-Auslass** (1500 m³/h, billig, `Untreated`, muss ans Ufer). Startphase wie Strom/Wasser: erst verlangt, wenn es eine
+  Kläranlage/einen Auslass gibt; dann fließt es in `IsSatisfied` (Versorgung, Zustand, Stufen) ein; verlassen nach 4 Tagen
+  (`SewageAbandonAfterTicks`). **Kanäle werden selbst verlegt** (Entscheidung des Spielers): Straßen führen sie nicht mit.
+- **`ConnectionRules`** (wiederverwendbarer Baustein, bisher nur Abwasser – Wasser/Strom folgen): `CarriedByRoads(kind)`,
+  Gebäude angeschlossen, wenn ein Kanal ≤ `BuildingReach` 12 m von der Zufahrt (`Building.Entrance`) verläuft (auch mittendrin);
+  Leitungen/Bauwerke verbinden sich weiter über Enden (3 m). `UtilitySystem.ConnectedLine(b, kind)`, `HouseConnection(...)` für
+  den sichtbaren Hausanschluss (`UtilityView`, unterirdisch, braun, 1,5 m unter den Wasserrohren).
+- **`WaterQualitySystem`** (`world.WaterQuality`, nach dem `UtilitySystem`): je Kanalnetz geklärt (Kläranlagen zuerst, anteilig)
+  bzw. ungeklärt über Auslässe. `Pollution` (`GridLayer`, Umwelt-Gitter, 0 = sauber): Auslass gibt `PollutionPerCubicMeter`
+  (0,015) × m³/h auf Wasserzellen ≤ 40 m; Transport **nur flussabwärts** (`TerrainMap.FlowDirection`, Festlegung −y bzw. zum Meer,
+  weil der Fluss kein Gefälle hat): 60 % zur nächsten Wasserzelle stromab (sonst schräg), 4 % je Seite quer, 1 % Selbstreinigung.
+  `PumpQuality(f)` = 1 − Verschmutzung im Ansaugbereich, je Wassernetz nach Leistung gemischt (Brunnen = 1) →
+  `DrinkingWaterQuality(b)`. Bodenwert: Wasserlage × (1 − 1,5 × Verschmutzung) (`LandValueSystem.WaterPollutionNear`).
+- **Atomkraftwerk** (`UtilityCatalog.NuclearPlant`): 200 MW, 400 000 € / 4 500 €/Tag, Kühlwasser (am Ufer, aber trockene ebene
+  Grundfläche: `DryFootprint`), kein Abgas, `ConcernRadius` 1200 m → `UtilitySystem.ConcernAt(p)` (voll bis 30 %).
+  **Störfall** (Entscheidung: an, aber harmlos): `IncidentChancePerDay` 0,2 % je Tag (stabiler Hash aus Id + Tag, kein
+  gemeinsamer Zufall), 3 Tage Abschaltung (Leistung 0), Event `NuclearIncident`, Medienmeldung; keine Sperrzone.
+  `IncidentsEnabled` schaltet ab, `ForceIncident` für Tests.
+- **Bürger** (Hooks in `CitizenSystem.Needs`, verbunden in `CitizenUtilityBinding.Connect`, alle null = neutral):
+  `DrinkingWaterQuality` → Gesundheit −0,4 × (1 − Qualität), Erinnerung `BadTapWater` unter 0,8; `NuclearConcern` → Ruhe −0,3 ×
+  Sorge × ängstlich, Erinnerung `NuclearFear` ab Ängstlichkeit 0,4; fehlendes Abwasser → `SewageBackup`. Ohne Zufall (RNG unverändert).
+- Darstellung: Werkzeug „Abwasserkanal“ (`UtilityTool.UtilityAction.SewagePipe`, unterirdisch), Kacheln Atom/Kläranlage/Auslass,
+  O schaltet Strom → Wasser → **Abwasser** → aus, linke Leiste Knöpfe „Abwasser“ und „Wasserqualität“ (`EnvironmentOverlayView.
+  Overlay.WaterQuality`, nur Verschmutzung sichtbar), Kanal-Chip oben, Inspektor: Abwasser/Trinkwasser/Atom-Sorge am Gebäude,
+  geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
+- Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
+  Fischsterben/Tourismus, Grundwasser-Verschmutzung, Wasser/Strom auf `ConnectionRules` umstellen (Hochspannung → Umspannwerk → Ortsnetz).
+
+## Medien (G4 erweitert)
+- Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
+  3 min, braucht Zufahrt), **Radiosender** (Funkradius 900 m) und **TV-Sender (Turm)** (1600 m) – `ServiceType.Broadcast` (technisch
+  `Walking` = Luftlinie, keine Zufahrt). Kapazität = Leser/Hörer/Zuschauer, Bedarf = Einwohner, Kosten wie alle Dienste (Kasse).
+- Bürger: `MediaReach` (ohne Medienhaus 0, nicht 0,5) → Freizeit +0,004 je Bewertung, Bildung Erwachsene +0,08;
+  `NewsTone` → Gemüt ± 0,05 × Reichweite × Stimmung (vorsichtig dosiert).
+- **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
+  Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
+  Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
+  Arbeitslosigkeit ≥ 12 %, Handel (Vertrag, Embargo, Zollerhöhung über `Report`, s. Etappe 8). Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium} {Land}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
+  `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
+  `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
+- Später: Nachrichtenfenster/Ticker in der HUD, Kampagnen/Werbung, Medien beeinflussen Wahlen/Politik, Klatsch aus Lebensereignissen.
 
 ## Dienste (G4)
 - `Simulation/Services`: `ServiceCatalog` (Polizeiwache, Feuerwache, Klinik, Krankenhaus, Grundschule, Gymnasium/Oberschule,
@@ -400,8 +553,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `Education` = Mittel aus `EducationPrimary`/`EducationSecondary` (auch einzeln abfragbar). Unbekannte Art → 0.
   Weitere: `GarbageAt/GarbageLevel(b)`, `FireRisk(b)`, `AverageCoverage(kind)`, `DemandOf(b, channel)`;
   `DemandProvider` (Func) erlaubt echten Bedarf (z. B. Schülerzahlen aus dem Bürgersystem) statt Schätzung.
-- **Reichweite über das Straßennetz**: Dijkstra über Fahrzeit vom Anschlusspunkt (nächste ebenerdige Stadtstraße, Rand
-  ≤ 8 m von der Grundfläche – sonst `NoRoadAccess`); Tempolimit × 0,8, +5 s je Kreuzung (≥ 3 Straßen), Einbahnstraßen nur
+- **Reichweite über das Straßennetz**: Dijkstra über Fahrzeit vom Anschlusspunkt (**Mitte der Vorderseite**, ebenerdige
+  Stadtstraße vor ihr, Rand ≤ 8 m – sonst `NoRoadAccess` „Keine Zufahrt an der Vorderseite“; früher zählte jeder Rand); Tempolimit × 0,8, +5 s je Kreuzung (≥ 3 Straßen), Einbahnstraßen nur
   in Fahrtrichtung, Autobahnen/Rampen befahrbar. Gebäude werden an ihrer Zufahrt (`FrontSegmentId`/`FrontT`) erreicht.
   Wirkung 1 bis 40 % der Reichweite, dann linear auf 0. Ohne Straßenverbindung (z. B. Fluss ohne Brücke) keine Wirkung.
   **Parks** wirken über Fußweg-Radius (Luftlinie zur Parkfläche): Spaziergänger kürzen über Wege/Grundstücke ab, die das
@@ -415,7 +568,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abdeckung × höchstens 4× die laufende Menge (Rückstau baut sich ab); Müllhalde läuft voll (25 000 t → wirkt nicht mehr).
   `FireRisk` = Grundrisiko je Zone × (1 − 0,8 × Feuerwehr) + 0,2 × Müllstand – noch ohne Brände.
 - Platzregeln wie G3: nicht auf Straße/Wasser/anderen Bauwerken/Strommasten, max. 8 m Gefälle (wird eingeebnet), Gebäude
-  darunter werden abgerissen, Straße durchs Dienstgebäude reißt es ab. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
+  darunter werden abgerissen. **Straßen durchs Dienstgebäude sind gesperrt** (Bauwerks-Sperre, `OnSegmentAdded` reißt nichts
+  mehr ab). **Ausrichtung (UX):** `ServiceType.NeedsRoadFront` (= nicht `Walking`; Parks nicht) – `PlanAligned(type, cursor,
+  drehung, movingId)` dreht die Vorderseite zur Straße (Cursor ≤ Tiefe + 16 m vom Straßenrand), `,`/`.` drehen zusätzlich, solange
+  die Vorderseite Zufahrt hat. **Verschieben:** `PlanMove(id, pos, front)` / `MoveFacility(plan)` – gleiche Platzregeln (eigene
+  alte Fläche zählt nicht), 10 % der Baukosten (`MoveCostShare`, Kategorie „Bau Dienste“), Id/Lager/Last/Statistik bleiben,
+  Anschluss + Reichweite neu, Event `FacilityMoved`. Grundstücke (`CitySystem.LotBlocker`, verkettet mit
   G3) und Terraforming (`TerrainMap.LockQuery`, verkettet) sind auf Dienstflächen gesperrt. Versorger/Masten dürfen nicht
   auf Dienstflächen (Hooks `UtilitySystem.OtherStructureOverlaps/-At`).
 - **Kosten (Stadtkasse)**: `ServiceSystem` ist `IUpkeepSource` (`Name` „Dienste“, `WeeklyUpkeep()` = Summe der
@@ -436,7 +594,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
 - Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
-  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
+  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
 
 ## Bodenwert & Ausbaustufen (G6)
@@ -555,7 +713,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Markt je Gut:** Bestand = Ausgangs- + Eingangslager aller Firmen; Zielbestand = 3 Tage Bedarf (Eingänge der Belegschaft +
   Haushaltswünsche, geglättet 0,3). Zielpreis = Grund × clamp(1 + 0,6 × (1 − (Bestand+1)/(Ziel+1)), 0,5, 1,8); lokaler Preis
   läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
-  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage).
+  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage); mit Weltkarte stattdessen der Weltpreis der Länder (Etappe 8).
 - **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
   Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
   Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
@@ -644,7 +802,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kapazität je Kopf aus Profil/Vorkommen, Ernte und Heizbedarf aus dem Klima der Hauptstadt, Vorleistungen (Erz+Energie+Holz →
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
-  Startpreis spiegelt Knappheit). `Balance(cat)` = Überschuss/Defizit je Tag für die spätere Handels-KI, `WorldPrice` =
+  Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
   produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
   vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
@@ -673,8 +831,87 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
 - Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
-  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Handel zwischen Ländern
-  (Etappe 8 über `Balance`/`Price`), Stadt-Wirtschaft (G5) speist ins Spieler-Land, Wechsel in andere Städte (LOD detailliert).
+  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
+  Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
+
+## Handel (Etappe 8)
+- `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
+  `TradeContract` (Bedingungen, Angebot, Vertrag, Lieferung, Gedächtnis), `TradeCommands`, `NationTrade` (Persönlichkeit, Zölle,
+  Vertrauen), `CityTradeDepot` (Grenzlager), `TradeRules` (alle Zahlen). Nur mit Weltkarte: `CreateDefault` legt `world.Trade` an,
+  sobald `world.Planet.Economy` existiert (läuft zuletzt; Tests ohne Welt bleiben unverändert). G5 kennt nur `Goods/ITradeGateway`.
+- **Güter ↔ Kategorien:** Agrar = Getreide, Vieh, Mehl, Lebensmittel; Holz = Holz, Bretter; Erze/Baustoffe = Erz, Sand, Zement,
+  Baustoffe; Energie = Kohle, Erdöl; Industrie = Stahl, Kunststoff, Glas; Konsum = Kleidung, Möbel; Technik = Elektronik, Fahrzeuge;
+  Tourismus ohne Gut. 1 Wareneinheit = Grundpreis Gut / Grundpreis Kategorie Kategorie-Einheiten (wertgleich).
+- **Preise:** Länderpreis je Gut = Grundpreis × (Kategoriepreis/Kategorie-Grundpreis des Landes) × (1 ± 6 % Hash je Land/Gut).
+  **Weltpreis** = Σ Länderpreis × w / Σ w, w = geglättetes Handelsvolumen (Kategorie-Einheiten/Tag, EMA 0,1) + 2 % der Produktion.
+  Die Stadt bekommt ihn über `GoodsSystem.WorldPriceSource` (begrenzt 0,5–2 × G5-Grundpreis) statt des Rauschens → Paritätsband,
+  Import/Export und Standortwahl reagieren auf Knappheit der Länder.
+- **Transport** (`TradeGeography`, einmal beim Start): Handelsort = Hauptstadt (Spieler: Mitte der Startregion); Landweg nur auf
+  derselben Landmasse (Großkreis × 1,35 × 0,03 €/t·km), Seeweg über den nächsten Küstenpunkt (Breitensuche über Land: Vor-/Nachlauf
+  × 0,03 + Großkreis Hafen–Hafen × 1,25 × 0,004 €/t·km + 2 × 4 €/t Umschlag) – der billigere gewinnt. Frachttonnen = max(Gewicht,
+  Volumen × 0,4). Lieferzeit = ⌈1 + Land/600 km + See/500 km (+2 Hafentage)⌉ Tage. Der Verkäufer trägt die Fernfracht (frei Grenze).
+- **Schnittstelle (Spieler = NPC):** `ProposeContractCommand` (Angebot „verkaufe“ / Nachfrage „kaufe“ an ein Land oder alle; auch
+  Handelsabkommen), `AcceptOfferCommand`, `RejectOfferCommand`, `WithdrawOfferCommand`, `CancelContractCommand`, `SetTariffCommand`.
+  `Submit` reiht ein (nächster Tick), `Execute` sofort (UI, KI); `CommandLog` für Replays. `ContractTerms`: Gut, Menge/Woche, Wochen
+  (1–52), Festpreis oder Weltpreis × Faktor, Strafanteil. Angebote gelten 7 Tage und werden **in der nächsten Nacht** beantwortet
+  (während des Handelstags gestellte erst in der übernächsten).
+- **Verträge:** Start am Folgetag (Spieler als Verkäufer: +6 Tage Vorlauf zum Sammeln), wöchentlicher Versand, Ankunft nach der
+  Lieferzeit, Bezahlung bei Ankunft (Preis am Versandtag). Fehlmenge → Strafe = Fehlmenge × Preis × Strafanteil an den Käufer,
+  Vertrauen des Käufers − (0,05 + 0,3 × Fehlquote), Beziehung − (4 + 12 × Fehlquote), Erinnerung „Vertragsbruch“; volle Lieferung:
+  Vertrauen +0,01, Beziehung +0,4. Kündigung: Gebühr = min(4, Restwochen) × Wochenwert × Strafanteil × 0,5, Vertrauen −0,1,
+  Beziehung −6; Ware unterwegs kommt noch an. Handelsabkommen: beide Zölle 0 für die Laufzeit (26 Wochen), Beziehung +0,5/Woche.
+- **NPC-Seite:** Lager in Kategorie-Einheiten (`NationEconomy.Stock`); Versand nur über einer Reserve von 3 + 12 × (1 − Verlässlichkeit)
+  Tagen Bedarf, unter 10 Tagen Reichweite bricht ein Land mit Wahrscheinlichkeit 0,5 × (1 − Verlässlichkeit) bewusst.
+- **Stadt (`CityTradeDepot`, Vertragspartei = Stadtkasse):** Importware landet im Grenzlager (Kasse zahlt „Handel: Einkauf“), Firmen
+  beziehen sie wie einen Import per Lkw ab Außenanschluss zu Vertragspreis + Zoll gegen das Lieferland („Handel: Verkauf“ + „Zölle“),
+  wenn das höchstens 5 % teurer ist als lokal/Weltmarkt. Exportverträge: Firmen liefern vor dem Weltmarkt-Export bis 10 % Restfüllung,
+  wenn Vertragspreis − Lkw ≥ 90 % lokal (volle Lager immer), Kasse zahlt den Vertragspreis; am Versandtag geht die Ware aus dem
+  Grenzlager, Fernfracht zahlt die Kasse, das Käuferland zahlt bei Ankunft. Importware 14 Tage nach der letzten Ankunft bzw.
+  Exportware ohne Vertrag geht zu 85 % des Weltpreises weg. **Grundzoll** des Spielers verteuert Weltmarkt-Importe der Firmen (Teil
+  des Einkaufswerts) und geht an die Kasse. Neue Kassen-Kategorien (hinten angefügt): Zölle, Handel: Verkauf, Vertragsstrafen
+  (erhalten) | Handel: Einkauf (inkl. Fracht), Vertragsstrafen (gezahlt); `EconomySystem.Post(cat, betrag)`.
+- **Beziehungen/Politik:** Beziehung je Länderpaar −100..100, Start 10 ± 25 (Hash), Nachbarn −8; Drift 2 %/Woche zum Startwert;
+  Zoll von A gegen B über 10 % kostet je Woche (Satz − 0,1) × 10 Punkte; unter −50 Embargo (keine Annahme, Verträge werden gekündigt).
+  Zölle: `TariffSchedule` je Land (Grundzoll + Satz je Lieferland), NPC-Grundzoll = Protektionismus × 20 %; Vergeltung: liegt der Zoll
+  eines Landes gegen n mehr als 5 Punkte über dem Satz von n, hebt ein protektionistisches n (≥ 0,3) wöchentlich um 2 Punkte nach,
+  ohne Grund zurück zum Grundzoll. Vertrauen je gerichtetem Paar 0..1 (Start 0,6, Drift 1 %/Woche), Gedächtnis 12 Einträge je Land.
+- **NPC = Utility AI** (`TradeSystem.Ai.cs`, keine Sprach-KI): Persönlichkeit (Risiko, Protektionismus, Verlässlichkeit,
+  Geschäftssinn; Hash + Profil). Lagebild täglich: Reichweite = Lager/Bedarf, Netto = Saldo ± Verträge; Defizit = 0,6 × (20 −
+  Reichweite)/20 + 0,8 × (−Netto/Bedarf); Überschuss = (0,6 × (Reichweite − 35)/60 + 0,8 × Netto/Bedarf) × (1 + 0,3 Primär-/0,15
+  Sekundärstärke). **Bewertung** eines Angebots = Summe von Bausteinen (Preis gegen Inlandspreis inkl. Zoll/Fracht × Geschäftssinn,
+  Bedarf, Menge gegen Bedarf/Lieferfähigkeit, Schutz eigener Stärken, eigener Bedarf beim Verkauf, Überschuss, Strafe, Beziehung,
+  Vertrauen, Festpreis-Laufzeit) + 0,1 → Annahme mit 1/(1 + e^(−U/T)), T = 0,08 + 0,15 × Risiko; **Grund** = stärkster Gegen- bzw.
+  Fürgrund („zu teuer: höchstens …“, „Preis zu niedrig: mindestens …“, „Menge zu groß“, „Bedarf gedeckt“, „kein Vertrauen nach
+  Vertragsbruch“ …). **Wochenentscheidung** (je Land jeden 7. Tag, gestaffelt): Softmax (T = 0,05 + 0,2 × Risiko) über Nichtstun
+  (0,15), Kaufen je Defizit-Kategorie, Verkaufen je Überschuss-Kategorie, Handelsabkommen (Partner mit Beziehung ≥ 25 und laufendem
+  Vertrag); Partner per Softmax (Überschuss/Defizit, Beziehung, Vertrauen, Preisvorteil, Lieferzeit), Menge aus Bedarf und
+  Lieferfähigkeit (beim Spieler aus Importen/Kapazität der Stadt), Laufzeit 4 + 8 × (1 − Risiko) ± 2 Wochen, Preis zwischen
+  Untergrenze Verkäufer × 1,04 und Obergrenze Käufer nach Geschäftssinn, Weltpreis-Kopplung mit Wahrscheinlichkeit 0,7 × Risiko.
+  Höchstens 2 Angebote je Entscheidung, 3 offene je Land, 6 offene an den Spieler (1 je Land).
+- **UI:** `Game/UI/Windows/TradeWindow` (mittig, **F11**, Münz-Knopf in der oberen Leiste, „Handel“ beim Land in der Weltkarte):
+  Länder (Beziehung, Stärken, Persönlichkeit, Vertrauen in uns, Handelsweg, Zölle, Lage je Kategorie, Gedächtnis, Abkommen anbieten),
+  Weltpreise mit Wochentrend + lokalem Preis + Grenzlager, Angebote (annehmen/ablehnen, eigene mit Antwort/Begründung, neues Angebot
+  mit Vorschau der NPC-Einschätzung über `PreviewOffer` + `Evaluate`), Verträge (Lieferstatus, unterwegs, Grenzlager, Kündigen),
+  Zölle (Grundzoll, Satz je Land, Handelsbuchungen der Kasse). Aktionen per `Execute` (wirkt auch bei Pause). Optik ungetestet.
+- **Leistung** (Testprojekt): 36 Länder, 1 Jahr Länder + Handel ≈ 120 ms (≈ 0,33 ms/Tag, seit der Kalibrierung mehr Verträge),
+  Handel allein ≈ 60 ms/Jahr, Wege 8 ms.
+- **Kalibrierung der Länder-Volkswirtschaften** (`WorldEconomy.Calibrate`, `NationEconomy.TickDay`): Vorher war die Welt global knapp
+  (Produktion/Bedarf Industrie 0,43, Technik 0,00). Ursachen: (1) Vorleistungen nach Reihenfolge – Konsum nahm alle Industriegüter,
+  Technik bekam nichts; jetzt bekommt jeder Abnehmer seinen Anteil (Lager / noch offener Bedarf aller späteren Abnehmer).
+  (2) Kapazitäten je Kopf passten nicht zum Bedarf inkl. Vorleistungen (überschlagen: Industrie ~0,19 statt ~0,35 je Kopf, Energie ~0,5 statt
+  ~1,1). Jetzt wird beim Erzeugen je Kategorie weltweit skaliert, rückwärts durch die Kette (Endprodukte gegen Haushalte, Industrie
+  gegen Haushalte + Vorleistungen, dann Rohstoffe; Heizen/Kühlen, Ernte und Tourismus-Saison im Jahresmittel): Σ Kapazität =
+  Σ Bedarf × 1,04 (Lebensmittel 1,12 wegen 0,5 %/Tag Verderb). Länderunterschiede bleiben relativ. Ergebnis (Seeds 2024/7):
+  Welt-Produktion/Bedarf je Kategorie 0,90–1,09; Länder mit Primärstärke haben 1,16–1,64 × Kapazität ihres Bedarfs (übrige 0,9–1,6).
+  Ein Jahr ohne Handel: Lagerlücke (Wert unter 20 Tagen Reichweite) wächst von 544 auf 607 G€; mit Handel Tag 365 269 G€,
+  Summe Tag 60–365 36 % kleiner.
+- **Medien** (`TradeMedia.Connect` in `CreateDefault`, Event `TradeSystem.News`): Schlagzeilen-Themen `TradeDeal` („Handelsvertrag
+  mit {Land}“ bei jedem Vertrag/Abkommen des Spielers), `Embargo` (Beziehung zum Spieler fällt unter −50), `TariffRaise` (ein Land
+  erhöht seinen Zoll gegen uns); neuer Platzhalter {Land}. Nur mit Medienhaus sichtbar, Sperrfristen wie üblich.
+- **Später (Stufe 2+):** Regierungen/Bündnisse (Zollunion, gemeinsame Außenzölle, Sanktionen, Abstimmungen), Diplomatie-Aktionen
+  (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße, Tourismus als
+  Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
+  Städten (Etappe 7), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
@@ -685,8 +922,14 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
   (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
   `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
-  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
-  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
+  **Personen** (Fußgänger): alle `People/*.fbx` (Ordner anlegen, wenn das erste Modell kommt) → `OwnModelCatalog.People`,
+  Id = Dateiname; Gruppe nach Präfix `Toddler*`, `Child*`/`Kid*`, `Teen*`, `Senior*`, sonst Erwachsene. Konvention: Ursprung =
+  Mitte zwischen den Füßen, Front +Z, 1 Einheit = 1 m (~1,75 m groß; grobe Einheitenfehler werden korrigiert), Paletten-Material;
+  optionale Kindobjekte `LegL`, `LegR`, `ArmL`, `ArmR` schwingen beim Gehen um ihren eigenen Ursprung (= Hüft-/Schultergelenk,
+  Drehachse X). Gezeichnet per Instancing (ein Teil je MeshFilter), keine Farbvariation (mehrere Modelle je Gruppe verwenden).
+  Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
+  zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
+  Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -715,6 +958,61 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   `DeadEndsAreExternal` (Testszenarien). Ziele mitten auf Segmenten (`FindPathToSegment`) wandern beim Zerteilen mit.
   Hängende Fahrzeuge verschwinden nach 90 s.
 
+## ÖPNV (Stufe 1: Buslinien)
+- `Simulation/Transit`: `TransitTypes.cs` (`TransitRules` alle Zahlen, `TransitCatalog.BusDepot`, `BusStop`, `TransitLine`, `Bus`,
+  `Passenger`, `TransitOption`, Pläne/Fehler), `TransitSystem` (+ `.Operations` Route/Depot/Busbetrieb, `.Riders` Fahrgäste),
+  `world.Transit` (jeden Tick, nach den Diensten). Verkehr: `TrafficSystem.Scheduled.cs` (Linienfahrzeuge), `Pathfinder.FindPathToEdge`.
+- **Haltestelle** (`PlanStop`/`BuildStop`, 600 €, 15 €/Woche): rastet an der nächsten ebenerdigen Stadtstraße ein (Rand ≤ 12 m),
+  Seite des Klicks (rechts in Segmentrichtung = `StopSide.Along`) oder Paar (`Both`); Einbahn nur die befahrene Seite; ≥ 15 m
+  von Kreuzungen, ≥ 30 m zur nächsten Haltestelle derselben Seite. Bus hält auf der Fahrspur am Rand (keine Bucht → blockiert
+  die Spur, wie im echten Leben). **Straßenumbau:** Haltestellen wandern beim Zerteilen/Umbau mit (Seite tauscht bei
+  „Richtung umdrehen“), fällt die Straße weg, entfällt die Haltestelle (sie liegt auf der Straße, blockiert sie also nicht).
+- **Linie** (`CreateLine(stops, loop, busse)`, `PreviewLine` für die Werkzeug-Vorschau): Rundlinie A→B→C→A oder Pendel A→B→C→B→A
+  (`VisitStops`). Je Abschnitt A* (Bus) ab der Kante, auf der der Bus am vorigen Halt steht; Ziel auf einer Seite →
+  `FindPathToEdge` (liegt es zurück auf derselben Kante: Runde bis zur Einbiegekante). Fahrplan je Abschnitt = Σ Länge /
+  (Tempolimit × 0,75) + 4 s je Kreuzung + 8 s Halt; Umlaufzeit/Busse = Takt. Neu berechnet bei Straßen-/Linienänderung.
+- **Busdepot** (Bauwerk wie G4: 40 × 30 m, 45 000 €, 1 500 €/Woche, 16 Busse; `PlanDepot`/`BuildDepot`/`DemolishDepot` 25 %
+  zurück; Sperren für Grundstücke/Terraforming/Versorger/Dienste über verkettete Hooks, neu `ServiceSystem.OtherStructureOverlaps`).
+  `SnapDepot` richtet die Vorderseite zur nächsten Stadtstraße aus und rastet am Rand ein (Spielerregel). **Straßenbau reißt
+  Depots nicht ab** – Depots hängen an der Bauwerks-Sperre (`RoadNetwork.RegisterStructures`, Art „depot“; Plan ungültig);
+  `BlocksRoad(segment)` / `BlocksPoint(p)` bleiben als Abfragen. Verschieben: `PlanMoveDepot`/`MoveDepot` (10 %).
+- **Busbetrieb:** fehlen einer Linie Busse, setzt das nächste Depot mit freiem Fahrzeug alle 4 s einen ein, der i-te beginnt am
+  Halt i·n/Ziel (Takt durch Verteilung). Busse sind echte Fahrzeuge (`VehicleClass.Bus`, `Vehicle.IsScheduled`/`TransitId`):
+  bremsen bis zur Haltestelle, stehen (`HoldAtStopFor`, Haltezeit 4 s + 1,2 s je Einsteiger + 0,8 s je Aussteiger, zählt nicht als
+  „hängend“), bekommen das nächste Ziel (`Redirect`, unerreichbare Halte werden übersprungen), ordnen sich vor dem Halt rechts ein.
+  Stau, Ampeln, 90-s-Abbruch wie alle; abgebrochener Bus → Fahrgäste stranden, Depot setzt neu ein. Weniger Busse gewünscht →
+  leer werdende Busse fahren ins Depot. Pünktlich = Abschnitt ≤ 1,35 × Plan + 20 s.
+- **Fahrgäste** (`CitizenSystem.Transit.cs`): `StartTrip` → `PlanRide(von, nach)` (Halte ≤ 600 m, je Ende 4 nächste, höchstens
+  1 Umstieg, nur Linien mit Bussen) → Wahl in zwei Stufen: Auto (`CarProbability` + 0,4 × Erinnerung Bus voll/verspätet,
+  − 0,3 × Vorteil einer schnelleren Busverbindung) sonst Bus gegen Fuß/Rad: `BusProbability` = logistisch(((t_Fuß/Rad − t_Bus,gefühlt)/600 s
+  + 0,2 gesellig − 0,15 sparsam − 0,3 naturverbunden (je Abweichung von 0,5) + 0,5 Stau − 0,7 Bus voll − 0,5 verspätet + 0,3 gute
+  Fahrt) / (Temperatur + 0,15)); t_Fuß/Rad = 1,25 × Luftlinie / 2,2 m/s; t_Bus,gefühlt = 1,3 × Fußwege/1,3 m/s + 1,5 × halber Takt
+  + Fahrzeit + 120 s je Umstieg. Ohne Linien/Erinnerungen ist alles exakt wie vorher. **Skalierung wie beim Auto:**
+  `TransitRealShare` 35 % × Demand fahren als einzelne Fahrgäste (warten an der Haltestelle, steigen ein – Kapazität 60 –, fahren,
+  steigen aus, Rest zu Fuß), der Rest statistisch (Fahrplanzeit auf der Spieluhr, zählt als Fahrgast und zahlt, belegt keinen
+  Platz). Grund ist die Zeitverzerrung (ein Spieltag = 60 s Verkehrszeit), nicht die Rechenzeit. Volle Busse lassen stehen
+  (nach 2 vollen gibt man auf), Geduld max(150 s, 2,5 × Takt); Ergebnis → Erinnerungen `BusFull`/`BusLate`/`BusRide` →
+  Mobilitäts-Bedürfnis (−0,15/−0,1/+0,1) und nächste Wahl. Sicherheitsnetz 5 Tage.
+- **Kasse:** `BudgetCategory.TransitFares` („Fahrgeld ÖPNV“, 1,50 € je Einstieg, über `EconomySystem.Earn` alle 5 Ticks),
+  `TransitConstruction` („Bau ÖPNV“); Unterhalt als `IUpkeepSource` „ÖPNV“ (Depots + 420 € je Bus im Einsatz + Haltestellen).
+- **Abfrage-API:** Linie `Stops/VisitStops/Legs`, `BusesOf`, `PassengersToday/Yesterday/Total`, `AverageLoad`, `Punctuality`,
+  `HeadwaySeconds`, `LeftBehindToday`; Haltestelle `WaitingCount`/`WaitingFor(line)`, `BoardedToday`, `LinesAt(stop)`; Bus `BusOf(vehicle)`,
+  `LineId`, `Passengers`, `TargetStopId`, `LastLegOnTime`; Bürger `RideOf(c)`, `BusOf(c)`.
+- **Unity** (`Game/Transit`): `TransitTool` (**Taste 5**, Modus `RoadTool.Mode.Transit`: Haltestelle ⇧ = beide Seiten, Linie zeichnen
+  mit Routen-Vorschau, Klick auf freie Straße setzt gleich einen Halt, Klick auf den ersten Halt = Rundlinie, Enter fertig, RMB
+  letzter Halt zurück, Esc verwerfen; Depot rastet ein, Strg frei; Abriss), `TransitView` (Haltestellen-Modell „bus_stop“ =
+  `Models/Props/BusStop.fbx`, Depot „bus_depot“ = `Models/Transport/BusDepot.fbx` über `OwnModelCatalog.Transport`, sonst
+  Platzhalter; Linienverläufe in 10 Linienfarben; Farbplatte auf dem Dach der Linienbusse – Busmodelle selbst aus „Buses“ über
+  die `VehicleView`). HUD: Kategorie „ÖPNV“ (`GameHud.Transit.cs`), Icon `HudIconKind.Bus`, `TransitWindow` (rechts, **F6** bzw.
+  im Werkzeug: Linien, Busse ±, Rund/Pendel, Halte mit Wartenden, Löschen). Inspektor: Haltestellen/Depots anklickbar
+  (`SelectionKind.TransitStop/-Depot`), Bus zeigt Linie/Fahrgäste, Bürger „wartet auf Linie …/im Bus“. IMGUI-Rückfallleiste hat
+  keinen ÖPNV-Eintrag. Im Editor noch nicht visuell abgenommen.
+- **Medien:** Schlagzeilen-Themen `NewBusLine`, `BusOverloaded` (≥ 20 stehen gelassen am Tag), `BusLate` (Pünktlichkeit < 60 %),
+  erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
+- Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
+- Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
+  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
+
 ## Roadmap
 1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
 2. ✅ Straßen
@@ -739,12 +1037,18 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G2 Bürger, Haushalte, Jobs, Pendeln/Einkaufen (Verkehr aus Gebäuden statt Sackgassen), Außenanbindungen.
      ✅ Bedürfnismodell (Utility AI, Persönlichkeit, Gedächtnis, Lebensereignisse inkl. Geburten/Auszug, Zufriedenheit).
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
-     Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
+     Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
+     ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
+     Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
+     (im Editor noch nicht visuell abgenommen). Später: Fußwege in Verkehrszeit (echtes Gehtempo), Abkürzungen durch Parks,
+     freie Fußwege/Plätze, Ampelphasen an Zebrastreifen, inkrementeller Gehweg-Neubau (✅ ÖPNV verbunden: Wartende, Fußwege zur/von der Haltestelle)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
-     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse. Später: Abwasser, schwankende Erzeugung
+     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
+     ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,
+     Atomkraftwerk mit Akzeptanz und Störfall. Später: schwankende Erzeugung, Wasser/Strom auf ConnectionRules
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
-     (im Editor noch nicht visuell abgenommen). Später: Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Brände/Kriminalität
+     (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. Später: Brände/Kriminalität
      als Ereignisse, Dienstfahrzeuge
    - ✅ G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
@@ -757,7 +1061,10 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
-   - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
+     - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
+       und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
+       Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
+   - Energie erweitern: ✅ Atomkraftwerk; weitere reale Kraftwerkstypen
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
@@ -770,4 +1077,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
+   - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
+     Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
+     Persönlichkeit/Gedächtnis, Beziehungen, Vertrauen, Zölle, Handelsabkommen, Stadtkasse (Zölle, Strafen, Vertragshandel),
+     Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
+     Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port

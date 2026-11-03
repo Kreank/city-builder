@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using CityBuilder.Simulation.Roads;
 
 namespace CityBuilder.Simulation.Utilities
 {
@@ -24,6 +25,19 @@ namespace CityBuilder.Simulation.Utilities
         public float Radius => MathF.Sqrt(Type.Width * Type.Width + Type.Depth * Type.Depth) * 0.5f;
 
         public bool Contains(Vector2 p, float margin = 0f) => UtilityGeometry.InRect(p, Position, Front, Type.Width, Type.Depth, margin);
+        /// <summary>Grundfläche (gemeinsamer Baustein mit Straßensperre und Ausrichtung).</summary>
+        public Footprint Footprint => new Footprint(Position, Front, Type.Width, Type.Depth);
+
+        StructureBlock block;
+        /// <summary>Eintrag für die Bauwerks-Sperre im Straßennetz (Straßen dürfen das Bauwerk nicht überbauen).</summary>
+        internal StructureBlock Block => block ??= new StructureBlock("utility", Id, Type.DisplayName, Footprint, Height);
+        internal void Relocate(Vector2 position, Vector2 front, float height)
+        {
+            Position = position;
+            Front = front;
+            Height = height;
+            block = null;
+        }
 
         /// <summary>Die vier Ecken der Grundfläche.</summary>
         public Vector2[] Corners() => UtilityGeometry.Corners(Position, Front, Type.Width, Type.Depth);
@@ -70,9 +84,14 @@ namespace CityBuilder.Simulation.Utilities
         public int TicksWithoutWater;
         public int PowerNetwork;
         public int WaterNetwork;
+        // --- Abwasser (G3 erweitert): Abwasser wird abgenommen (Kläranlage/Auslass im selben Kanalnetz)
+        public bool HasSewage;
+        public int TicksWithoutSewage;
+        public int SewageNetwork;
+        // --- Ende Abwasser
 
-        public bool Has(UtilityKind k) => k == UtilityKind.Power ? HasPower : HasWater;
-        public int TicksWithout(UtilityKind k) => k == UtilityKind.Power ? TicksWithoutPower : TicksWithoutWater;
+        public bool Has(UtilityKind k) => k == UtilityKind.Power ? HasPower : k == UtilityKind.Sewage ? HasSewage : HasWater;
+        public int TicksWithout(UtilityKind k) => k == UtilityKind.Power ? TicksWithoutPower : k == UtilityKind.Sewage ? TicksWithoutSewage : TicksWithoutWater;
     }
 
     /// <summary>Ein zusammenhängendes Netz einer Versorgungsart mit seiner Bilanz.</summary>

@@ -35,8 +35,15 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten (wie Stadt und Versorgung).</summary>
         public int TickInterval => 5;
 
-        /// <summary>Ein Dienst ist an eine Stadtstraße angeschlossen, wenn deren Rand höchstens so weit von der Grundfläche entfernt ist.</summary>
+        /// <summary>
+        /// Ein Dienst ist an eine Stadtstraße angeschlossen, wenn deren Rand höchstens so weit von der Mitte seiner
+        /// Vorderseite entfernt ist und die Straße vor ihr liegt (<see cref="RoadFront.FindAccess"/>).
+        /// </summary>
         public const float RoadReach = 8f;
+        /// <summary>Ausrichten: Cursor bis Tiefe + so viele Meter vom Straßenrand → Gebäude rastet an der Straße ein.</summary>
+        public const float AlignReach = 16f;
+        /// <summary>Umzugspreis als Anteil der Baukosten (Verschieben-Werkzeug).</summary>
+        public const float MoveCostShare = 0.1f;
         /// <summary>Durchschnittstempo im Einsatz als Anteil des Tempolimits.</summary>
         public const float SpeedFactor = 0.8f;
         /// <summary>Zuschlag je durchfahrener Kreuzung (ab 3 Straßen) in Sekunden.</summary>
@@ -56,6 +63,7 @@ namespace CityBuilder.Simulation.Services
         {
             ServiceKinds.Police, ServiceKinds.Fire, ServiceKinds.Health, ServiceKinds.EducationPrimary, ServiceKinds.EducationSecondary,
             ServiceKinds.Library, ServiceKinds.Park, ServiceKinds.Garbage,
+            ServiceKinds.Media, // G4 erweitert: Zeitung/Radio/TV
         };
         static readonly int GarbageChannel = Array.IndexOf(Channels, ServiceKinds.Garbage);
         static readonly int FireChannel = Array.IndexOf(Channels, ServiceKinds.Fire);
@@ -113,6 +121,8 @@ namespace CityBuilder.Simulation.Services
 
         public event Action<ServiceFacility> FacilityAdded;
         public event Action<ServiceFacility> FacilityRemoved;
+        /// <summary>Dienstgebäude wurde verschoben (gleiche Id, Zustand/Lager/Statistik bleiben).</summary>
+        public event Action<ServiceFacility> FacilityMoved;
 
         public ServiceSystem(RoadNetwork roads, TerrainMap terrain, CitySystem city, UtilitySystem utilities, EnvironmentLayers environment,
             Vector2 min, Vector2 max)
@@ -126,7 +136,8 @@ namespace CityBuilder.Simulation.Services
             this.max = max;
             for (int i = 0; i < links.Length; i++) links[i] = new Dictionary<int, BuildingLinks>();
 
-            roads.SegmentAdded += OnSegmentAdded;
+            // Bauwerks-Sperre: Straßen dürfen Dienstgebäude nicht überbauen (RoadBuilder.Plan… → OverlapsStructure)
+            roads.RegisterStructures(StructureBlocks);
             city.BuildingRemoved += b => states.Remove(b.Id);
 
             // Auf Dienstflächen wächst nichts (vorhandenen Blocker, z. B. Versorgung, weiter beachten)
@@ -163,7 +174,16 @@ namespace CityBuilder.Simulation.Services
             }
         }
 
+        // --- ÖPNV (Hook): überlappt ein fremdes Bauwerk (Mitte, Front, Breite, Tiefe)? Gesetzt vom TransitSystem.
+        public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
+        // --- Ende ÖPNV
+
         public ServiceFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
+
+        IEnumerable<StructureBlock> StructureBlocks()
+        {
+            foreach (var f in facilities.Values) yield return f.Block;
+        }
 
         public ServiceFacility FacilityAt(Vector2 p, float margin = 0f)
         {
@@ -289,7 +309,8 @@ namespace CityBuilder.Simulation.Services
                 case ServiceKinds.EducationPrimary: return residents * 0.08f;
                 case ServiceKinds.EducationSecondary: return residents * 0.07f;
                 case ServiceKinds.Library:
-                case ServiceKinds.Park: return residents;
+                case ServiceKinds.Park:
+                case ServiceKinds.Media: return residents; // Medien: Leser/Hörer/Zuschauer = Einwohner
                 case ServiceKinds.Garbage: return residents * 0.01f + workers * (b.Zone == ZoneType.Industry ? 0.02f : 0.005f);
                 default: return 0f;
             }
@@ -297,11 +318,19 @@ namespace CityBuilder.Simulation.Services
 
         // ------------------------------------------------------------ Planen/Bauen/Abreißen
 
-        public ServicePlan Plan(ServiceType type, Vector2 position, float rotationDegrees = 0f)
+        public ServicePlan Plan(ServiceType type, Vector2 position, float rotationDegrees = 0f) =>
+            Plan(type, position, Footprint.FrontFromDegrees(rotationDegrees));
+
+        /// <summary>Planen mit Vorderseite als Vektor. <paramref name="movingId"/> &gt; 0: Verschieben dieses Gebäudes.</summary>
+        public ServicePlan Plan(ServiceType type, Vector2 position, Vector2 front, int movingId = 0)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
-            float a = rotationDegrees * MathF.PI / 180f;
-            var plan = new ServicePlan { Type = type, Position = position, Front = new Vector2(MathF.Sin(a), MathF.Cos(a)), Cost = type.Cost };
+            front = front.LengthSquared() > 1e-8f ? Vector2.Normalize(front) : Vector2.UnitY;
+            var plan = new ServicePlan
+            {
+                Type = type, Position = position, Front = front, MovingId = movingId,
+                Cost = movingId > 0 ? type.Cost * MoveCostShare : type.Cost,
+            };
             plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
             plan.Error = Check(plan);
             // Geld zuletzt prüfen: Geometriefehler haben Vorrang (wie Straßen/Versorgung)
@@ -315,6 +344,57 @@ namespace CityBuilder.Simulation.Services
                         plan.Displaced.Add(b);
             }
             return plan;
+        }
+
+        /// <summary>
+        /// Planen mit Straßenausrichtung (Werkzeug, Verschieben): Dienste mit Zufahrt (<see cref="ServiceType.NeedsRoadFront"/>)
+        /// drehen sich mit der Vorderseite zur nächsten Stadtstraße und rasten mit der Vorderkante am Gehweg ein (auch an
+        /// Kurven, entlang der Straße verschiebbar). <paramref name="rotationDegrees"/> = zusätzliche Drehung zur Straße
+        /// (ohne Straße in der Nähe bzw. bei Parks: absolute Drehung). Ohne Zufahrt an der Vorderseite → <see cref="ServiceBuildError.NoRoadAccess"/>.
+        /// </summary>
+        public ServicePlan PlanAligned(ServiceType type, Vector2 cursor, float rotationDegrees = 0f, int movingId = 0)
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+            if (type.NeedsRoadFront &&
+                RoadFront.TryAlign(roads, cursor, type.Width, type.Depth, rotationDegrees, type.Depth + AlignReach, out var center, out var front))
+            {
+                var plan = Plan(type, center, front, movingId);
+                plan.Aligned = true;
+                return plan;
+            }
+            return Plan(type, cursor, Footprint.FrontFromDegrees(rotationDegrees), movingId);
+        }
+
+        // ------------------------------------------------------------ Verschieben
+
+        /// <summary>Umzugsplan für ein bestehendes Dienstgebäude (gleiche Platzregeln, Umzugspreis <see cref="MoveCostShare"/>).</summary>
+        public ServicePlan PlanMove(int id, Vector2 position, Vector2 front)
+        {
+            var f = GetFacility(id);
+            return f == null ? null : Plan(f.Type, position, front, id);
+        }
+
+        /// <summary>Kurzform: verschieben, wenn gültig (Validierung wie beim Bau, Umzugspreis über die Stadtkasse).</summary>
+        public bool MoveFacility(int id, Vector2 position, Vector2 front) => MoveFacility(PlanMove(id, position, front));
+
+        /// <summary>
+        /// Führt einen gültigen Umzugsplan aus: das Gebäude behält Id, Lager, Last und Statistik; die neue Fläche wird
+        /// eingeebnet, Gebäude darunter weichen, Anschluss und Reichweite werden neu berechnet.
+        /// </summary>
+        public bool MoveFacility(ServicePlan plan)
+        {
+            if (plan == null || !plan.IsValid || plan.MovingId <= 0) return false;
+            if (!facilities.TryGetValue(plan.MovingId, out var f) || f.Type != plan.Type) return false;
+            if (!Affordable(plan.Cost)) return false;
+            Budget?.Spend(Economy.BudgetCategory.ServiceConstruction, plan.Cost);
+            foreach (var b in plan.Displaced) city.RemoveBuilding(b);
+            f.Relocate(plan.Position, plan.Front, plan.Height);
+            f.AccessSegmentId = plan.AccessSegmentId;
+            f.AccessT = plan.AccessT;
+            terrain.FlattenArea(f.Position, f.Front, f.Type.Width, f.Type.Depth, f.Height);
+            StructureVersion++;
+            FacilityMoved?.Invoke(f);
+            return true;
         }
 
         ServiceBuildError Check(ServicePlan plan)
@@ -336,8 +416,13 @@ namespace CityBuilder.Simulation.Services
             foreach (var s in roads.Segments)
                 if (ServiceGeometry.RoadCrossesRect(s, plan.Position, plan.Front, type.Width, type.Depth, 0f)) return ServiceBuildError.OverlapsRoad;
             foreach (var f in facilities.Values)
-                if (ServiceGeometry.RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
+                if (f.Id != plan.MovingId &&
+                    ServiceGeometry.RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
                     return ServiceBuildError.OverlapsFacility;
+            // --- ÖPNV (Hook): andere Bauwerke (Depots) im Weg
+            if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
+                return ServiceBuildError.OverlapsFacility;
+            // --- Ende ÖPNV
             if (utilities != null)
             {
                 foreach (var f in utilities.Facilities)
@@ -354,7 +439,7 @@ namespace CityBuilder.Simulation.Services
                 plan.AccessSegmentId = seg;
                 plan.AccessT = t;
             }
-            else if (!type.Walking) return ServiceBuildError.NoRoadAccess;
+            else if (type.NeedsRoadFront) return ServiceBuildError.NoRoadAccess;
             return ServiceBuildError.None;
         }
 
@@ -393,7 +478,7 @@ namespace CityBuilder.Simulation.Services
             return true;
         }
 
-        /// <summary>Internes Entfernen ohne Erlös (z. B. Straße durchs Gebäude).</summary>
+        /// <summary>Internes Entfernen ohne Erlös (Straßen reißen Dienstgebäude nicht mehr ab – sie sind für Straßen gesperrt).</summary>
         public bool Remove(int id)
         {
             if (!facilities.TryGetValue(id, out var f)) return false;
@@ -583,16 +668,8 @@ namespace CityBuilder.Simulation.Services
 
         // ------------------------------------------------------------ Straßen
 
-        /// <summary>Neue Straße durch ein Dienstgebäude → es wird abgerissen (wie Gebäude und Versorger).</summary>
-        void OnSegmentAdded(RoadSegment s)
-        {
-            List<int> hit = null;
-            foreach (var f in facilities.Values)
-                if (ServiceGeometry.RoadCrossesRect(s, f.Position, f.Front, f.Type.Width, f.Type.Depth, -0.5f)) (hit ?? (hit = new List<int>())).Add(f.Id);
-            if (hit == null) return;
-            hit.Sort();
-            foreach (int id in hit) Remove(id);
-        }
+        // Früher riss eine neue Straße durchs Dienstgebäude es ab (OnSegmentAdded). Jetzt sperrt die Bauwerks-Sperre
+        // (RoadNetwork.RegisterStructures) solche Straßen schon im Plan: Straße anders setzen oder Gebäude verschieben.
 
         /// <summary>Fahrzeit über ein Segment in Sekunden.</summary>
         public static float SegmentSeconds(RoadSegment s) => s.Length / (MathF.Max(10f, s.Type.SpeedLimitKmh) / 3.6f * SpeedFactor);
@@ -646,37 +723,11 @@ namespace CityBuilder.Simulation.Services
         }
 
         /// <summary>
-        /// Anschlusspunkt: nächste ebenerdige Stadtstraße, deren Rand höchstens <see cref="RoadReach"/> von der Grundfläche
-        /// entfernt ist (bei Gleichstand kleinste Segment-Id).
+        /// Anschlusspunkt = Mitte der Vorderseite: nächste ebenerdige Stadtstraße vor ihr, Rand ≤ <see cref="RoadReach"/>
+        /// (<see cref="RoadFront.FindAccess"/>, bei Gleichstand kleinste Segment-Id). Früher zählte jeder Rand der Grundfläche.
         /// </summary>
-        bool FindAccess(Vector2 center, Vector2 front, float width, float depth, out int segmentId, out float t)
-        {
-            segmentId = -1;
-            t = 0f;
-            float best = RoadReach + 1e-3f;
-            float reach = MathF.Sqrt(width * width + depth * depth) * 0.5f + RoadReach;
-            foreach (var s in roads.Segments)
-            {
-                if (s.Type.Category != RoadCategory.City) continue;
-                Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var lo, out var hi);
-                float r = reach + s.Type.HalfWidth;
-                if (center.X < lo.X - r || center.Y < lo.Y - r || center.X > hi.X + r || center.Y > hi.Y + r) continue;
-                int samples = Math.Max(2, (int)MathF.Ceiling(s.Length / 2f));
-                for (int i = 0; i <= samples; i++)
-                {
-                    float u = i / (float)samples;
-                    if (MathF.Abs(s.ElevationAt(u)) > 3f) continue; // Brücke/Tunnel: keine Zufahrt
-                    float d = ServiceGeometry.RectDistance(s.Evaluate(u), center, front, width, depth) - s.Type.HalfWidth;
-                    if (d < best - 1e-4f || (MathF.Abs(d - best) <= 1e-4f && segmentId >= 0 && s.Id < segmentId))
-                    {
-                        best = d;
-                        segmentId = s.Id;
-                        t = u;
-                    }
-                }
-            }
-            return segmentId >= 0;
-        }
+        bool FindAccess(Vector2 center, Vector2 front, float width, float depth, out int segmentId, out float t) =>
+            RoadFront.FindAccess(roads, new Footprint(center, front, width, depth), RoadReach, out segmentId, out t);
 
         RoadSegment NearestCityRoad(Vector2 p, float maxDistance)
         {

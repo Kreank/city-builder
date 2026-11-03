@@ -143,10 +143,23 @@ namespace CityBuilder.Game.Inspect
             SelectionVersion++;
         }
 
-        /// <summary>Info-Modus verlassen (Schließen-Knopf).</summary>
+        /// <summary>
+        /// UX: Stadtübersicht ausdrücklich angefordert (Info-Knopf/C). Ohne Auswahl und ohne Übersicht bleibt das Panel zu –
+        /// im Auswählen-Modus (Standard) wird nichts aufgedrängt.
+        /// </summary>
+        public bool ShowOverview { get; set; }
+
+        /// <summary>Soll das Inspektor-Panel offen sein? (Auswahl vorhanden oder Übersicht angefordert)</summary>
+        public bool WantsPanel => Active && (!selection.IsNone || ShowOverview);
+
+        FacilityMover mover;
+        bool MoverBusy => (mover != null || (mover = GetComponent<FacilityMover>()) != null) && mover.Moving;
+
+        /// <summary>Panel schließen (×): Auswahl und Übersicht weg, der Auswählen-Modus bleibt.</summary>
         public void Close()
         {
-            if (tool != null && tool.CurrentMode == RoadTool.Mode.Inspect) tool.SetMode(RoadTool.Mode.Straight);
+            ClearSelection();
+            ShowOverview = false;
         }
 
         void Update()
@@ -154,6 +167,7 @@ namespace CityBuilder.Game.Inspect
             if (cameraController == null && tool != null && tool.Camera != null) cameraController = tool.Camera.GetComponent<CameraController>();
             if (!Active)
             {
+                ShowOverview = false;
                 HideMarkers();
                 StopFollowing();
                 return;
@@ -165,8 +179,9 @@ namespace CityBuilder.Game.Inspect
             {
                 var screen = mouse.position.ReadValue();
                 bool overUi = UiBlocker.IsPointerOverUi(screen);
-                if (mouse.leftButton.wasPressedThisFrame && !overUi && tool.Camera != null) PickAt(screen);
-                if (mouse.rightButton.wasPressedThisFrame && !overUi) ClearSelection();
+                bool moving = MoverBusy; // UX: während Verschieben gehören die Klicks dem FacilityMover
+                if (mouse.leftButton.wasPressedThisFrame && !overUi && tool.Camera != null && !moving) PickAt(screen);
+                if (mouse.rightButton.wasPressedThisFrame && !overUi && !moving) ClearSelection();
             }
             if (kb != null && kb.fKey.wasPressedThisFrame && CanFollow) follow = !follow;
 
@@ -190,6 +205,7 @@ namespace CityBuilder.Game.Inspect
                 if (b != null) hit = new Selection(SelectionKind.Building, b.Id);
                 else if (f != null) hit = new Selection(SelectionKind.Facility, f.Id);
                 else if (sf != null) hit = new Selection(SelectionKind.Service, sf.Id);
+                else if (world.Transit?.DepotAt(tool.Cursor) is var td && td != null) hit = new Selection(SelectionKind.TransitDepot, td.Id); // ÖPNV
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -211,6 +227,12 @@ namespace CityBuilder.Game.Inspect
                     break;
                 case SelectionKind.Citizen:
                     if (world.Citizens.Get(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.TransitStop: // ÖPNV
+                    if (world.Transit?.GetStop(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.TransitDepot: // ÖPNV
+                    if (world.Transit?.GetDepot(selection.Id) == null) SetSelection(Selection.None);
                     break;
                 case SelectionKind.Vehicle:
                 {
@@ -269,6 +291,18 @@ namespace CityBuilder.Game.Inspect
                     if (f != null) primary.Rect(f.Corners(), f.Height + 0.3f, f.Height + InspectorPicking.ServiceHeight(f) + 0.5f, width);
                     break;
                 }
+                case SelectionKind.TransitDepot: // ÖPNV
+                {
+                    var d = world.Transit?.GetDepot(selection.Id);
+                    if (d != null) primary.Rect(d.Corners(), d.Height + 0.3f, d.Height + 9.5f, width);
+                    break;
+                }
+                case SelectionKind.TransitStop: // ÖPNV
+                {
+                    var s = world.Transit?.GetStop(selection.Id);
+                    if (s != null) primary.Ring(SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position) + 0.6f), 8f, width * 0.6f);
+                    break;
+                }
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -283,6 +317,10 @@ namespace CityBuilder.Game.Inspect
                     if (c == null) break;
                     var v = world.Citizens.VehicleOf(c);
                     if (v != null) primary.Ring(InspectorPicking.VehiclePosition(v, tool.Runner.TickAlpha), Mathf.Clamp(v.Length * 0.7f, 3f, 12f), width * 0.6f);
+                    // --- Fußgänger: Ring um die sichtbare Person
+                    else if (People.PeopleView.Active != null && People.PeopleView.Active.TryGetPosition(c, out var walker))
+                        primary.Ring(walker, 1.6f, width * 0.4f);
+                    // --- Ende Fußgänger
                     else if (c.Location.IsBuilding) MarkBuilding(primary, world.City.GetBuilding(c.Location.BuildingId), width);
                     if (c.Home.IsBuilding && c.Home.BuildingId != c.Location.BuildingId) MarkBuilding(home, world.City.GetBuilding(c.Home.BuildingId), width * 0.7f);
                     if (c.WorkplaceId != 0 && c.WorkplaceId != c.Location.BuildingId) MarkBuilding(work, world.City.GetBuilding(c.WorkplaceId), width * 0.7f);
@@ -318,6 +356,7 @@ namespace CityBuilder.Game.Inspect
                     if (c == null) return null;
                     var v = world.Citizens.VehicleOf(c);
                     if (v != null) return InspectorPicking.VehiclePosition(v, tool.Runner.TickAlpha);
+                    if (People.PeopleView.Active != null && People.PeopleView.Active.TryGetPosition(c, out var walker)) return walker; // Fußgänger
                     var b = c.Location.IsBuilding ? world.City.GetBuilding(c.Location.BuildingId) : null;
                     return b != null ? SimConvert.ToWorld(b.Position, b.Height) : (Vector3?)null;
                 }
@@ -335,6 +374,16 @@ namespace CityBuilder.Game.Inspect
                 {
                     var f = world.Services.GetFacility(selection.Id);
                     return f != null ? SimConvert.ToWorld(f.Position, f.Height) : (Vector3?)null;
+                }
+                case SelectionKind.TransitStop: // ÖPNV
+                {
+                    var s = world.Transit?.GetStop(selection.Id);
+                    return s != null ? SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position)) : (Vector3?)null;
+                }
+                case SelectionKind.TransitDepot: // ÖPNV
+                {
+                    var d = world.Transit?.GetDepot(selection.Id);
+                    return d != null ? SimConvert.ToWorld(d.Position, d.Height) : (Vector3?)null;
                 }
                 default: return null;
             }

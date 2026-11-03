@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace CityBuilder.Game.Inspect
 {
-    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service }
+    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service, TransitStop, TransitDepot /* ÖPNV */ }
 
     /// <summary>Was im Inspektor ausgewählt ist (nur Art + Id – das Objekt wird jedes Frame neu nachgeschlagen).</summary>
     public readonly struct Selection
@@ -30,7 +30,7 @@ namespace CityBuilder.Game.Inspect
 
     /// <summary>
     /// Auswahl per Mausstrahl: Gebäude und Versorgungsbauwerke als gedrehte Quader (Grundstück × sichtbare Höhe),
-    /// Fahrzeuge als Kugel um die interpolierte Position. Gewinnt der vorderste Treffer; kleine Fahrzeuge haben
+    /// Fahrzeuge und Fußgänger als Kugel um die interpolierte Position. Gewinnt der vorderste Treffer; kleine Fahrzeuge haben
     /// etwas Vorrang, damit man sie vor Gebäuden anklicken kann. Liest nur.
     /// </summary>
     public static class InspectorPicking
@@ -71,6 +71,26 @@ namespace CityBuilder.Game.Inspect
                     }
                 }
 
+            // --- ÖPNV: Depots (Quader) und Haltestellen (Kugel am Halt, Vorrang wie Fahrzeuge)
+            if (world.Transit != null)
+            {
+                foreach (var d in world.Transit.Depots)
+                    if (RayBox(ray, d.Position, d.Front, d.Type.Width, d.Type.Depth, d.Height, 9f, out float t) && t < best)
+                    {
+                        best = t;
+                        result = new Selection(SelectionKind.TransitDepot, d.Id);
+                    }
+                float bestStop = best + VehicleBias;
+                foreach (var s in world.Transit.Stops)
+                    if (RaySphere(ray, SimConvert.ToWorld(s.Position, world.Terrain.HeightAt(s.Position) + 1.5f), 5f, out float t) && t < bestStop)
+                    {
+                        bestStop = t;
+                        best = System.Math.Min(best, t);
+                        result = new Selection(SelectionKind.TransitStop, s.Id);
+                    }
+            }
+            // --- Ende ÖPNV
+
             float bestVehicle = best + VehicleBias;
             foreach (var v in world.Traffic.Vehicles)
             {
@@ -83,6 +103,14 @@ namespace CityBuilder.Game.Inspect
                     result = new Selection(SelectionKind.Vehicle, v.Id);
                 }
             }
+            // --- Fußgänger: Kugel um die zuletzt gezeichnete Position (PeopleView), Vorrang wie Fahrzeuge → öffnet den Bürger
+            var people = People.PeopleView.Active;
+            if (people != null && people.Pick(ray, bestVehicle, out int citizenId, out float pt))
+            {
+                bestVehicle = pt;
+                result = new Selection(SelectionKind.Citizen, citizenId);
+            }
+            // --- Ende Fußgänger
             return result;
         }
 

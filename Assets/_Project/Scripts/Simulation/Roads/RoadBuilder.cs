@@ -54,6 +54,8 @@ namespace CityBuilder.Simulation.Roads
         OverWater,
         /// <summary>Stadtkasse: zu wenig Geld (Kreditrahmen erschöpft) oder Baustopp wegen langer Überziehung.</summary>
         InsufficientFunds,
+        /// <summary>Fahrbahn (inkl. Gehweg) schneidet ein Dienst-/Versorgungsbauwerk (<see cref="RoadPlan.BlockedBy"/>).</summary>
+        OverlapsStructure,
     }
 
     public sealed class RoadPlan
@@ -71,12 +73,16 @@ namespace CityBuilder.Simulation.Roads
         public float Cost;
         /// <summary>Höhenprofil, wenn die Straße dem Gelände folgt (sonst null = gerade Rampe).</summary>
         public float[] Profile;
+        /// <summary>Bauwerk, das die Straße überschneiden würde (Fehler <see cref="RoadBuildError.OverlapsStructure"/>).</summary>
+        public StructureBlock BlockedBy;
         public bool IsValid => Error == RoadBuildError.None;
         public float HeightAt(float t) => Profile != null ? Profiles.Sample(Profile, t) : StartHeight + (EndHeight - StartHeight) * t;
     }
 
     public sealed class RoundaboutPlan
     {
+        /// <summary>Bauwerk, das ein Ringbogen überschneiden würde.</summary>
+        public StructureBlock BlockedBy;
         public Vector2 Center;
         public float Radius;
         public float Height;
@@ -97,6 +103,7 @@ namespace CityBuilder.Simulation.Roads
         public bool FollowTerrain;
         public RoadBuildError Error;
         public float Cost => (Right?.Cost ?? 0f) + (Left?.Cost ?? 0f);
+        public StructureBlock BlockedBy => Right?.BlockedBy ?? Left?.BlockedBy;
         public bool IsValid => Error == RoadBuildError.None;
     }
 
@@ -264,6 +271,10 @@ namespace CityBuilder.Simulation.Roads
             }
             if (plan.Crossings.Count > 0 && (1f - prevT) * plan.Length < RoadNetwork.MinSegmentLength)
                 return RoadBuildError.TooCloseToCrossing;
+
+            // Bauwerks-Sperre: Straßen reißen Dienst-/Versorgungsbauwerke nicht mehr ab (Zonen-Gebäude schon)
+            plan.BlockedBy = RoadFront.FindBlocking(network, plan.Start, plan.Control, plan.End, type.HalfWidth, plan.HeightAt);
+            if (plan.BlockedBy != null) return RoadBuildError.OverlapsStructure;
 
             return RoadBuildError.None;
         }
@@ -475,8 +486,16 @@ namespace CityBuilder.Simulation.Roads
                 if (id == segment.Id) continue;
                 if (!type.CanConnectTo(network.GetSegment(id).Type)) return RoadBuildError.IncompatibleConnection;
             }
+            if (ReplaceBlocker(network, segment, type) != null) return RoadBuildError.OverlapsStructure;
             if (!Affordable(network, ReplaceCost(segment, type))) return RoadBuildError.InsufficientFunds;
             return RoadBuildError.None;
+        }
+
+        /// <summary>Bauwerk, das ein Ausbau auf den (breiteren) Typ überschneiden würde – null, wenn keins (schmaler: nie).</summary>
+        public static StructureBlock ReplaceBlocker(RoadNetwork network, RoadSegment segment, RoadType type)
+        {
+            if (segment == null || type == null || type.HalfWidth <= segment.Type.HalfWidth + 1e-3f) return null;
+            return RoadFront.FindBlocking(network, segment.Start.Position, segment.Control, segment.End.Position, type.HalfWidth, segment.HeightAt);
         }
 
         public static RoadSegment Replace(RoadNetwork network, RoadSegment segment, RoadType type)
@@ -576,11 +595,13 @@ namespace CityBuilder.Simulation.Roads
 
             // Ringknoten etwas drehen, falls eine vorhandene Straße zu dicht an einem Ringknoten kreuzt.
             RoadBuildError firstError = RoadBuildError.None;
+            StructureBlock firstBlocked = null;
             for (int attempt = 0; attempt < 8; attempt++)
             {
                 float offset = step * attempt / 8f;
                 plan.Arcs.Clear();
                 plan.Cost = 0f;
+                plan.BlockedBy = null;
                 RoadBuildError error = RoadBuildError.None;
                 for (int i = 0; i < arcs && error == RoadBuildError.None; i++)
                 {
@@ -588,6 +609,7 @@ namespace CityBuilder.Simulation.Roads
                     var arc = PlanArc(network, plan, p0, c, p2, 0f);
                     // Die Ringbögen kennen sich im Plan noch nicht – nur Fehler gegenüber dem Bestand zählen.
                     if (!arc.IsValid && arc.Error != RoadBuildError.Duplicate) error = arc.Error;
+                    if (arc.BlockedBy != null && plan.BlockedBy == null) plan.BlockedBy = arc.BlockedBy; // Bauwerks-Sperre
                     plan.Arcs.Add(arc);
                     plan.Cost += arc.Cost;
                 }
@@ -597,9 +619,10 @@ namespace CityBuilder.Simulation.Roads
                     plan.Error = Affordable(network, plan.Cost) ? RoadBuildError.None : RoadBuildError.InsufficientFunds;
                     return plan;
                 }
-                if (firstError == RoadBuildError.None) firstError = error;
+                if (firstError == RoadBuildError.None) { firstError = error; firstBlocked = plan.BlockedBy; }
             }
             plan.Error = firstError;
+            plan.BlockedBy = firstBlocked;
             return plan;
         }
 

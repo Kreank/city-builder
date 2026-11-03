@@ -40,6 +40,33 @@ namespace CityBuilder.Simulation.Roads
         public Economy.IConstructionBudget Budget { get; set; }
         // --- Ende Stadtkasse
 
+        // --- Bauwerks-Sperre (Hook): Bauwerke, die Straßen nicht überbauen dürfen (Dienste, Versorger, später Depots …).
+        // RoadBuilder.Plan… prüft dagegen (RoadBuildError.OverlapsStructure). Zonen-Gebäude melden sich hier nicht an.
+        readonly List<Func<IEnumerable<StructureBlock>>> structureSources = new List<Func<IEnumerable<StructureBlock>>>();
+
+        /// <summary>Meldet eine Quelle sperrender Bauwerke an (eine Zeile je Bauwerksart).</summary>
+        public void RegisterStructures(Func<IEnumerable<StructureBlock>> source)
+        {
+            if (source != null) structureSources.Add(source);
+        }
+
+        public bool HasStructures => structureSources.Count > 0;
+
+        /// <summary>Alle sperrenden Bauwerke aller angemeldeten Quellen.</summary>
+        public IEnumerable<StructureBlock> Structures
+        {
+            get
+            {
+                foreach (var src in structureSources)
+                {
+                    var list = src();
+                    if (list == null) continue;
+                    foreach (var b in list) if (b != null) yield return b;
+                }
+            }
+        }
+        // --- Ende Bauwerks-Sperre
+
         public IEnumerable<RoadNode> Nodes => nodes.Values;
         public IEnumerable<RoadSegment> Segments => segments.Values;
         public int NodeCount => nodes.Count;

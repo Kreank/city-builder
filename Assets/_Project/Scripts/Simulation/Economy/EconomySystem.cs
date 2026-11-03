@@ -169,6 +169,24 @@ namespace CityBuilder.Simulation.Economy
             Book(CurrentWeek, BudgetCategory.Demolition, amount);
         }
 
+        // --- ÖPNV: laufende Einnahmen außerhalb der Tagesabrechnung (Fahrgeld)
+        /// <summary>Bucht eine Einnahme sofort in die laufende Woche (nur Einnahme-Kategorien, z. B. Fahrgeld).</summary>
+        public void Earn(BudgetCategory category, double amount)
+        {
+            if (!(amount > 0) || !Budget.IsIncome(category)) return;
+            Book(CurrentWeek, category, amount);
+        }
+        // --- Ende ÖPNV
+
+        // --- Etappe 8 Handel: Buchung einer Einnahme (Zölle, Vertragsverkauf, Strafen) bzw. Ausgabe ohne Geldprüfung
+        /// <summary>Bucht einen Betrag ≥ 0 in eine Kategorie (Vorzeichen aus <see cref="Budget.IsIncome"/>), ohne Prüfung des Rahmens.</summary>
+        public void Post(BudgetCategory category, double amount)
+        {
+            if (!(amount > 0)) return;
+            Book(CurrentWeek, category, amount);
+        }
+        // --- Ende Etappe 8
+
         /// <summary>Kurzform: prüfen und abbuchen. false = zu wenig Geld (nichts gebucht).</summary>
         public bool TrySpend(BudgetCategory category, double amount)
         {

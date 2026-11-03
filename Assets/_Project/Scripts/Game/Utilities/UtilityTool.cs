@@ -15,7 +15,7 @@ namespace CityBuilder.Game.Utilities
     /// </summary>
     public sealed class UtilityTool : MonoBehaviour
     {
-        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove }
+        public enum UtilityAction { Facility, PowerLine, WaterPipe, Remove, SewagePipe } // SewagePipe: Abwasser (G3 erweitert)
 
         /// <summary>Höhe der Leiterseile über Gelände (Vorschau) bzw. Rohrtiefe darunter.</summary>
         public const float WireHeight = 12f;
@@ -50,6 +50,8 @@ namespace CityBuilder.Game.Utilities
         {
             tool = roadTool;
             if (tool.Runner != null) tool.Runner.WorldReplaced += () => placingLine = false; // Speichern & Laden
+            // UX: Esc/Rechtsklick beenden die Leitungskette (sonst zurück zum Auswählen)
+            tool.RegisterOperation(() => Active && placingLine, () => placingLine = false);
             okMaterial = new Material(transparent) { name = "UtilityPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
             badMaterial = new Material(transparent) { name = "UtilityPreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
         }
@@ -103,24 +105,18 @@ namespace CityBuilder.Game.Utilities
             if (tool == null) return;
             var kb = GameKeyboard.Current;
             if (kb == null) return;
-            if (kb.jKey.wasPressedThisFrame) tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Utility);
+            if (kb.jKey.wasPressedThisFrame) tool.ToggleMode(RoadTool.Mode.Utility); // UX: erneut J = Auswählen
             if (!Active) return;
             if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
             if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
-            if (kb.escapeKey.wasPressedThisFrame)
-            {
-                if (placingLine) GameKeyboard.ConsumeEscape(); // Spielmenü nur ohne laufende Leitung
-                placingLine = false;
-            }
-            var mouse = Mouse.current;
-            if (mouse != null && mouse.rightButton.wasPressedThisFrame) placingLine = false;
+            // Esc/Rechtsklick: über RoadTool.RegisterOperation (beendet die Kette, sonst zurück zum Auswählen)
         }
 
         void LateUpdate()
         {
             label = null;
             if (tool == null) return;
-            tool.ForceUnderground = Active && Current == UtilityAction.WaterPipe;
+            tool.ForceUnderground = Active && (Current == UtilityAction.WaterPipe || Current == UtilityAction.SewagePipe);
             if (!Active || !tool.HasCursor || tool.Runner.World == null) { Hide(); placingLine &= Active; return; }
 
             var mouse = Mouse.current;
@@ -131,6 +127,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityAction.Facility: UpdateFacility(p, clicked); break;
                 case UtilityAction.PowerLine: UpdateLine(UtilityKind.Power, p, clicked); break;
                 case UtilityAction.WaterPipe: UpdateLine(UtilityKind.Water, p, clicked); break;
+                case UtilityAction.SewagePipe: UpdateLine(UtilityKind.Sewage, p, clicked); break;
                 case UtilityAction.Remove: UpdateRemove(p, clicked); break;
             }
         }
@@ -138,6 +135,7 @@ namespace CityBuilder.Game.Utilities
         void Hide()
         {
             if (ghost != null) ghost.SetActive(false);
+            frontMarker?.Hide();
             if (lineRenderer != null) lineRenderer.enabled = false;
             HidePoles();
         }
@@ -181,10 +179,11 @@ namespace CityBuilder.Game.Utilities
         {
             lineRenderer.enabled = false;
             HidePoles();
-            var plan = Utilities.PlanFacility(SelectedType, p, Rotation);
-            ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid);
+            var plan = Utilities.PlanFacilityAligned(SelectedType, p, Rotation); // UX: Kraftwerke/Wasserturm zur Straße
+            ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid, SelectedType.NeedsRoadFront);
             var t = SelectedType;
-            string info = $"{t.DisplayName} · {t.Capacity:0} {UtilityCatalog.Unit(t.Kind)} · {t.Cost:0} € (+{t.UpkeepPerDay:0} €/Tag) · {Rotation:0}°";
+            string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°";
+            string info = $"{t.DisplayName} · {t.Capacity:0} {UtilityCatalog.Unit(t.Kind)} · {t.Cost:0} € (+{t.UpkeepPerDay:0} €/Tag) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
             SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 8f));
             if (clicked && plan.IsValid) Utilities.BuildFacility(plan);
@@ -206,7 +205,9 @@ namespace CityBuilder.Game.Utilities
                 lineRenderer.SetPosition(1, SimConvert.ToWorld(p, Ground(p) + offset));
                 string hint = kind == UtilityKind.Power
                     ? " · Stadtstraßen führen Strom schon mit – Leitung nur für Lücken/Überland"
-                    : " · Stadtstraßen führen Wasser schon mit – Rohr nur für Lücken";
+                    : kind == UtilityKind.Sewage
+                        ? $" · Kanäle selbst verlegen (Straßen führen keinen mit) – entlang der Straße einrasten, Gebäude ≤ {ConnectionRules.BuildingReach:0} m sind angeschlossen"
+                        : " · Stadtstraßen führen Wasser schon mit – Rohr nur für Lücken";
                 SetLabel($"{UtilityCatalog.LineName(kind)}: Startpunkt wählen{SnapText(snap)}{hint}", false, SimConvert.ToWorld(p, Ground(p) + WireHeight));
                 if (clicked) { lineStart = p; placingLine = true; }
                 return;
@@ -257,7 +258,7 @@ namespace CityBuilder.Game.Utilities
             if (f != null)
             {
                 lineRenderer.enabled = false;
-                ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 6f, false);
+                ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 6f, false, false);
                 SetLabel($"{f.Type.DisplayName} abreißen", true, SimConvert.ToWorld(f.Position, f.Height + 10f));
                 if (clicked) Utilities.DemolishFacility(f.Id);
                 return;
@@ -275,14 +276,20 @@ namespace CityBuilder.Game.Utilities
             if (clicked) Utilities.DemolishLine(line.Id);
         }
 
-        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid)
+        void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront)
         {
             ghost.SetActive(true);
             ghost.transform.SetPositionAndRotation(SimConvert.ToWorld(pos, height + tall * 0.5f),
                 Quaternion.LookRotation(new Vector3(front.X, 0f, front.Y)));
             ghost.transform.localScale = new Vector3(width, tall, depth);
             ghostRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
+            // UX: Vorderseite (Zufahrt) als Streifen + Pfeil – nur bei Bauwerken mit Straßenfront
+            if (frontMarker == null) frontMarker = new PlacementGhost(transform, "Utility Front");
+            if (showFront) frontMarker.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial);
+            else frontMarker.Hide();
         }
+
+        PlacementGhost frontMarker;
 
         void SetLabel(string text, bool error, Vector3 world)
         {
@@ -322,6 +329,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityBuildError.PoleOnFacility: return "Kein Maststandort: Bauwerk im Weg";
                 case UtilityBuildError.PoleOnBuilding: return "Kein Maststandort: Gebäude im Weg (wird nicht abgerissen) – andere Trasse wählen";
                 case UtilityBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                case UtilityBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {UtilitySystem.RoadReach:0} m";
                 default: return null;
             }
         }
@@ -363,6 +371,7 @@ namespace CityBuilder.Game.Utilities
             GUILayout.BeginHorizontal();
             if (Button("Stromleitung", Active && Current == UtilityAction.PowerLine, 110f)) Select(UtilityAction.PowerLine);
             if (Button("Wasserrohr", Active && Current == UtilityAction.WaterPipe, 110f)) Select(UtilityAction.WaterPipe);
+            if (Button("Abwasserkanal", Active && Current == UtilityAction.SewagePipe, 110f)) Select(UtilityAction.SewagePipe); // G3 erweitert
             if (Button("Abriss", Active && Current == UtilityAction.Remove, 80f)) Select(UtilityAction.Remove);
             if (GUILayout.Button("⟲ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(-15f);
             if (GUILayout.Button("⟳ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(15f);
@@ -397,6 +406,9 @@ namespace CityBuilder.Game.Utilities
                 case "power_solar": return "Solar";
                 case "water_pump": return "Pumpe (Ufer)";
                 case "water_tower": return "Wasserturm";
+                case "power_nuclear": return "Atom";
+                case "sewage_plant": return "Kläranlage";
+                case "sewage_outlet": return "Auslass (Ufer)";
                 default: return t.DisplayName;
             }
         }

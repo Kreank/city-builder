@@ -100,7 +100,14 @@ namespace CityBuilder.Simulation.Citizens
         /// (sparsam/naturverbunden → weniger Auto, ehrgeizig/weite Wege → mehr Auto, Stau-Erinnerung → deutlich weniger).
         /// Bei durchschnittlicher Persönlichkeit, ohne Erinnerungen und ~750 m Weg genau der Grundanteil.
         /// </summary>
-        public float CarProbability(Citizen c, float distance)
+        public float CarProbability(Citizen c, float distance) => CarProbability(c, distance, default);
+
+        /// <summary>
+        /// Wie <see cref="CarProbability(Citizen, float)"/>, zusätzlich ÖPNV (Stufe 1): Erinnerung „Bus voll/verspätet“ →
+        /// eher Auto (+0,4 × Stärke), eine Busverbindung, die gefühlt schneller als das Auto ist, → weniger Auto.
+        /// Ohne Busverbindung und Bus-Erinnerungen identisch zum alten Wert.
+        /// </summary>
+        public float CarProbability(Citizen c, float distance, in Transit.TransitOption transit)
         {
             float share = (c.IsCommuterIn ? CommuterCarShare : CarShare) * traffic.Demand;
             if (share <= 0f) return 0f;
@@ -108,6 +115,10 @@ namespace CityBuilder.Simulation.Citizens
             float uCar = -0.5f * (p.Thrifty - 0.5f) + 0.3f * (p.Ambitious - 0.5f) - 0.35f * (p.NatureLoving - 0.5f)
                          + 0.25f * (MathF.Min(1f, distance / 2500f) - 0.3f)
                          - 0.6f * MathF.Min(1f, c.Memories.Strength(MemoryKind.TrafficJam));
+            // --- ÖPNV
+            uCar += 0.4f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusFull) + 0.7f * c.Memories.Strength(MemoryKind.BusLate));
+            if (transit.Valid) uCar -= 0.3f * Math.Clamp((CarSeconds(distance) - transit.PerceivedSeconds) / 900f, 0f, 1f);
+            // --- Ende ÖPNV
             float pCar = UtilityChoice.Probability(uCar, 0f, p.Temperature + 0.15f);
             return Math.Clamp(share * 2f * pCar, 0f, 1f);
         }

@@ -29,6 +29,8 @@ namespace CityBuilder.Simulation.Utilities
         PoleOnBuilding,
         /// <summary>Stadtkasse: zu wenig Geld oder Baustopp.</summary>
         InsufficientFunds,
+        /// <summary>Keine Zufahrt an der Vorderseite (nur Bauwerke mit <see cref="UtilityFacilityType.NeedsRoadFront"/>).</summary>
+        NoRoadAccess,
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -40,9 +42,15 @@ namespace CityBuilder.Simulation.Utilities
         public float Height;
         public float Cost;
         public UtilityBuildError Error;
+        /// <summary>Automatisch zur Straße ausgerichtet (Vorderseite zeigt zur Straße, Vorderkante am Gehweg).</summary>
+        public bool Aligned;
+        /// <summary>Verschieben: Id des bestehenden Bauwerks (0 = Neubau). <see cref="Cost"/> ist dann der Umzugspreis.</summary>
+        public int MovingId;
         /// <summary>Gebäude, die für das Bauwerk abgerissen würden.</summary>
         public readonly List<Building> Displaced = new List<Building>();
         public bool IsValid => Error == UtilityBuildError.None;
+        /// <summary>Mitte der Vorderkante (Vorschau-Pfeil).</summary>
+        public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
     }
 
     /// <summary>Geplante Leitung/Rohr (Vorschau).</summary>
@@ -82,6 +90,8 @@ namespace CityBuilder.Simulation.Utilities
 
         /// <summary>Nach 2 Spieltagen ohne Versorgung wird ein Gebäude verlassen.</summary>
         public const int AbandonAfterTicks = 2 * SimulationClock.TicksPerDay;
+        /// <summary>Abwasser (G3 erweitert): ohne Entsorgung hält man es länger aus – verlassen nach 4 Spieltagen.</summary>
+        public const int SewageAbandonAfterTicks = 4 * SimulationClock.TicksPerDay;
         /// <summary>Leitungsenden verbinden sich mit allem in diesem Abstand.</summary>
         public const float ConnectRadius = 3f;
         /// <summary>Ein Bauwerk ist an eine Straße angeschlossen, wenn deren Rand höchstens so weit entfernt ist.</summary>
@@ -89,6 +99,10 @@ namespace CityBuilder.Simulation.Utilities
         public const float MinLineLength = 4f;
         /// <summary>Größter Höhenunterschied auf der Grundfläche (wird eingeebnet).</summary>
         public const float MaxFacilitySlope = 8f;
+        /// <summary>Ausrichten: Cursor bis Tiefe + so viele Meter vom Straßenrand → Bauwerk rastet an der Straße ein.</summary>
+        public const float AlignReach = 16f;
+        /// <summary>Umzugspreis als Anteil der Baukosten (Verschieben-Werkzeug).</summary>
+        public const float MoveCostShare = 0.1f;
         const float PollutionDecay = 0.08f;
         const float PollutionDiffuse = 0.1f;
 
@@ -102,11 +116,12 @@ namespace CityBuilder.Simulation.Utilities
         readonly StableMap<int, UtilityFacility> facilities = new StableMap<int, UtilityFacility>();
         readonly StableMap<int, UtilityLine> lines = new StableMap<int, UtilityLine>();
         readonly Dictionary<int, UtilityStatus> status = new Dictionary<int, UtilityStatus>();
-        readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>() };
+        // Je Art (Strom, Wasser, Abwasser) – Index = (int)UtilityKind
+        readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>(), new List<UtilityNetwork>() };
         /// <summary>Je Art und Netz: Gebäude (nach Id sortiert).</summary>
-        readonly List<List<Building>>[] networkBuildings = { new List<List<Building>>(), new List<List<Building>>() };
+        readonly List<List<Building>>[] networkBuildings = { new List<List<Building>>(), new List<List<Building>>(), new List<List<Building>>() };
         /// <summary>Je Art: Gebäude-Id → Netz-Id.</summary>
-        readonly Dictionary<int, int>[] buildingNetwork = { new Dictionary<int, int>(), new Dictionary<int, int>() };
+        readonly Dictionary<int, int>[] buildingNetwork = { new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>() };
         int nextFacilityId = 1, nextLineId = 1;
         int builtRoadVersion = -1, builtCityVersion = -1, builtStructureVersion = -1;
 
@@ -133,6 +148,8 @@ namespace CityBuilder.Simulation.Utilities
         public event Action<UtilityFacility> FacilityAdded;
         public event Action<UtilityFacility> FacilityRemoved;
         public event Action<Building> BuildingAbandoned;
+        /// <summary>Bauwerk wurde verschoben (gleiche Id und Leistung).</summary>
+        public event Action<UtilityFacility> FacilityMoved;
 
         public UtilitySystem(RoadNetwork roads, TerrainMap terrain, CitySystem city, EnvironmentLayers environment, Vector2 min, Vector2 max)
         {
@@ -143,12 +160,19 @@ namespace CityBuilder.Simulation.Utilities
             this.min = min;
             this.max = max;
             roads.SegmentAdded += OnSegmentAdded;
+            // Bauwerks-Sperre: Straßen dürfen Versorger nicht überbauen (RoadBuilder.Plan… → OverlapsStructure)
+            roads.RegisterStructures(StructureBlocks);
             city.BuildingRemoved += b => status.Remove(b.Id);
             // Auf Versorger-Flächen und Mast-Grundflächen wachsen keine Gebäude (8-m-Zelle: halbe Zelle Rand)
             city.LotBlocker = p => FacilityAt(p, ZoneGrid.CellSize * 0.5f) != null || PoleNear(p, ZoneGrid.CellSize * 0.5f + PoleFootprintHalf) != null;
         }
 
         public UtilityFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
+
+        IEnumerable<StructureBlock> StructureBlocks()
+        {
+            foreach (var f in facilities.Values) yield return f.Block;
+        }
         public UtilityLine GetLine(int id) => lines.TryGetValue(id, out var l) ? l : null;
 
         // ------------------------------------------------------------ Abfragen für die Stadt
@@ -175,7 +199,8 @@ namespace CityBuilder.Simulation.Utilities
         public bool IsSatisfied(Building b)
         {
             var s = GetStatus(b);
-            return (s.HasPower || !IsRequired(UtilityKind.Power)) && (s.HasWater || !IsRequired(UtilityKind.Water));
+            return (s.HasPower || !IsRequired(UtilityKind.Power)) && (s.HasWater || !IsRequired(UtilityKind.Water))
+                   && (s.HasSewage || !IsRequired(UtilityKind.Sewage)); // Abwasser: erst mit Kläranlage/Auslass verlangt
         }
 
         /// <summary>Netz, in dem das Gebäude hängt (null = keins).</summary>
@@ -194,6 +219,8 @@ namespace CityBuilder.Simulation.Utilities
         public float DemandOf(Building b, UtilityKind kind)
         {
             if (b == null || !b.IsConstructed) return 0f;
+            // Abwasser folgt immer dem tatsächlichen Wasserverbrauch (auch Industrie nach Rezept, G5)
+            if (kind == UtilityKind.Sewage) return DemandOf(b, UtilityKind.Water) * UtilityCatalog.SewageShareOfWater;
             float v = DemandProvider != null ? DemandProvider(b, kind) : float.NaN;
             return float.IsNaN(v) ? UtilityCatalog.Demand(b, kind) : v;
         }
@@ -204,10 +231,18 @@ namespace CityBuilder.Simulation.Utilities
 
         // ------------------------------------------------------------ Bauwerke planen/bauen/abreißen
 
-        public FacilityPlan PlanFacility(UtilityFacilityType type, Vector2 position, float rotationDegrees = 0f)
+        public FacilityPlan PlanFacility(UtilityFacilityType type, Vector2 position, float rotationDegrees = 0f) =>
+            PlanFacility(type, position, Footprint.FrontFromDegrees(rotationDegrees));
+
+        /// <summary>Planen mit Vorderseite als Vektor. <paramref name="movingId"/> &gt; 0: Verschieben dieses Bauwerks.</summary>
+        public FacilityPlan PlanFacility(UtilityFacilityType type, Vector2 position, Vector2 front, int movingId = 0)
         {
-            float a = rotationDegrees * MathF.PI / 180f;
-            var plan = new FacilityPlan { Type = type, Position = position, Front = new Vector2(MathF.Sin(a), MathF.Cos(a)), Cost = type.Cost };
+            front = front.LengthSquared() > 1e-8f ? Vector2.Normalize(front) : Vector2.UnitY;
+            var plan = new FacilityPlan
+            {
+                Type = type, Position = position, Front = front, MovingId = movingId,
+                Cost = movingId > 0 ? type.Cost * MoveCostShare : type.Cost,
+            };
             plan.Error = CheckFacility(plan);
             if (plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
             plan.Height = MathF.Max(terrain.HeightAt(position), terrain.WaterLevel + 0.5f);
@@ -215,6 +250,53 @@ namespace CityBuilder.Simulation.Utilities
                 foreach (var b in city.Buildings)
                     if (RectsOverlap(position, plan.Front, type.Width, type.Depth, b.Position, b.Front, b.Width, b.Depth)) plan.Displaced.Add(b);
             return plan;
+        }
+
+        /// <summary>
+        /// Planen mit Straßenausrichtung (Werkzeug, Verschieben): Bauwerke mit <see cref="UtilityFacilityType.NeedsRoadFront"/>
+        /// drehen sich mit der Vorderseite zur nächsten Stadtstraße und rasten am Gehweg ein; <paramref name="rotationDegrees"/>
+        /// dreht zusätzlich. Windrad/Solar/Pumpe (und ohne Straße in der Nähe): absolute Drehung wie bisher.
+        /// </summary>
+        public FacilityPlan PlanFacilityAligned(UtilityFacilityType type, Vector2 cursor, float rotationDegrees = 0f, int movingId = 0)
+        {
+            if (type.NeedsRoadFront &&
+                RoadFront.TryAlign(roads, cursor, type.Width, type.Depth, rotationDegrees, type.Depth + AlignReach, out var center, out var front))
+            {
+                var plan = PlanFacility(type, center, front, movingId);
+                plan.Aligned = true;
+                return plan;
+            }
+            return PlanFacility(type, cursor, Footprint.FrontFromDegrees(rotationDegrees), movingId);
+        }
+
+        // ------------------------------------------------------------ Verschieben
+
+        /// <summary>Umzugsplan für ein bestehendes Bauwerk (gleiche Platzregeln, Umzugspreis <see cref="MoveCostShare"/>).</summary>
+        public FacilityPlan PlanMove(int id, Vector2 position, Vector2 front)
+        {
+            var f = GetFacility(id);
+            return f == null ? null : PlanFacility(f.Type, position, front, id);
+        }
+
+        /// <summary>Kurzform: verschieben, wenn gültig.</summary>
+        public bool MoveFacility(int id, Vector2 position, Vector2 front) => MoveFacility(PlanMove(id, position, front));
+
+        /// <summary>
+        /// Führt einen gültigen Umzugsplan aus: Bauwerk behält Id und Leistung, Fläche wird eingeebnet, Gebäude darunter
+        /// weichen, Masten auf der neuen Fläche werden umgelegt; Netze rechnen beim nächsten Durchlauf neu.
+        /// </summary>
+        public bool MoveFacility(FacilityPlan plan)
+        {
+            if (plan == null || !plan.IsValid || plan.MovingId <= 0) return false;
+            if (!facilities.TryGetValue(plan.MovingId, out var f) || f.Type != plan.Type || !Affordable(plan.Cost)) return false;
+            Budget?.Spend(Economy.BudgetCategory.UtilityConstruction, plan.Cost);
+            foreach (var b in plan.Displaced) city.RemoveBuilding(b);
+            f.Relocate(plan.Position, plan.Front, plan.Height);
+            if (!plan.Type.NeedsWater) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
+            StructureVersion++;
+            FacilityMoved?.Invoke(f);
+            RerouteLines(p => f.Contains(p, PoleFootprintHalf));
+            return true;
         }
 
         UtilityBuildError CheckFacility(FacilityPlan plan)
@@ -230,6 +312,12 @@ namespace CityBuilder.Simulation.Utilities
             {
                 // Pumpe steht an Land, Wasser muss in Reichweite sein (Ufer)
                 if (terrain.IsWater(plan.Position)) return UtilityBuildError.OnWater;
+                // Atom (G3 erweitert): große Bauwerke am Ufer brauchen trotzdem eine trockene, ebene Grundfläche
+                if (type.DryFootprint)
+                {
+                    foreach (var c in corners) if (terrain.IsWater(c)) return UtilityBuildError.OnWater;
+                    if (hi - lo > MaxFacilitySlope) return UtilityBuildError.TooSteep;
+                }
                 if (!WaterNear(plan.Position, MathF.Max(type.Width, type.Depth) * 0.5f + 20f)) return UtilityBuildError.NeedsWater;
             }
             else
@@ -242,10 +330,17 @@ namespace CityBuilder.Simulation.Utilities
             foreach (var s in roads.Segments)
                 if (RoadCrossesRect(s, plan.Position, plan.Front, type.Width, type.Depth, 0f)) return UtilityBuildError.OverlapsRoad;
             foreach (var f in facilities.Values)
-                if (RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
+                if (f.Id != plan.MovingId &&
+                    RectsOverlap(plan.Position, plan.Front, type.Width, type.Depth, f.Position, f.Front, f.Type.Width, f.Type.Depth))
                     return UtilityBuildError.OverlapsFacility;
             if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
                 return UtilityBuildError.OverlapsFacility; // G4-Hook: Dienstgebäude
+            // Zufahrt an der Vorderseite (Kraftwerke, Wasserturm): Steht das Bauwerk an einer Stadtstraße (Rand ≤ RoadReach,
+            // = Netzanschluss über die Straße), muss die Vorderseite zu ihr zeigen. Ohne Straße in der Nähe (Überland, Anschluss
+            // per Leitung/Rohr) gilt keine Zufahrtspflicht – Brennstoff/Personal sind noch nicht simuliert.
+            if (type.NeedsRoadFront && NearCityRoad(plan.Position, plan.Front, type.Width, type.Depth) &&
+                !RoadFront.FindAccess(roads, new Footprint(plan.Position, plan.Front, type.Width, type.Depth), RoadReach, out _, out _))
+                return UtilityBuildError.NoRoadAccess;
             return UtilityBuildError.None;
         }
 
@@ -284,7 +379,7 @@ namespace CityBuilder.Simulation.Utilities
                 Height = plan.Height,
                 Output = plan.Type.Capacity,
             };
-            if (!plan.Type.NeedsWater) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
+            if (!plan.Type.NeedsWater || plan.Type.DryFootprint) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
             facilities[f.Id] = f;
             StructureVersion++;
             FacilityAdded?.Invoke(f);
@@ -443,13 +538,15 @@ namespace CityBuilder.Simulation.Utilities
             {
                 Rebuild(UtilityKind.Power);
                 Rebuild(UtilityKind.Water);
+                Rebuild(UtilityKind.Sewage); // Abwasser (G3 erweitert)
                 builtRoadVersion = roads.Version;
                 builtCityVersion = city.Version;
                 builtStructureVersion = StructureVersion;
                 StatusVersion++;
             }
-            foreach (var f in facilities.Values) f.Output = f.Type.Capacity; // später: Wind/Sonne/Brennstoff
-            bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water);
+            UpdateIncidents(world); // Atom (G3 erweitert): seltener Störfall, s. UtilitySystem.Nuclear.cs
+            foreach (var f in facilities.Values) f.Output = f.Type.Capacity * OutputFactor(f); // später: Wind/Sonne/Brennstoff
+            bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water) | Distribute(UtilityKind.Sewage);
             if (changed) StatusVersion++;
             UpdateDurations();
             Abandon();
@@ -467,7 +564,7 @@ namespace CityBuilder.Simulation.Utilities
             // Stadtstraßen tragen Leitung und Rohr: Segmente an gemeinsamen Knoten sind verbunden
             var segIndex = new Dictionary<int, int>();
             foreach (var s in roads.Segments)
-                if (CarriesUtilities(s)) segIndex[s.Id] = uf.Add();
+                if (ConnectionRules.CarriedByRoads(kind) && CarriesUtilities(s)) segIndex[s.Id] = uf.Add(); // Abwasser: nicht (selbst verlegt)
             foreach (var n in roads.Nodes)
             {
                 int first = -1;
@@ -527,9 +624,27 @@ namespace CityBuilder.Simulation.Utilities
                     for (int j = 0; j < fList.Count; j++)
                         if (fList[j].Contains(e, ConnectRadius)) uf.Union(lIndex[i], fIndex[j]);
                     var seg = NearestCityRoad(e, ConnectRadius);
-                    if (seg != null) uf.Union(lIndex[i], segIndex[seg.Id]);
+                    if (seg != null && segIndex.TryGetValue(seg.Id, out int segI)) uf.Union(lIndex[i], segI);
                     var b = city.BuildingAt(e);
                     if (b != null && buildingPos.TryGetValue(b.Id, out int bi)) uf.Union(lIndex[i], bIndex[bi]);
+                }
+            }
+
+            // Selbst verlegte Netze (Abwasser): Gebäude hängen an jeder Leitung in Anschlussreichweite ihrer Zufahrt
+            if (!ConnectionRules.CarriedByRoads(kind) && lList.Count > 0)
+            {
+                float reach = ConnectionRules.BuildingReach;
+                for (int j = 0; j < lList.Count; j++)
+                {
+                    var l = lList[j];
+                    float x0 = MathF.Min(l.A.X, l.B.X) - reach, x1 = MathF.Max(l.A.X, l.B.X) + reach;
+                    float y0 = MathF.Min(l.A.Y, l.B.Y) - reach, y1 = MathF.Max(l.A.Y, l.B.Y) + reach;
+                    for (int i = 0; i < sorted.Count; i++)
+                    {
+                        var e = sorted[i].Entrance;
+                        if (e.X < x0 || e.X > x1 || e.Y < y0 || e.Y > y1) continue;
+                        if (ConnectionRules.Reaches(l, sorted[i])) uf.Union(bIndex[i], lIndex[j]);
+                    }
                 }
             }
 
@@ -597,6 +712,7 @@ namespace CityBuilder.Simulation.Utilities
                     status.TryGetValue(b.Id, out var s);
                     bool old = s.Has(kind);
                     if (kind == UtilityKind.Power) { s.HasPower = supplied; s.PowerNetwork = id; }
+                    else if (kind == UtilityKind.Sewage) { s.HasSewage = supplied; s.SewageNetwork = id; }
                     else { s.HasWater = supplied; s.WaterNetwork = id; }
                     status[b.Id] = s;
                     if (old != supplied) changed = true;
@@ -608,13 +724,14 @@ namespace CityBuilder.Simulation.Utilities
         void UpdateDurations()
         {
             // Dauer zählt erst, wenn die Art verlangt wird – sonst würde das erste Kraftwerk sofort alle Altbauten räumen
-            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water);
+            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
             foreach (var b in city.Buildings)
             {
                 if (!status.TryGetValue(b.Id, out var s)) continue;
                 if (!b.IsConstructed) { status[b.Id] = default; continue; }
                 s.TicksWithoutPower = s.HasPower || !power ? 0 : s.TicksWithoutPower + TickInterval;
                 s.TicksWithoutWater = s.HasWater || !water ? 0 : s.TicksWithoutWater + TickInterval;
+                s.TicksWithoutSewage = s.HasSewage || !sewage ? 0 : s.TicksWithoutSewage + TickInterval;
                 status[b.Id] = s;
             }
         }
@@ -622,13 +739,14 @@ namespace CityBuilder.Simulation.Utilities
         void Abandon()
         {
             if (!AbandonmentEnabled) return;
-            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water);
-            if (!power && !water) return;
+            bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
+            if (!power && !water && !sewage) return;
             List<Building> leave = null;
             foreach (var b in city.Buildings)
             {
                 if (!b.IsConstructed || !status.TryGetValue(b.Id, out var s)) continue;
-                if ((power && s.TicksWithoutPower >= AbandonAfterTicks) || (water && s.TicksWithoutWater >= AbandonAfterTicks))
+                if ((power && s.TicksWithoutPower >= AbandonAfterTicks) || (water && s.TicksWithoutWater >= AbandonAfterTicks)
+                    || (sewage && s.TicksWithoutSewage >= SewageAbandonAfterTicks))
                     (leave ?? (leave = new List<Building>())).Add(b);
             }
             if (leave == null) return;
@@ -668,19 +786,24 @@ namespace CityBuilder.Simulation.Utilities
         // ------------------------------------------------------------ Straßenänderungen
 
         /// <summary>
-        /// Neue Straße durch ein Bauwerk → Bauwerk wird abgerissen (wie bei Gebäuden).
         /// Neue Straße durch einen Mast → Leitung wird neu trassiert, geht das nicht, wird sie abgerissen.
+        /// Bauwerke reißt eine Straße nicht mehr ab: die Bauwerks-Sperre (<see cref="RoadNetwork.RegisterStructures"/>)
+        /// lässt solche Straßen gar nicht erst zu.
         /// </summary>
         void OnSegmentAdded(RoadSegment s)
         {
-            List<int> hit = null;
-            foreach (var f in facilities.Values)
-                if (RoadCrossesRect(s, f.Position, f.Front, f.Type.Width, f.Type.Depth, -0.5f)) (hit ?? (hit = new List<int>())).Add(f.Id);
-            if (hit != null) foreach (int id in hit) RemoveFacility(id);
             RerouteLines(p => RoadBlocksPole(s, p));
         }
 
         // ------------------------------------------------------------ Geometrie
+
+        /// <summary>Liegt eine Stadtstraße höchstens <see cref="RoadReach"/> von irgendeinem Rand der Grundfläche (Netzanschluss)?</summary>
+        bool NearCityRoad(Vector2 center, Vector2 front, float width, float depth)
+        {
+            foreach (var s in roads.Segments)
+                if (CarriesUtilities(s) && RoadCrossesRect(s, center, front, width, depth, RoadReach)) return true;
+            return false;
+        }
 
         /// <summary>Nur ebenerdige Stadtstraßen (inkl. Brücken/Tunnel der Stadtstraßen) tragen Leitungen – Autobahnen nicht.</summary>
         static bool CarriesUtilities(RoadSegment s) => s.Type.Category == RoadCategory.City;

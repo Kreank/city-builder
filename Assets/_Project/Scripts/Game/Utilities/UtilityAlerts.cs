@@ -17,7 +17,7 @@ namespace CityBuilder.Game.Utilities
 
         SimulationRunner runner;
         UtilitySystem subscribed;
-        readonly bool[] shortage = new bool[2];
+        readonly bool[] shortage = new bool[3]; // Strom, Wasser, Abwasser (G3 erw.)
         int shownStatus = -1;
         int removedLines;
         int abandonedPending;
@@ -78,6 +78,7 @@ namespace CityBuilder.Game.Utilities
                 shownStatus = u.StatusVersion;
                 CheckShortage(u, UtilityKind.Power);
                 CheckShortage(u, UtilityKind.Water);
+                CheckShortage(u, UtilityKind.Sewage); // G3 erweitert
             }
 
             if (u.LinesRemovedByConstruction > removedLines)
@@ -110,13 +111,13 @@ namespace CityBuilder.Game.Utilities
             string name = UtilityCatalog.KindName(kind);
             string unit = UtilityCatalog.Unit(kind);
             if (now)
-                HudMessages.Warning($"{(kind == UtilityKind.Power ? "Stromnetz" : "Wassernetz")} unterdeckt",
+                HudMessages.Warning($"{(kind == UtilityKind.Power ? "Stromnetz" : kind == UtilityKind.Sewage ? "Kanalnetz" : "Wassernetz")} unterdeckt",
                     $"Bedarf {BuildLabels.Number(u.TotalDemand(kind))} {unit}, Erzeugung {BuildLabels.Number(u.TotalProduction(kind))} {unit} · " +
                     $"{unsupplied} Gebäude ohne {name} ({coverage * 100f:0} % gedeckt).",
-                    kind == UtilityKind.Power ? HudIconKind.Power : HudIconKind.Water, "shortage-" + i);
+                    kind == UtilityKind.Power ? HudIconKind.Power : kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water, "shortage-" + i);
             else
                 HudMessages.Info($"{name} wieder ausreichend", "Alle angeschlossenen Gebäude sind versorgt.",
-                    kind == UtilityKind.Power ? HudIconKind.Power : HudIconKind.Water, "shortage-" + i);
+                    kind == UtilityKind.Power ? HudIconKind.Power : kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water, "shortage-" + i);
         }
 
         // Kommt aus World.Step (Hauptthread) – nur zählen, nichts an der Simulation ändern.

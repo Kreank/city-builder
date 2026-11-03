@@ -7,13 +7,13 @@ using UnityEngine.InputSystem;
 namespace CityBuilder.Game.Utilities
 {
     /// <summary>
-    /// Info-Ansicht Strom bzw. Wasser (O schaltet Strom → Wasser → aus): über jedem fertigen Gebäude ein Marker,
+    /// Info-Ansicht Strom, Wasser bzw. Abwasser (O schaltet Strom → Wasser → Abwasser → aus): über jedem fertigen Gebäude ein Marker,
     /// grün = versorgt, rot = unversorgt (je länger unversorgt, desto größer), dazu eine farbige Bodenplatte.
     /// Bauwerke der gewählten Art bekommen einen blauen Marker. Liest nur die Simulation.
     /// </summary>
     public sealed class UtilityOverlayView : MonoBehaviour
     {
-        public enum Overlay { None, Power, Water }
+        public enum Overlay { None, Power, Water, Sewage } // Sewage: Abwasser (G3 erweitert)
 
         static readonly Color Ok = new Color(0.2f, 0.9f, 0.3f);
         static readonly Color Bad = new Color(0.95f, 0.15f, 0.1f);
@@ -29,7 +29,7 @@ namespace CityBuilder.Game.Utilities
         Overlay shownOverlay;
 
         public Overlay Current { get; private set; } = Overlay.None;
-        public UtilityKind Kind => Current == Overlay.Water ? UtilityKind.Water : UtilityKind.Power;
+        public UtilityKind Kind => Current == Overlay.Water ? UtilityKind.Water : Current == Overlay.Sewage ? UtilityKind.Sewage : UtilityKind.Power;
 
         public void Init(SimulationRunner r, Material lit, Material transparent)
         {
@@ -67,7 +67,7 @@ namespace CityBuilder.Game.Utilities
         {
             var kb = GameKeyboard.Current;
             if (kb != null && kb.oKey.wasPressedThisFrame)
-                Current = Current == Overlay.None ? Overlay.Power : Current == Overlay.Power ? Overlay.Water : Overlay.None;
+                Current = Current == Overlay.None ? Overlay.Power : Current == Overlay.Power ? Overlay.Water : Current == Overlay.Water ? Overlay.Sewage : Overlay.None;
         }
 
         void LateUpdate()
@@ -101,7 +101,7 @@ namespace CityBuilder.Game.Utilities
                 var s = u.GetStatus(b);
                 bool ok = s.Has(kind);
                 // Unversorgt: Marker wächst mit der Dauer (bis zum Verlassen)
-                float size = ok ? 2.5f : 2.5f + 2.5f * Mathf.Clamp01(s.TicksWithout(kind) / (float)UtilitySystem.AbandonAfterTicks);
+                float size = ok ? 2.5f : 2.5f + 2.5f * Mathf.Clamp01(s.TicksWithout(kind) / (float)(kind == UtilityKind.Sewage ? UtilitySystem.SewageAbandonAfterTicks : UtilitySystem.AbandonAfterTicks));
                 var top = SimConvert.ToWorld(b.Position, b.Height + EstimatedHeight(b) + 4f + size);
                 (ok ? okList : badList).Add(Matrix4x4.TRS(top, rot45, Vector3.one * size));
                 var plate = SimConvert.ToWorld(b.Position, b.Height + 0.25f);

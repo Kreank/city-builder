@@ -45,7 +45,7 @@ namespace CityBuilder.Game.Utilities
 
             var u = tool.Runner.World.Utilities;
             if (overlayOn) Section(u, overlay.Kind);
-            else { Section(u, UtilityKind.Power); GUILayout.Space(6f); Section(u, UtilityKind.Water); }
+            else { Section(u, UtilityKind.Power); GUILayout.Space(6f); Section(u, UtilityKind.Water); GUILayout.Space(6f); Section(u, UtilityKind.Sewage); }
 
             GUILayout.Space(6f);
             GUILayout.Label($"Unterhalt gesamt {u.TotalUpkeepPerDay:0} €/Tag · verlassene Gebäude {u.AbandonedBuildings}\n" +

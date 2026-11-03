@@ -50,8 +50,10 @@ namespace CityBuilder.Simulation.Citizens
         None,
         /// <summary>Sichtbares Auto im Verkehr.</summary>
         Car,
-        /// <summary>Zu Fuß/Rad/ÖPNV – vorerst ein Platzhalter mit Fahrzeit aus der Luftlinie.</summary>
+        /// <summary>Zu Fuß/Rad – Platzhalter mit Fahrzeit aus der Luftlinie (ÖPNV seit Stufe 1 echt: <see cref="Transit"/>).</summary>
         Other,
+        /// <summary>ÖPNV: wartet an der Haltestelle bzw. fährt in einem echten Bus (<c>TransitSystem</c>).</summary>
+        Transit,
     }
 
     /// <summary>Ort eines Bürgers: Gebäude oder Außenanschluss (Kartenrand).</summary>
@@ -134,6 +136,8 @@ namespace CityBuilder.Simulation.Citizens
         public bool HasCarTrip => TripId != 0;
         /// <summary>Bis wann die aktuelle Tätigkeit dauert (Arbeit, Einkauf).</summary>
         internal long BusyUntil;
+        /// <summary>Lesend: bis zu diesem Tick dauert die aktuelle Tätigkeit (Arbeit, Einkauf, Freizeit, kurz nach Ankunft) – Fußgänger-Darstellung.</summary>
+        public long BusyUntilTick => BusyUntil;
         internal int LastWorkDay = -1;
 
         // ------------------------------------------------------------ Bedürfnismodell
