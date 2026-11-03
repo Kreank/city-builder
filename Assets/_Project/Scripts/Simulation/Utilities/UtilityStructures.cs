@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace CityBuilder.Simulation.Utilities
@@ -38,11 +39,26 @@ namespace CityBuilder.Simulation.Utilities
         public Vector2 A { get; internal set; }
         public Vector2 B { get; internal set; }
         public int NetworkId { get; internal set; } = -1;
+        /// <summary>
+        /// Maststandorte (nur Stromleitungen, Reihenfolge A → B; Wasserrohre: leer). Von der Simulation berechnet
+        /// (nie auf Straße/Wasser/Bauwerk/Gebäude, Spannweite ≤ <see cref="UtilitySystem.MaxPoleSpan"/>).
+        /// </summary>
+        public IReadOnlyList<Vector2> Poles { get; internal set; } = Array.Empty<Vector2>();
+        /// <summary>Wird erhöht, wenn die Leitung neu trassiert wurde (Masten verschoben) – für die Darstellung.</summary>
+        public int Revision { get; internal set; }
 
         public float Length => Vector2.Distance(A, B);
         public float DistanceTo(Vector2 p) => UtilityGeometry.DistanceToSegment(p, A, B);
 
         public override string ToString() => $"{UtilityCatalog.LineName(Kind)} #{Id}";
+    }
+
+    /// <summary>Geplanter Mast einer Stromleitung (Vorschau): Standort und ggf. warum er dort nicht stehen darf.</summary>
+    public struct PolePlan
+    {
+        public Vector2 Position;
+        public UtilityBuildError Error;
+        public bool IsValid => Error == UtilityBuildError.None;
     }
 
     /// <summary>Versorgungszustand eines Gebäudes (je Art: versorgt? seit wie vielen Ticks nicht?).</summary>
