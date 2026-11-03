@@ -8,13 +8,11 @@ namespace CityBuilder.Game.Utilities
 {
     /// <summary>
     /// Zeichnet Versorger-Bauwerke als einfache Platzhalter aus Grundkörpern (Kraftwerkshallen, Schornsteine,
-    /// Kühlturm, Windrad mit drehendem Rotor, Solarfelder, Pumpe, Wasserturm), Stromleitungen mit Masten und
-    /// durchhängenden Seilen sowie Wasserrohre (nur in der Unterirdisch-Ansicht sichtbar).
+    /// Kühlturm, Windrad mit drehendem Rotor, Solarfelder, Pumpe, Wasserturm), Stromleitungen mit Masten (Standorte aus
+    /// der Simulation) und durchhängenden Seilen sowie Wasserrohre (nur in der Unterirdisch-Ansicht sichtbar).
     /// </summary>
     public sealed class UtilityView : MonoBehaviour
     {
-        const float PylonSpacing = 45f;
-
         SimulationRunner runner;
         Material baseMaterial, wireMaterial;
         GroundView ground;
@@ -22,6 +20,8 @@ namespace CityBuilder.Game.Utilities
         Transform facilityRoot, lineRoot, pipeRoot;
         readonly Dictionary<int, GameObject> facilityObjects = new Dictionary<int, GameObject>();
         readonly Dictionary<int, GameObject> lineObjects = new Dictionary<int, GameObject>();
+        /// <summary>Revision je Leitung (neu trassiert → neu zeichnen).</summary>
+        readonly Dictionary<int, int> lineRevisions = new Dictionary<int, int>();
         readonly Dictionary<Color, Material> materials = new Dictionary<Color, Material>();
         readonly List<Transform> rotors = new List<Transform>();
         int builtVersion = -1;
@@ -96,9 +96,21 @@ namespace CityBuilder.Game.Utilities
             foreach (var l in u.Lines)
             {
                 aliveL.Add(l.Id);
-                if (!lineObjects.ContainsKey(l.Id)) lineObjects[l.Id] = l.Kind == UtilityKind.Power ? BuildPowerLine(l) : BuildPipe(l);
+                if (lineObjects.TryGetValue(l.Id, out var old) && lineRevisions.TryGetValue(l.Id, out int rev) && rev != l.Revision)
+                {
+                    if (old != null) Destroy(old);
+                    lineObjects.Remove(l.Id);
+                }
+                if (!lineObjects.ContainsKey(l.Id))
+                {
+                    lineObjects[l.Id] = l.Kind == UtilityKind.Power ? BuildPowerLine(l) : BuildPipe(l);
+                    lineRevisions[l.Id] = l.Revision;
+                }
             }
             RemoveDead(lineObjects, aliveL);
+            var deadRevisions = new List<int>();
+            foreach (int id in lineRevisions.Keys) if (!aliveL.Contains(id)) deadRevisions.Add(id);
+            foreach (int id in deadRevisions) lineRevisions.Remove(id);
         }
 
         static void RemoveDead(Dictionary<int, GameObject> objects, HashSet<int> alive)
@@ -199,34 +211,56 @@ namespace CityBuilder.Game.Utilities
 
         // ------------------------------------------------------------ Stromleitungen: Masten + Seile
 
+        /// <summary>
+        /// Masten an den Standorten aus der Simulation (<see cref="UtilityLine.Poles"/> – nie auf Straße/Wasser),
+        /// Seile mit Durchhang von Mast zu Mast; liegt ein Leitungsende abseits des Endmasts (Anschluss auf
+        /// Straße/Bauwerk), führt ein schräges Anschlussseil dorthin.
+        /// </summary>
         GameObject BuildPowerLine(UtilityLine l)
         {
             var root = new GameObject($"Stromleitung #{l.Id}").transform;
             root.SetParent(lineRoot, false);
-            int spans = Mathf.Max(1, Mathf.CeilToInt(l.Length / PylonSpacing));
             var dir = l.B - l.A;
             var forward = new Vector3(dir.X, 0f, dir.Y).normalized;
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
             var rot = Quaternion.LookRotation(forward);
             var right = rot * Vector3.right;
-            var tops = new Vector3[spans + 1];
             var steel = new Color(0.45f, 0.46f, 0.48f);
+            var concrete = new Color(0.6f, 0.59f, 0.56f);
             float h = UtilityTool.WireHeight;
+            var poles = l.Poles;
+            var tops = new Vector3[poles.Count];
 
-            for (int i = 0; i <= spans; i++)
+            for (int i = 0; i < poles.Count; i++)
             {
-                var p = SimVector2.Lerp(l.A, l.B, i / (float)spans);
+                var p = poles[i];
                 var basePos = SimConvert.ToWorld(p, Mathf.Max(Ground(p), runner.World.Terrain.WaterLevel));
                 var pylon = new GameObject("Mast").transform;
                 pylon.SetParent(root, false);
                 pylon.SetPositionAndRotation(basePos, rot);
+                // Fundament = belegte Grundfläche (Platzverbrauch sichtbar machen)
+                float foot = UtilitySystem.PoleSize;
+                Box(pylon, new Vector3(0f, 0.15f, 0f), new Vector3(foot, 0.3f, foot), concrete);
                 Box(pylon, new Vector3(0f, h * 0.5f, 0f), new Vector3(0.6f, h, 0.6f), steel);
                 Box(pylon, new Vector3(0f, h - 0.6f, 0f), new Vector3(6f, 0.35f, 0.35f), steel);
                 tops[i] = basePos + Vector3.up * (h - 0.8f);
             }
+            if (poles.Count == 0) return root.gameObject;
+
+            // Anschlusspunkte der Enden (auf Straße/Bauwerk/Gebäude) – tiefer als die Mastspitze
+            Vector3 EndPoint(SimVector2 p) => SimConvert.ToWorld(p, Mathf.Max(Ground(p), runner.World.Terrain.WaterLevel) + h * 0.5f);
+            bool startDrop = SimVector2.Distance(l.A, poles[0]) > 1f;
+            bool endDrop = SimVector2.Distance(l.B, poles[poles.Count - 1]) > 1f;
 
             // Zwei Seile links/rechts am Querträger, mit Durchhang
             foreach (float side in new[] { -2.6f, 2.6f })
             {
+                var points = new List<Vector3>();
+                if (startDrop) points.Add(EndPoint(l.A));
+                for (int i = 0; i < tops.Length; i++) points.Add(tops[i] + right * side);
+                if (endDrop) points.Add(EndPoint(l.B));
+                if (points.Count < 2) continue;
+
                 var go = new GameObject("Seil");
                 go.transform.SetParent(root, false);
                 var lr = go.AddComponent<LineRenderer>();
@@ -235,12 +269,12 @@ namespace CityBuilder.Game.Utilities
                 lr.widthMultiplier = 0.12f;
                 lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 const int perSpan = 8;
-                lr.positionCount = spans * perSpan + 1;
+                lr.positionCount = (points.Count - 1) * perSpan + 1;
                 int k = 0;
-                for (int s = 0; s < spans; s++)
+                for (int s = 0; s < points.Count - 1; s++)
                 {
-                    var a = tops[s] + right * side;
-                    var b = tops[s + 1] + right * side;
+                    var a = points[s];
+                    var b = points[s + 1];
                     float sag = Vector3.Distance(a, b) * 0.03f;
                     for (int j = 0; j < perSpan; j++)
                     {
@@ -248,7 +282,7 @@ namespace CityBuilder.Game.Utilities
                         lr.SetPosition(k++, Vector3.Lerp(a, b, t) + Vector3.down * (sag * 4f * t * (1f - t)));
                     }
                 }
-                lr.SetPosition(k, tops[spans] + right * side);
+                lr.SetPosition(k, points[points.Count - 1]);
             }
             return root.gameObject;
         }
