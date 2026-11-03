@@ -209,6 +209,24 @@ namespace CityBuilder.Game.Inspect
             }
 
             LandValueFactorsSection(ui, world, b);
+            DepositsSection(ui, world, b.Position, "auf dem Grundstück");
+        }
+
+        /// <summary>Welt (Etappe 5): Vorkommen am Punkt (<c>world.Resources.DepositAt</c>, 0..1) mit Menge je Hektar.</summary>
+        static void DepositsSection(Ui ui, SimulationWorld world, System.Numerics.Vector2 p, string where)
+        {
+            var r = world.Resources;
+            if (r == null) return;
+            ui.Section("Vorkommen", where + " · Ansicht F3");
+            using (ui.Card())
+                foreach (var id in CityBuilder.Simulation.World.ResourceIds.All)
+                {
+                    var kind = r.Kind(id);
+                    if (kind == null) continue;
+                    float v = r.DepositAt(id, p);
+                    ui.Meter(kind.DisplayName, $"{v * 100f:0} % · ≈ {BuildLabels.Number(v * kind.AmountPerHectare)} {kind.Unit}/ha", v,
+                        v >= 0.5f ? Tone.Good : v >= 0.2f ? Tone.Accent : Tone.Muted);
+                }
         }
 
         // ------------------------------------------------------------ G6 Bodenwert, Ausbaustufe, Zustand
@@ -531,6 +549,7 @@ namespace CityBuilder.Game.Inspect
                 if (t.NeedsWater) ui.Field("Standort", "braucht Wasser in Reichweite");
                 ui.Field("Zustand", "— (Verschleiß/Wartung später)", Tone.Muted);
             }
+            DepositsSection(ui, world, f.Position, "am Standort");
             if (utilityOverlay != null)
             {
                 var overlay = f.Kind == UtilityKind.Power ? UtilityOverlayView.Overlay.Power : UtilityOverlayView.Overlay.Water;
@@ -645,6 +664,8 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Zugezogen / weggezogen", $"{s.MovedIn} / {s.MovedOut}");
                 ui.Field("Gestorben", s.Died.ToString());
             }
+
+            if (Tool.HasCursor) DepositsSection(ui, world, Tool.Cursor, "unter dem Mauszeiger");
 
             ui.Note("Klick auf Gebäude, Fahrzeug, Kraftwerk/Pumpe oder Dienstgebäude zeigt Details; Bewohner und Beschäftigte sind " +
                     "dort anklickbar. F: Fahrzeug/Bürger verfolgen. Rechtsklick: Auswahl aufheben. C oder Esc: Info schließen.");
