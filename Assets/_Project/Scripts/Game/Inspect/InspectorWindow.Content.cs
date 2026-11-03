@@ -29,6 +29,7 @@ namespace CityBuilder.Game.Inspect
                 case "Übersicht": BuildingOverview(ui, world, b); break;
                 case "Bewohner": ResidentsTab(ui, world, b); break;
                 case "Arbeit": WorkersTab(ui, world, b); break;
+                case "Firma": FirmTab(ui, world, b); break; // G5 Warenketten (InspectorWindow.Goods.cs)
                 default: SurroundingsTab(ui, world, b); break;
             }
         }
@@ -94,7 +95,7 @@ namespace CityBuilder.Game.Inspect
             var u = world.Utilities;
             var s = u.GetStatus(b);
             string name = UtilityCatalog.KindName(kind);
-            float demand = UtilityCatalog.Demand(b, kind);
+            float demand = u.DemandOf(b, kind); // G5: Industrie nach Rezept
             string need = $"Bedarf {demand:0.#} {UtilityCatalog.Unit(kind)}";
             if (!b.IsConstructed) { ui.Field(name, "– (im Bau, noch kein Bedarf)", Tone.Muted); return; }
             if (s.Has(kind))
@@ -495,6 +496,8 @@ namespace CityBuilder.Game.Inspect
                         () => Go(SelectionKind.Citizen, c.Id));
                     ui.Field("Unterwegs seit", $"{Duration(world.Clock.Tick - c.TripStartTick)} Spielzeit");
                 }
+                else if (v.TripId < 0 && world.Goods?.ShipmentForTrip(v.TripId) != null)
+                    ui.Field("Fahrer", "Lieferfahrt (Lkw des Warensystems, s. Ladung)"); // G5
                 else
                 {
                     ui.Field("Ziel", v.HasSegmentDestination ? $"Zufahrt an Segment {v.DestinationSegmentId}"
@@ -502,6 +505,7 @@ namespace CityBuilder.Game.Inspect
                     ui.Field("Fahrer", v.TripId != 0 ? "Bürgerfahrt (beendet)" : "Durchgangs-/Hintergrundverkehr (kein Bürger)");
                 }
             }
+            ShipmentSection(ui, world, v); // G5: Ladung des Lkw
             ui.Note("Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – Autofahrten dauern daher in Spielzeit oft Stunden.");
             using (ui.Actions())
             {

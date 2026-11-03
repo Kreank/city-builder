@@ -77,6 +77,7 @@ namespace CityBuilder.Game.UI.Hud
         WorldLabelLayer worldLabels;
         HelpWindow help;
         WorldMapUiWindow worldMap;
+        GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
         VisualElement resourceFlyout;
 
         /// <summary>Wahr, solange die neue UI läuft (sonst greift das RoadTool auf die alte IMGUI-Leiste zurück).</summary>
@@ -208,6 +209,10 @@ namespace CityBuilder.Game.UI.Hud
             help = Windows.Add(new HelpWindow());
             var mapComp = tool.GetComponent<CityBuilder.Game.WorldMap.WorldMapWindow>();
             if (mapComp != null) worldMap = Windows.Add(new WorldMapUiWindow(mapComp));
+            // --- G5 Warenketten: Fenster „Wirtschaft“ (F5); Zustand im GoodsPanel
+            var goodsComp = tool.GetComponent<CityBuilder.Game.Goods.GoodsPanel>();
+            if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
+            // --- Ende G5
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
         }
@@ -458,6 +463,13 @@ namespace CityBuilder.Game.UI.Hud
             var mapBtn = Btn(null, () => worldMap?.Toggle(), () => worldMap != null && worldMap.IsOpen, "Weltkarte (F4): Länder, Klima, Rohstoffe", null, "cb-icon-btn");
             mapBtn.Add(Icon(HudIconKind.Globe));
             topBar.Add(mapBtn);
+
+            // --- G5 Wirtschaft (F5) – nur mit den neuen Fenstern
+            var goodsBtn = Btn(null, () => goodsWindow?.Toggle(), () => goodsWindow != null && goodsWindow.IsOpen,
+                "Wirtschaft (F5): Güter, Preise, Import/Export, Firmen, Lieferungen", null, "cb-icon-btn");
+            goodsBtn.Add(Icon(HudIconKind.Briefcase));
+            topBar.Add(goodsBtn);
+            // --- Ende G5
 
             var helpBtn = Btn(null, () => help?.Toggle(), () => help != null && help.IsOpen, "Hilfe & Tasten (F1)", null, "cb-icon-btn");
             helpBtn.Add(Icon(HudIconKind.Help));

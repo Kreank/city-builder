@@ -140,6 +140,7 @@ namespace CityBuilder.Game.Inspect
             var tabs = new List<string> { "Übersicht" };
             if (b.Households > 0) tabs.Add("Bewohner");
             if (b.Jobs > 0) tabs.Add("Arbeit");
+            if (CityBuilder.Simulation.Goods.GoodsSystem.HasFirm(b.Zone)) tabs.Add("Firma"); // G5 Warenketten
             tabs.Add("Umfeld");
             return tabs;
         }

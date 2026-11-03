@@ -189,6 +189,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.WorldMap.WorldMapWindow>().Init(this);
             // --- Ende Welt
 
+            // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
+            Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
+            // --- Ende G5
+
             // Spiel-UI (UI Toolkit) zuletzt – sie greift auf die Begleiter oben zu. Fehlen Theme/USS in Resources,
             // bleibt die alte IMGUI-Bauleiste als Rückfall.
             if (!Ensure<CityBuilder.Game.UI.Hud.GameHud>().Init(this)) Ensure<RoadToolbar>().Init(this);
