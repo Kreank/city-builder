@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CityBuilder.Game.Roads;
+using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Services;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,7 +18,8 @@ namespace CityBuilder.Game.Services
     /// </summary>
     public sealed class ServiceTool : MonoBehaviour
     {
-        public enum ServiceAction { Place, Remove }
+        /// <summary>Eigene Assets: <see cref="NoiseBarrier"/> = Lärmschutzwand als Kette ziehen (Linienbauwerk).</summary>
+        public enum ServiceAction { Place, Remove, NoiseBarrier }
 
         const int Buckets = 6;
         const float PieceLength = 6f;
@@ -56,6 +58,8 @@ namespace CityBuilder.Game.Services
         {
             tool = roadTool;
             if (tool.Runner != null) tool.Runner.WorldReplaced += () => cachedRoadVersion = cachedStructureVersion = -1; // Speichern & Laden
+            // Eigene Assets: laufende Wandkette – Esc/Rechtsklick beendet nur die Kette
+            tool.RegisterOperation(() => Active && Current == ServiceAction.NoiseBarrier && barrierChain, () => barrierChain = false, () => barrierChain = false);
             okMaterial = new Material(transparent) { name = "ServicePreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
             badMaterial = new Material(transparent) { name = "ServicePreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
             for (int i = 0; i < Buckets; i++)
@@ -101,6 +105,7 @@ namespace CityBuilder.Game.Services
 
         public void Select(ServiceAction action)
         {
+            if (action != ServiceAction.NoiseBarrier || Current != ServiceAction.NoiseBarrier) barrierChain = false; // Eigene Assets
             Current = action;
             if (!Active) tool.SetMode(RoadTool.Mode.Service);
         }
@@ -138,6 +143,7 @@ namespace CityBuilder.Game.Services
             var mouse = Mouse.current;
             bool clicked = mouse != null && mouse.leftButton.wasPressedThisFrame;
             if (Current == ServiceAction.Place) UpdatePlace(tool.Cursor, clicked);
+            else if (Current == ServiceAction.NoiseBarrier) UpdateBarrier(tool.Cursor, clicked); // Eigene Assets
             else UpdateRemove(tool.Cursor, clicked);
             DrawReach();
         }
@@ -208,11 +214,85 @@ namespace CityBuilder.Game.Services
             foreach (var l in reachPieces) l.Clear();
             cachedPlan = null;
             var f = Services.FacilityAt(p, 2f);
+            if (f == null && TryRemoveBarrier(p, clicked)) return; // Eigene Assets: Lärmschutzwand abreißen
             if (f == null) { ghost.SetActive(false); frontMarker?.Hide(); return; }
             ShowGhost(f.Position, f.Front, f.Type.Width + 1f, f.Type.Depth + 1f, f.Height, 7f, false, false);
             SetLabel($"{f.Type.DisplayName} abreißen (+{f.Type.Cost * Simulation.Economy.EconomyRules.DemolitionRefundShare:0} €)", true, SimConvert.ToWorld(f.Position, f.Height + 12f));
             if (clicked) Services.Demolish(f.Id); // Abrisserlös 25 %
         }
+
+        // ------------------------------------------------------------ Eigene Assets: Lärmschutzwand
+
+        bool barrierChain;
+        SimVector2 barrierStart;
+
+        /// <summary>Wand gerade in Arbeit (Startpunkt gesetzt)?</summary>
+        public bool BarrierChainActive => barrierChain;
+
+        void UpdateBarrier(SimVector2 p, bool clicked)
+        {
+            ring.enabled = false;
+            foreach (var l in reachPieces) l.Clear();
+            cachedPlan = null;
+            frontMarker?.Hide();
+            var world = tool.Runner.World;
+            var nb = world.NoiseBarriers;
+            if (nb == null) { ghost.SetActive(false); return; }
+            var kb = GameKeyboard.Current;
+            bool free = kb != null && kb.ctrlKey.isPressed;
+            if (!free && nb.SnapToRoad(p, out var snapped, out _)) p = snapped;
+            float h = world.Terrain.HeightAt(p);
+            if (!barrierChain)
+            {
+                ShowGhost(p, SimVector2.UnitY, 1.2f, 1.2f, h, NoiseBarrierSystem.WallHeight, true, false);
+                SetLabel("Lärmschutzwand: Startpunkt setzen (rastet neben der Straße ein, Strg = frei) · " +
+                         $"{NoiseBarrierSystem.CostPerMeter:0} €/m", false, SimConvert.ToWorld(p, h + 8f));
+                if (clicked) { barrierStart = p; barrierChain = true; }
+                return;
+            }
+            var plan = nb.Plan(barrierStart, p);
+            var mid = (barrierStart + p) * 0.5f;
+            var dir = p - barrierStart;
+            var normal = dir.LengthSquared() > 1e-4f ? SimVector2.Normalize(new SimVector2(-dir.Y, dir.X)) : SimVector2.UnitY;
+            ShowGhost(mid, normal, Mathf.Max(0.5f, plan.Length), NoiseBarrierSystem.Thickness, world.Terrain.HeightAt(mid),
+                NoiseBarrierSystem.WallHeight, plan.IsValid, false);
+            string info = plan.IsValid
+                ? $"Lärmschutzwand {plan.Length:0} m · {plan.Cost:0} € · dämpft den Straßenlärm dahinter · Klick = setzen, weiter ziehen · RMB/Esc = fertig"
+                : BarrierErrorText(plan.Error);
+            SetLabel(info, !plan.IsValid, SimConvert.ToWorld(mid, world.Terrain.HeightAt(mid) + 8f));
+            if (clicked && plan.IsValid && nb.Build(plan) != null) barrierStart = p; // Kette: nächstes Stück beginnt hier
+        }
+
+        bool TryRemoveBarrier(SimVector2 p, bool clicked)
+        {
+            var nb = tool.Runner.World.NoiseBarriers;
+            var wall = nb?.BarrierNear(p, 2f);
+            if (wall == null) return false;
+            var mid = wall.Mid;
+            float h = tool.Runner.World.Terrain.HeightAt(mid);
+            ShowGhost(mid, wall.Normal, wall.Length + 1f, NoiseBarrierSystem.Thickness + 1f, h, NoiseBarrierSystem.WallHeight + 1f, false, false);
+            SetLabel($"Lärmschutzwand ({wall.Length:0} m) abreißen (+{NoiseBarrierSystem.CostOf(wall.Length) * Simulation.Economy.EconomyRules.DemolitionRefundShare:0} €)",
+                true, SimConvert.ToWorld(mid, h + 8f));
+            if (clicked) nb.Demolish(wall.Id);
+            return true;
+        }
+
+        public static string BarrierErrorText(NoiseBarrierError e)
+        {
+            switch (e)
+            {
+                case NoiseBarrierError.TooShort: return $"Zu kurz (mind. {NoiseBarrierSystem.MinLength:0} m)";
+                case NoiseBarrierError.TooLong: return $"Zu lang (höchstens {NoiseBarrierSystem.MaxLength:0} m je Stück – Zwischenpunkt setzen)";
+                case NoiseBarrierError.OutOfWorld: return "Außerhalb der Karte";
+                case NoiseBarrierError.OnWater: return "Nicht im Wasser bauen";
+                case NoiseBarrierError.OnRoad: return "Liegt auf Fahrbahn/Gehweg – neben die Straße setzen";
+                case NoiseBarrierError.OverlapsStructure: return "Kreuzt ein Bauwerk";
+                case NoiseBarrierError.OverlapsBuilding: return "Kreuzt ein Gebäude (wird nicht abgerissen)";
+                case NoiseBarrierError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                default: return null;
+            }
+        }
+        // ------------------------------------------------------------ Ende Lärmschutzwand
 
         /// <summary>Erreichte Straßen in Stücken einfärben (Farbe nach Entfernungswirkung, aus der Simulation).</summary>
         void BuildReachPreview(ServicePlan plan)
@@ -340,6 +420,7 @@ namespace CityBuilder.Game.Services
 
             GUILayout.BeginHorizontal();
             if (Button("Abriss", Active && Current == ServiceAction.Remove, 70f)) Select(ServiceAction.Remove);
+            if (Button("Lärmschutzwand", Active && Current == ServiceAction.NoiseBarrier, 110f)) Select(ServiceAction.NoiseBarrier); // Eigene Assets
             if (GUILayout.Button("⟲ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(-15f);
             if (GUILayout.Button("⟳ 15°", GUILayout.Width(55f), GUILayout.Height(24f))) Rotate(15f);
             GUILayout.Label("Ansicht (⇧4):", GUILayout.Width(85f));

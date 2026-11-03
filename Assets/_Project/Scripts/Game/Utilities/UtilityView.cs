@@ -421,6 +421,12 @@ namespace CityBuilder.Game.Utilities
             float h = UtilityTool.WireHeightOf(l.Type);
             var poles = l.Poles;
             var tops = new Vector3[poles.Count];
+            // --- Eigene Assets: Hochspannungsmast als Blender-Modell (Models/Infrastructure/PowerPylon.fbx, Donaumast 42 m,
+            // Traversen 24 m ±9 und 31 m ±6,5, Isolatoren hängen 2,3 m) – Seile hängen dann an den Isolatoren
+            var catalog = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+            var pylonModel = high && catalog != null && catalog.Palette != null
+                ? catalog.Find(CityBuilder.Game.Assets.OwnModelRoles.Infrastructure, "power_pylon") : null;
+            // --- Ende Eigene Assets
 
             for (int i = 0; i < poles.Count; i++)
             {
@@ -432,6 +438,20 @@ namespace CityBuilder.Game.Utilities
                 // Fundament = belegte Grundfläche (Platzverbrauch sichtbar machen)
                 float foot = l.Type.PoleSize;
                 Box(pylon, new Vector3(0f, 0.15f, 0f), new Vector3(foot, 0.3f, foot), concrete);
+                if (pylonModel != null)
+                {
+                    // Eigene Assets: Modell (Traversen quer zur Leitung = lokale X-Achse)
+                    var go = Instantiate(pylonModel.Model, pylon, false);
+                    go.name = pylonModel.Model.name;
+                    foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                    {
+                        var mats = new Material[r.sharedMaterials.Length];
+                        for (int m = 0; m < mats.Length; m++) mats[m] = catalog.Palette;
+                        r.sharedMaterials = mats;
+                    }
+                    tops[i] = basePos;
+                    continue;
+                }
                 if (high)
                 {
                     // Hochspannung: Stahlgittermast als schlanker Turm mit zwei Traversen
@@ -457,10 +477,14 @@ namespace CityBuilder.Game.Utilities
 
             // Seile links/rechts an den Traversen, mit Durchhang (Hochspannung: zwei Ebenen)
             var sides = high ? new[] { -6.5f, 6.5f, -4.5f, 4.5f } : new[] { -1.1f, 1.1f };
+            // Eigene Assets: am Modellmast 6 Seile an den Isolatoren (tops = Mastfuß)
+            float[] modelSides = { -9f, 9f, -4.95f, 4.95f, -6.5f, 6.5f };
+            float[] modelHeights = { 21.7f, 21.7f, 21.7f, 21.7f, 28.7f, 28.7f };
+            if (pylonModel != null) sides = modelSides;
             for (int si = 0; si < sides.Length; si++)
             {
                 float side = sides[si];
-                float drop = high && si >= 2 ? 6f : 0f;
+                float drop = pylonModel != null ? -modelHeights[si] : high && si >= 2 ? 6f : 0f;
                 var points = new List<Vector3>();
                 if (startDrop) points.Add(EndPoint(l.A));
                 for (int i = 0; i < tops.Length; i++) points.Add(tops[i] + right * side + Vector3.down * drop);
