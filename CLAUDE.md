@@ -477,6 +477,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
   in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
   und `InputSystem_Actions` – alles andere (Store-Pakete direkt nach dem Import) wird nie committet.
+- **Eigene Modelle kommen nach Ordner automatisch ins Spiel** (Neubau beider Kataloge, sobald sich ein FBX unter
+  `Models/` ändert): `Utilities/<Name>.fbx` und `Services/<Name>.fbx` über die Namenslisten in `OwnModelCatalogBuilder`
+  (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
+  (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
+  `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
+  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
+  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
