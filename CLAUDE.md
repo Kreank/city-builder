@@ -73,7 +73,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Hilfe „Netz entlang Straßen verlegen“ (einzelne oder alle Stadtstraßen, normale Kosten, Vorschau) – v. a. für
   bestehende Städte/alte Spielstände (Übergangsfrist 5 Tage nach dem Laden eines Stands v1).
 
-## Entscheidung: Bauart (2026-11-03, Spieler)
+## Entscheidung: Bauart (2026-11-03, Spieler – Wohnhäuser umgesetzt, s. „Wohnhäuser setzen (Anno-Stil)“)
 - **Freie Straßen bleiben** (kein Anno-Raster).
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
@@ -458,7 +458,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Standard = Auswählen** (`RoadTool.SelectMode` = der vorhandene `Mode.Inspect`; bewusst kein neuer Enum-Wert, damit
   Inspektor/Picking/Views und Werkzeuge anderer Agenten unverändert passen). Start in diesem Modus, keine Bauvorschau,
   Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst, Versorger, Haltestelle/Depot.
-- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5) →
+- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5 6) →
   Auswählen (`RoadTool.ToggleMode`); R bleibt Gerade ↔ Kurve. Aktive Kategorie in der Bauleiste erneut anklicken → Auswählen.
   In Zonen/Gelände hat Rechtsklick eigene Bedeutung, dort nur Esc. Laufende Vorgänge melden Begleiter mit
   `RoadTool.RegisterOperation(busy, esc, rechtsklick)` (Leitungskette, Buslinie zeichnen, Verschieben): dann bricht Esc/RMB
@@ -468,7 +468,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kategorie offen. **Inspektor-Panel** öffnet sich erst mit einer Auswahl (`InspectorPanel.WantsPanel`); Stadtübersicht
   nur über Info-Knopf oben bzw. C (`RoadTool.ToggleCityInfo` → `InspectorPanel.ShowOverview`); × schließt, Modus bleibt.
   Zonen kräftig: Zonen-Werkzeug oder Stadtübersicht.
-- **Verschieben** `Game/Inspect/FacilityMover` (Begleiter): Dienst/Versorger/Busdepot auswählen → „Verschieben (Y)“ im
+- **Verschieben** `Game/Inspect/FacilityMover` (Begleiter): Dienst/Versorger/Busdepot/gesetztes Wohnhaus auswählen → „Verschieben (Y)“ im
   Inspektor oder Taste **Y** (einziger freier Buchstabe, gedrucktes Zeichen der Belegung) → Geist mit Vorderseiten-Pfeil folgt der
   Maus mit denselben Platzregeln inkl. Ausrichtung, `,`/`.` drehen, Klick setzt (Stadtkasse 10 %), Esc/RMB bricht ab.
   Depots: `TransitSystem.SnapDepot` + `PlanMoveDepot`/`MoveDepot`.
@@ -778,6 +778,59 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   +30 % Höhe je Stufe. Knopf in der HUD-Ansichtsleiste/Inspektor-Anzeige baut `ui2` an diese API.
 - Später: Stufenaufstieg auch nach Wohlstand/Einkommen (G5), Brände/Kriminalität senken den Wert, Bodenwert als
   Preis beim Kauf von Grundstücken, Denkmalschutz/Stilrichtungen, Abriss-Meldung im HUD.
+
+## Wohnhäuser setzen (Anno-Stil)
+- **Entscheidung des Spielers** (s. „Entscheidung: Bauart“): Wohnhäuser einzeln hinstellen, sie bevölkern sich und steigen auf,
+  wenn Einrichtungen in Reichweite sind. **Zonen bleiben zusätzlich**, freie Straßen bleiben.
+- **Herkunft** `Building.Origin` (`BuildingOrigin.Zone` | `Player`, `IsPlayerPlaced`). **Bauarten** `Zoning/HouseCatalog`:
+  Einfamilienhaus (Wohnen gering, 2×2 Zellen = 16×16 m, 4 000 €), Mehrfamilienhaus (mittel, 3×3, 16 000 €), Wohnblock (dicht,
+  4×4, 45 000 €); Wohnungen wie gewachsene Gebäude gleicher Größe (`HouseholdsAtLevel`, Kapazität × 1,0/1,4/1,8 je Stufe wie G6).
+  Je Zonenart genau eine Bauart → Bauart = (Herkunft, Zone), im Spielstand steht nur die Herkunft. **Bewusst ohne Laden/
+  Mischgebiet:** Läden sind Firmen mit Lager/Gewinn/Pleite (G5) – die wählt weiter die Simulation (Entscheidung „Produktion
+  lenken statt bauen“); der Laden ist dafür eine *Anforderung* der Häuser.
+- **Simulation** `CitySystem.Houses.cs`: `PlanHouse(type, cursor, drehung, movingId)` richtet die Vorderseite über
+  `RoadFront.TryAlign` zur Straße aus (Cursor ≤ Tiefe + 16 m vom Rand), `PlanHouseAt(type, mitte, front)` genau →
+  `HousePlan` (Fehler `HouseBuildError`: OutOfWorld, OnWater, TooSteep > 4 m, OverlapsRoad, OverlapsStructure mit
+  `BlockerName` – Dienste/Versorger/Depots exakt über `roads.Structures`, Strommasten über `LotBlocker`-Prüfpunkte –,
+  **OverlapsBuilding** (Zonengebäude darunter: lieber ungültig mit Hinweis als still abreißen), NoRoadAccess über
+  `RoadFront.FindAccess` ≤ 8 m, InsufficientFunds) → `BuildHouse(plan)` (Baufortschritt wie Zonen, Bodenplatte auf Höhe der
+  Zufahrt, Gelände eingeebnet). Kasse: `CitySystem.Budget`, Kategorie **`BudgetCategory.HouseConstruction`** („Bau Wohnhäuser“,
+  hinten angefügt). `DemolishHouse(id)` = 25 % zurück. **Verschieben** `PlanMoveHouse(id, cursor, drehung)`/`MoveHouse(plan)`
+  (10 %, Id/Stufe/Bewohner bleiben, Event `BuildingMoved` + `BuildingChanged`).
+- **Schutz:** gesetzte Häuser werden **nicht** von Zonenlogik abgerissen (Umwidmung/Entzonen in `Paint`, Straße durchs Grundstück
+  in `OnSegmentAdded`, fehlende Straße in `ValidateBuildings` – dort bleibt das Haus stehen, Zufahrt = −1, `HasRoadAccess`),
+  nicht verlassen bei Ausfall (`UtilitySystem.Abandon` überspringt sie – sie steigen stattdessen ab) und nicht wegen Verfall
+  abgerissen. **Bauwerks-Sperre** wie Dienste: `roads.RegisterStructures` Art „house“ (Name = Bauart). Dienste, Versorger und
+  Depots über einem gesetzten Haus → Plan ungültig (`OverlapsFacility`, kleine markierte Zeile in den drei Systemen).
+  Zonen wachsen nicht auf/an gesetzten Häusern (`LotFits` prüft auch schräg stehende).
+- **Bevölkern:** kein Sonderweg – gesetzte Häuser sind normale Wohnungen (Zuzug, Umzug, `HomeScore`, Wohnkomfort je Zone).
+- **Aufstieg nach Bedürfnissen** (`Zoning/HouseRules`, datengetrieben; Auswertung `LandValue/LandValueSystem.Houses.cs`, täglich
+  in `EvaluateBuildings` statt der G6-Regeln): je Stufe eine `HouseLevelRule` (neue harte `HouseNeed`s, weiche Zufriedenheit/
+  Belegung, Tage); Anforderungen gelten kumuliert. **Stufe 2 „gehoben“** (3 Tage): Strom, Wasser (`Utilities.IsSupplied`), Laden
+  mit Ware in Fußweite (Einzelhandel/Mischgebiet ≤ `ShopWalkRadius` 500 m Luftlinie, `Goods.ShopHasStock`), Grundschule;
+  Zufriedenheit ≥ 0,55, Belegung ≥ 75 %. **Stufe 3 „wohlhabend“** (5 Tage): + Polizei, Gesundheit, Abwasser, Park, Oberschule
+  oder Bibliothek; Zufriedenheit ≥ 0,62. Dienste über `world.Services.Coverage(kind, b)` ≥ `ServiceThreshold` 0,25 (bei
+  mehreren Arten zählt die beste). Fortschritt: alles erfüllt +1, Hartes fehlt −2, nur Weiches fehlt → Pause. Fehlt eine
+  Anforderung der **eigenen** Stufe: schlechte Tage (+1/−2), nach `DeclineDays` 6 → Abstieg. Mehr Stufen = Regel an
+  `HouseRules.Levels` anhängen (Kapazitätsfaktor ist bei G6 noch auf 3 Stufen begrenzt). Zonengebäude: G6 unverändert.
+- **API:** `LevelInfo(b)` für gesetzte Häuser: `PlayerHouse`, `Needs` (✓/✗ + `Detail`, z. B. „Abdeckung 45 % (nötig 25 %)“,
+  „Laden in 320 m“), `MissingText` „Es fehlt: Grundschule in Reichweite, …“ (inkl. weicher Punkte), `Missing` mit
+  `LevelGap.Needs`, `OwnNeedsMissing`, Fortschritt/Abstiegstage. `EvaluateNeed(s)`, `PreviewHouse(plan)` → `HousePreview`
+  (alle Anforderungen am Bauplatz – Versorgung = Leitung in Anschlussweite, Dienste über `CoverageAt` –, `ReachableLevel`).
+  Test-Hook `HouseNeedOverride`.
+- **Werkzeug** (`Game/Zoning/HouseTool`, Modus `RoadTool.Mode.House`, **Taste 6** – alle Buchstaben belegt, 6 war frei und passt
+  zu 4 Dienste/5 ÖPNV): Bauleisten-Kategorie „Wohnhäuser“ (`GameHud.Houses.cs`: 3 Bauarten, Drehen, Abriss-Kachel, auch unter
+  Abriss), Vorschau mit dem **Stufe-1-Modell der Zone** (`AssetCatalog` über `BuildingView.PickForLevel`, wie `BuildingView`
+  skaliert, über `PlacementGhost.ShowModel`; ohne Katalog Quader) grün/rot + Vorderseiten-Pfeil, `,`/`.` drehen, Kosten/Fehler/
+  „Es fehlt“ in der Hinweiszeile (`GameHud.UpdateHint` → `HouseTool.HintText`), Welt-Beschriftung mit ✓/✗ je Bedürfnis und
+  erreichbarer Stufe. **Haus-Fenster** (`UI/Windows/HouseWindow`, rechts): je Stufe die Anforderungen am Mauszeiger mit ✓/✗ +
+  Detail; Klick auf eine Einrichtung zeigt deren **Reichweite** (Abdeckungs-Ansicht `ServiceOverlayView.ToolKind`; Laden: Ring
+  500 m), ohne Auswahl die erste fehlende. Esc/Rechtsklick → Auswählen. Inspektor: Herkunft, Stufe + Name, Anforderungen ✓/✗,
+  weiche Bedingungen, Fortschritt, Abstieg droht; Knöpfe Verschieben (Y, `FacilityMover` kann jetzt auch gesetzte Häuser) und
+  Abreißen. IMGUI-Rückfallleiste ohne Eintrag. Im Editor noch nicht visuell abgenommen.
+- **Speichern:** Abschnitt `city` v2 (Herkunft je Gebäude); v1 → alle Gebäude „aus Zone“ (`HouseTests.Migration_CityV1_…`).
+- Später: Häuser-Meldungen im HUD (Aufstieg/Abstieg gesammelt wie `LandValueAlerts`), Bedarfsstufen der Haushalte (G5) an die
+  Hausstufe koppeln, Marktplatz als eigener Dienst, Reichweiten aller Einrichtungen gleichzeitig, eigenes Aussehen gesetzter Häuser.
 
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
@@ -1418,6 +1471,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
      Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
      bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
+   - ✅ Wohnhäuser einzeln setzen (Anno-Stil, Taste 6): 3 Bauarten, Platzregeln/Straßensperre wie Dienste, bevölkern über das
+     Bürgersystem, Stufen nach Einrichtungen in Reichweite (datengetrieben, Abstieg), Vorschau mit ✓/✗ und Reichweiten,
+     Inspektor, Verschieben, Spielstand city v2 (im Editor noch nicht visuell abgenommen). Zonen bleiben zusätzlich.
    - ✅ Zeitmodell: Kalender 6 min/Tick + 180 Verkehrsschritte (Zeitdehnung 8), Fußwege/Platzhalter in Verkehrszeit,
      Fahrgäste gehen erst zur Haltestelle, Tempo 1/2/3 = 6/3/1,5 min je Spieltag mit Rechenzeit-Budget, Speichern mitten im Tick
      (im Editor noch nicht visuell abgenommen). Später: Abfahrten innerhalb des Ticks verteilen, CarShare neu abstimmen, Rad-Darstellung

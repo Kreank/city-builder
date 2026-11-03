@@ -134,6 +134,9 @@ namespace CityBuilder.Simulation.Transit
                     if (ServiceGeometry.RectsOverlap(position, plan.Front, type.Width, type.Depth, b.Position, b.Front, b.Width, b.Depth))
                         plan.Displaced.Add(b);
             }
+            // --- Wohnhäuser setzen: gesetzte Häuser werden nicht abgerissen – Plan ungültig (Spieler reißt selbst ab)
+            if (plan.Displaced.Exists(b => b.IsPlayerPlaced)) { plan.Error = TransitBuildError.OverlapsFacility; plan.Displaced.Clear(); }
+            // --- Ende Wohnhäuser
             return plan;
         }
 
@@ -246,6 +249,9 @@ namespace CityBuilder.Simulation.Transit
                 foreach (var b in city.Buildings)
                     if (ServiceGeometry.RectsOverlap(position, plan.Front, d.Type.Width, d.Type.Depth, b.Position, b.Front, b.Width, b.Depth))
                         plan.Displaced.Add(b);
+            // --- Wohnhäuser setzen: gesetzte Häuser werden nicht abgerissen – Plan ungültig (Spieler reißt selbst ab)
+            if (plan.Displaced.Exists(b => b.IsPlayerPlaced)) { plan.Error = TransitBuildError.OverlapsFacility; plan.Displaced.Clear(); }
+            // --- Ende Wohnhäuser
             return plan;
         }
 

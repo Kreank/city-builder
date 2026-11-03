@@ -137,7 +137,8 @@ namespace CityBuilder.Game.Services
             label = null;
             if (tool == null) return;
             var overlay = GetComponent<ServiceOverlayView>();
-            if (overlay != null) overlay.ToolKind = Active && Current == ServiceAction.Place ? SelectedType.Kind : null;
+            // Wohnhäuser setzen: im Haus-Werkzeug bestimmt das HouseTool die Abdeckungs-Ansicht
+            if (overlay != null && tool.CurrentMode != RoadTool.Mode.House) overlay.ToolKind = Active && Current == ServiceAction.Place ? SelectedType.Kind : null;
             if (!Active || !tool.HasCursor || tool.Runner.World == null) { Hide(); return; }
 
             var mouse = Mouse.current;

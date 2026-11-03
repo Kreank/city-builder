@@ -55,13 +55,14 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("J", "Versorgung (Strom, Wasser)");
                 ui.Field("4 · ⇧4", "Dienste · Abdeckungs-Ansicht durchschalten");
                 ui.Field("5 · F6", "ÖPNV (Haltestelle, Linie zeichnen, Busdepot) · Linienübersicht");
+                ui.Field("6", "Wohnhäuser einzeln setzen (Anno-Stil, , . drehen) – Stufen nach Einrichtungen in Reichweite");
             }
             ui.Section("Ansehen");
             using (ui.Fields())
             {
                 ui.Field("Esc · Rechtsklick", "Vorgang abbrechen, sonst zurück zum Auswählen (Standard: Linksklick wählt aus)");
                 ui.Field("C · F", "Stadtübersicht · Fahrzeug/Bürger verfolgen");
-                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot verschieben (, . drehen, Klick setzt)");
+                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot/gesetztes Wohnhaus verschieben (, . drehen, Klick setzt)");
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");

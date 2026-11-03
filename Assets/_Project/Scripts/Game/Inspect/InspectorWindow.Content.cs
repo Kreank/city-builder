@@ -61,6 +61,7 @@ namespace CityBuilder.Game.Inspect
             }
 
             LandValueAndLevel(ui, world, b);
+            if (b.IsPlayerPlaced) HouseActions(ui, world, b); // Wohnhäuser setzen: Verschieben/Abreißen
 
             ui.Section("Versorgung");
             using (ui.Fields())
@@ -83,6 +84,7 @@ namespace CityBuilder.Game.Inspect
             ui.Section("Gebäude");
             using (ui.Fields())
             {
+                ui.Field("Herkunft", b.IsPlayerPlaced ? $"vom Spieler gesetzt · {HouseCatalog.NameOf(b)}" : $"aus Zone gewachsen · {Zones.DisplayName(b.Zone)}"); // Wohnhäuser
                 ui.Field("Grundstück", $"{b.WidthCells}×{b.DepthCells} Zellen ({b.Width:0}×{b.Depth:0} m)");
                 var view = panel.BuildingView;
                 ui.Field("Höhe (sichtbar)", view != null ? $"≈ {view.VisualHeight(b):0} m" : "–");
@@ -261,6 +263,7 @@ namespace CityBuilder.Game.Inspect
         {
             var lv = world.LandValue;
             if (lv == null) return;
+            if (b.IsPlayerPlaced) { HouseLevel(ui, world, b); return; } // Wohnhäuser setzen: Anforderungen statt Bodenwert
             float value = lv.ValueOf(b);
             var info = lv.LevelInfo(b);
             ui.Section("Bodenwert & Ausbaustufe", "Faktoren im Reiter Umfeld");
@@ -300,6 +303,7 @@ namespace CityBuilder.Game.Inspect
             }
 
             var info = lv.LevelInfo(b);
+            if (info.PlayerHouse) { ui.Note("Gesetztes Wohnhaus: die Stufe hängt an Einrichtungen in Reichweite (Reiter Übersicht), nicht am Bodenwert."); return; }
             if (info.Level >= info.MaxLevel) { ui.Note("Höchste Ausbaustufe erreicht."); return; }
             var next = info.Next;
             var facts = info.Facts;
@@ -313,6 +317,56 @@ namespace CityBuilder.Game.Inspect
                 if (next.Condition > 0f) Requirement(ui, "Zustand", info.Condition, next.Condition);
                 ui.Field("Versorgung", facts.Supplied ? "vorhanden" : "fehlt", facts.Supplied ? Tone.Good : Tone.Warn);
             }
+        }
+
+        // ------------------------------------------------------------ Wohnhäuser setzen (Anno-Stil)
+
+        /// <summary>Gesetztes Haus: Stufe, Anforderungen der nächsten Stufe mit ✓/✗, Fortschritt, Abstieg.</summary>
+        static void HouseLevel(Ui ui, SimulationWorld world, Building b)
+        {
+            var info = world.LandValue.LevelInfo(b);
+            bool top = info.Level >= info.MaxLevel;
+            ui.Section("Stufe & Bedürfnisse", "Anno-Regeln · Einrichtungen in Reichweite");
+            using (ui.Card())
+            {
+                ui.Meter($"Stufe {info.Level} von {info.MaxLevel} · {HouseRules.LevelName(info.Level)}",
+                    top ? "höchste Stufe" : $"Aufstieg {info.ProgressDays}/{info.DaysNeeded} Tage", info.Progress,
+                    top || info.Missing == LevelGap.None ? Tone.Good : Tone.Accent);
+                if (!top && info.Missing != LevelGap.None) ui.Note(info.MissingText);
+                ui.Meter("Zustand", $"{info.ConditionText} · {info.Condition * 100f:0} %", info.Condition, ValueTone(info.Condition));
+            }
+            if (info.Needs != null && info.Needs.Count > 0)
+            {
+                ui.Section(top ? $"Für Stufe {info.Level} (halten)" : $"Für Stufe {info.Level + 1}", top ? null : $"{info.DaysNeeded} Tage erfüllt");
+                using (ui.Fields())
+                {
+                    foreach (var s in info.Needs) ui.Field($"{s.Mark} {s.Need.Label}", s.Detail, s.Met ? Tone.Good : Tone.Warn);
+                    if (!top)
+                    {
+                        var f = info.Facts;
+                        bool satOk = f.Satisfaction >= info.NeedSatisfaction, occOk = f.Occupancy >= info.NeedOccupancy;
+                        ui.Field($"{(satOk ? "✓" : "✗")} Zufriedenheit (weich)", f.Satisfaction < 0f ? "noch keine Bewohner" : $"{f.Satisfaction * 100f:0} % / mind. {info.NeedSatisfaction * 100f:0} %", satOk ? Tone.Good : Tone.Accent);
+                        ui.Field($"{(occOk ? "✓" : "✗")} Belegung (weich)", $"{f.Occupancy * 100f:0} % / mind. {info.NeedOccupancy * 100f:0} %", occOk ? Tone.Good : Tone.Accent);
+                    }
+                }
+                ui.Note("Fehlt Hartes: Fortschritt −2 Tage je Tag · fehlt nur Weiches: Fortschritt pausiert.");
+            }
+            if (info.Declining || info.OwnNeedsMissing)
+                ui.Message("Abstieg droht", info.OwnNeedsMissing
+                    ? $"Anforderungen der Stufe {info.Level} fehlen – {info.DeclineDays} von {info.DeclineDaysLimit} schlechten Tagen."
+                    : $"Noch {info.DeclineDays} schlechte Tage gezählt (baut sich ab, solange alles da ist).", Tone.Warn);
+            if (info.EmptyDays > 0) ui.Note($"Seit {info.EmptyDays} Tagen leer.");
+        }
+
+        void HouseActions(Ui ui, SimulationWorld world, Building b)
+        {
+            var type = HouseCatalog.Of(b);
+            if (type == null) return;
+            MoveAction(ui, SelectionKind.Building, b.Id, type.Cost);
+            using (ui.Actions())
+                ui.ActionButton($"Abreißen (+{BuildLabels.Money(type.Cost * CityBuilder.Simulation.Economy.EconomyRules.DemolitionRefundShare)})",
+                    () => world.City.DemolishHouse(b.Id), ActionStyle.Secondary, false, true,
+                    "Haus abreißen – 25 % der Baukosten zurück, Bewohner ziehen um oder weg");
         }
 
         static void Requirement(Ui ui, string label, float have, float need)

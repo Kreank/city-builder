@@ -260,6 +260,9 @@ namespace CityBuilder.Simulation.Utilities
             if (plan.Error == UtilityBuildError.None)
                 foreach (var b in city.Buildings)
                     if (RectsOverlap(position, plan.Front, type.Width, type.Depth, b.Position, b.Front, b.Width, b.Depth)) plan.Displaced.Add(b);
+            // --- Wohnhäuser setzen: gesetzte Häuser werden nicht abgerissen – Plan ungültig (Spieler reißt selbst ab)
+            if (plan.Displaced.Exists(b => b.IsPlayerPlaced)) { plan.Error = UtilityBuildError.OverlapsFacility; plan.Displaced.Clear(); }
+            // --- Ende Wohnhäuser
             return plan;
         }
 
@@ -854,6 +857,7 @@ namespace CityBuilder.Simulation.Utilities
             foreach (var b in city.Buildings)
             {
                 if (!b.IsConstructed || !status.TryGetValue(b.Id, out var s)) continue;
+                if (b.IsPlayerPlaced) continue; // Wohnhäuser setzen: gesetzte Häuser werden nicht verlassen – sie steigen ab (HouseRules)
                 if ((power && s.TicksWithoutPower >= AbandonAfterTicks) || (water && s.TicksWithoutWater >= AbandonAfterTicks)
                     || (sewage && s.TicksWithoutSewage >= SewageAbandonAfterTicks))
                     (leave ?? (leave = new List<Building>())).Add(b);

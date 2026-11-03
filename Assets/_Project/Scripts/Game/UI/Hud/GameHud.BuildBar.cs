@@ -21,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */ }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */, Houses /* Wohnhäuser setzen */ }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -78,6 +78,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Roads, HudIconKind.Road, "Straßen", "Stadtstraßen: Gerade/Kurve (R), Kreisverkehr (K), Ausbauen (U), Richtung (I) · Tab Typ wechseln");
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
+            CategoryButton(cats, Category.Houses, HudIconKind.LandValue, "Wohnhäuser", "Wohnhäuser einzeln setzen (6, Anno-Stil): bevölkern sich und steigen auf, wenn Laden, Schule, Polizei … in Reichweite sind"); // Wohnhäuser
             CategoryButton(cats, Category.Utilities, HudIconKind.Power, "Versorgung", "Versorgung (J): Kraftwerke, Umspannwerke, Pumpen · Hochspannung, Ortsnetz (Freileitung/Erdkabel), Rohre, Kanäle selbst verlegen");
             CategoryButton(cats, Category.Services, HudIconKind.Service, "Dienste", "Dienste (4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll, Medien, Freizeit, Wahrzeichen, Lärmschutzwand · ⇧4 Abdeckungs-Ansicht");
             CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
@@ -113,6 +114,7 @@ namespace CityBuilder.Game.UI.Hud
                 case RoadTool.Mode.Service:
                     return serviceTool != null && serviceTool.Current == ServiceTool.ServiceAction.Remove ? Category.Bulldoze : Category.Services;
                 case RoadTool.Mode.Transit: return TransitCategory(); // ÖPNV
+                case RoadTool.Mode.House: return HouseCategory(); // Wohnhäuser
                 case RoadTool.Mode.Bulldoze: return Category.Bulldoze;
                 case RoadTool.Mode.Inspect: return null;
                 default: return tool.SelectedType.Category == RoadCategory.City ? Category.Roads : Category.Highway;
@@ -149,6 +151,7 @@ namespace CityBuilder.Game.UI.Hud
                     else tool.SetMode(RoadTool.Mode.Terraform);
                     break;
                 case Category.Transit: SelectTransitCategory(); break; // ÖPNV
+                case Category.Houses: SelectHouseCategory(); break; // Wohnhäuser
                 case Category.Traffic: if (mode != RoadTool.Mode.Traffic) tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Category.Bulldoze: if (mode != RoadTool.Mode.Bulldoze) tool.SetMode(RoadTool.Mode.Bulldoze); break;
             }
@@ -194,6 +197,7 @@ namespace CityBuilder.Game.UI.Hud
                     if (parts.Count > 0) text = string.Join("  ·  ", parts);
                 }
             }
+            else if (HouseHint(out var houseText, out var houseError)) { text = houseText; error = houseError; } // Wohnhäuser
             else if (tool.CurrentMode == RoadTool.Mode.Terraform && terraform != null && terraform.HitLocked)
             {
                 text = "Unter Straßen und Gebäuden ist das Gelände gesperrt";
@@ -232,6 +236,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Traffic: BuildTrafficPanel(); break;
                 case Category.Bulldoze: BuildBulldozePanel(); break;
                 case Category.Transit: BuildTransitPanel(); break; // ÖPNV
+                case Category.Houses: BuildHousePanel(); break; // Wohnhäuser
             }
             refreshNow = true;
         }
@@ -737,8 +742,9 @@ namespace CityBuilder.Game.UI.Hud
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Remove,
                     "Polizei, Schule, Park, Wahrzeichen, Lärmschutzwand … anklicken – 25 % der Baukosten zurück"));
             AddTransitBulldozeTile(tiles); // ÖPNV
+            AddHouseBulldozeTile(tiles); // Wohnhäuser
             panelBody.Add(tiles);
-            panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt."));
+            panelBody.Add(Info(() => "Gebäude in Zonen verschwinden über Entzonen (Kategorie Zonen) oder wenn ihre Straße wegfällt; gesetzte Wohnhäuser nur per Abriss."));
         }
     }
 }
