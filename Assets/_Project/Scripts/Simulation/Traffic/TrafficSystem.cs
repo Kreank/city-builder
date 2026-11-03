@@ -1,0 +1,659 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.Roads;
+
+namespace CityBuilder.Simulation.Traffic
+{
+    public sealed class TrafficStats
+    {
+        public int Active;
+        public int Spawned;
+        public int Arrived;
+        /// <summary>Wegen Stillstand/Unerreichbarkeit entfernt (wie in Cities: Skylines).</summary>
+        public int Despawned;
+        public float AverageSpeedKmh;
+        public int Waiting;
+    }
+
+    /// <summary>
+    /// Verkehrssimulation: erzeugt Fahrten zwischen Verkehrsquellen, bewegt Fahrzeuge spurgenau
+    /// (Fahrzeugfolgemodell IDM), wählt Spuren/Spurwechsel, beachtet Vorfahrt, Schilder und Ampeln.
+    /// Verkehrszeit ist von der Kalenderzeit entkoppelt: 1 Tick = <see cref="Dt"/> Sekunden Fahrzeit.
+    /// </summary>
+    public sealed class TrafficSystem : ISimulationSystem
+    {
+        public const float Dt = 0.25f;
+        const float MinGap = 2f;
+        const float TimeHeadway = 1.2f;
+        const float ComfortDecel = 2.5f;
+
+        public int TickInterval => 1;
+
+        readonly RoadNetwork network;
+        readonly Vector2 worldMin, worldMax;
+        readonly Random rng;
+
+        public LaneGraph Lanes { get; }
+        public TrafficRules Rules { get; }
+        public JunctionController Junctions { get; }
+        public Pathfinder Paths { get; }
+        public TrafficStats Stats { get; } = new TrafficStats();
+
+        public readonly List<Vehicle> Vehicles = new List<Vehicle>();
+        readonly HashSet<Vehicle> removed = new HashSet<Vehicle>();
+
+        /// <summary>Verkehrsaufkommen (0 = aus, 1 = normal, 3 = sehr viel).</summary>
+        public float Demand = 1f;
+        public int MaxVehicles = 1500;
+        /// <summary>Simulierte Verkehrszeit in Sekunden.</summary>
+        public float Time { get; private set; }
+
+        long tick;
+        int nextId = 1;
+
+        sealed class Endpoint
+        {
+            public RoadNode Node;
+            public List<Lane> Out = new List<Lane>();
+            public List<Lane> In = new List<Lane>();
+            public bool Highway;
+        }
+        readonly List<Endpoint> endpoints = new List<Endpoint>();
+        int endpointsVersion = -1;
+
+        public TrafficSystem(RoadNetwork network, Vector2 worldMin, Vector2 worldMax, int seed = 12345)
+        {
+            this.network = network;
+            this.worldMin = worldMin;
+            this.worldMax = worldMax;
+            rng = new Random(seed);
+            Lanes = new LaneGraph(network);
+            Rules = new TrafficRules(network);
+            Junctions = new JunctionController(network, Lanes, Rules);
+            Paths = new Pathfinder(network, Lanes, Rules);
+
+            Lanes.LanesRemoved += lanes =>
+            {
+                foreach (var lane in lanes)
+                    foreach (var v in lane.Vehicles.ToList()) Remove(v, despawned: false);
+            };
+            Lanes.ConnectionsRemoved += conns =>
+            {
+                var set = new HashSet<LaneConnection>(conns);
+                foreach (var c in conns)
+                    foreach (var v in c.Vehicles.ToList()) Remove(v, despawned: false);
+                foreach (var v in Vehicles)
+                    if (v.Planned != null && set.Contains(v.Planned)) v.Planned = null;
+            };
+        }
+
+        public IEnumerable<Vehicle> ActiveVehicles => Vehicles.Where(v => !removed.Contains(v));
+
+        // ------------------------------------------------------------ Tick
+
+        public void Tick(SimulationWorld world)
+        {
+            tick++;
+            Time += Dt;
+            Lanes.Update();
+
+            if (Demand > 0f && Vehicles.Count < MaxVehicles) Spawn();
+
+            // Verbindungen zuerst (Fahrzeuge verlassen die Kreuzung), dann Spuren – jeweils vorderstes zuerst.
+            var conns = new HashSet<LaneConnection>();
+            var lanes = new HashSet<Lane>();
+            foreach (var v in Vehicles)
+            {
+                if (removed.Contains(v)) continue;
+                if (v.Connection != null) conns.Add(v.Connection);
+                else if (v.Lane != null) lanes.Add(v.Lane);
+            }
+            foreach (var c in conns)
+            {
+                var list = c.Vehicles.ToArray();
+                for (int i = 0; i < list.Length; i++)
+                    if (list[i].LastTick != tick && list[i].Connection == c) StepOnConnection(list[i], c);
+            }
+            foreach (var l in lanes)
+            {
+                var list = l.Vehicles.ToArray();
+                for (int i = 0; i < list.Length; i++)
+                    if (list[i].LastTick != tick && list[i].Lane == l && list[i].Connection == null) StepOnLane(list[i], l);
+            }
+
+            UpdatePositionsAndStats();
+            if (tick % 20 == 0) RelaxIdleLanes();
+
+            if (removed.Count > 0)
+            {
+                Vehicles.RemoveAll(v => removed.Contains(v));
+                removed.Clear();
+            }
+        }
+
+        // ------------------------------------------------------------ Fahren
+
+        float LaneSpeed(Lane lane, Vehicle v) => MathF.Min(v.MaxSpeed, Rules.SpeedLimit(lane.Segment));
+
+        float ConnectionSpeed(LaneConnection c, Vehicle v)
+        {
+            float limit = MathF.Min(Rules.SpeedLimit(c.From.Segment), Rules.SpeedLimit(c.To.Segment));
+            switch (c.Turn)
+            {
+                case TurnType.Straight: limit = c.From.Segment.IsRoundabout || c.To.Segment.IsRoundabout ? MathF.Min(limit, 8f) : limit; break;
+                case TurnType.UTurn: limit = 4f; break;
+                default: limit = MathF.Min(limit, 7.5f); break;
+            }
+            return MathF.Min(v.MaxSpeed, limit);
+        }
+
+        /// <summary>Intelligent Driver Model: Beschleunigung aus Wunschgeschwindigkeit und Abstand.</summary>
+        static float Idm(Vehicle v, float desired, float gap, float leaderSpeed)
+        {
+            float a = v.Acceleration;
+            float speed = v.Speed;
+            float dv = speed - leaderSpeed;
+            float sStar = MinGap + MathF.Max(0f, speed * TimeHeadway + speed * dv / (2f * MathF.Sqrt(a * ComfortDecel)));
+            float free = 1f - MathF.Pow(speed / MathF.Max(0.1f, desired), 4f);
+            float interaction = sStar / MathF.Max(0.1f, gap);
+            return a * (free - interaction * interaction);
+        }
+
+        void StepOnLane(Vehicle v, Lane lane)
+        {
+            v.LastTick = tick;
+            if (v.Planned != null && v.Planned.From != lane) v.Planned = null;
+
+            int index = lane.Vehicles.IndexOf(v);
+            var leader = index > 0 ? lane.Vehicles[index - 1] : null;
+            float length = lane.Length;
+            float desired = LaneSpeed(lane, v);
+            float gap = 1000f, leaderSpeed = desired;
+            if (leader != null)
+            {
+                gap = leader.S - leader.Length - v.S;
+                leaderSpeed = leader.Speed;
+            }
+
+            float distToEnd = length - v.S;
+            bool mayExit = false;
+            LaneConnection exit = null;
+
+            if (!v.IsOnFinalEdge && (leader == null || gap > distToEnd))
+            {
+                exit = v.Planned ?? (v.Planned = ChooseConnection(v));
+                if (removed.Contains(v)) return;
+                float endGap = 1000f, endSpeed = 0f;
+                if (exit == null)
+                {
+                    endGap = distToEnd - 0.5f;
+                }
+                else
+                {
+                    float lookahead = 12f + v.Speed * 3f;
+                    bool permitted = distToEnd > lookahead || CanEnter(v, exit, distToEnd);
+                    if (!permitted) endGap = distToEnd - 0.5f;
+                    else if (exit.To.FreeSpaceAtStart - JunctionQueue(exit) < v.Length + 1f && distToEnd < lookahead)
+                        endGap = distToEnd - 0.5f; // Kreuzung nicht blockieren
+                    else
+                    {
+                        mayExit = distToEnd <= lookahead;
+                        var cl = exit.Last;
+                        if (cl != null) { endGap = distToEnd + cl.S - cl.Length; endSpeed = cl.Speed; }
+                    }
+                }
+                if (endGap < gap) { gap = endGap; leaderSpeed = endSpeed; }
+            }
+
+            Advance(v, desired, gap, leaderSpeed, leader);
+
+            // Stillstand / Haltelinie
+            if (v.Speed < 0.3f) v.WaitTime += Dt; else v.WaitTime = 0f;
+            if (v.Speed < 0.3f && length - v.S < 4f) v.StopLineWait += Dt;
+            else if (v.Speed > 2f) v.StopLineWait = 0f;
+            if (v.LaneChangeCooldown > 0f) v.LaneChangeCooldown -= Dt;
+
+            if (v.S >= length)
+            {
+                if (v.IsOnFinalEdge) { Arrive(v); return; }
+                if (mayExit && exit != null) { EnterConnection(v, exit, v.S - length); return; }
+                v.S = length;
+                v.Speed = 0f;
+            }
+            else if (v.IsOnFinalEdge && v.S >= length - 1f)
+            {
+                Arrive(v);
+                return;
+            }
+
+            if (!v.IsOnFinalEdge && v.LaneChangeCooldown <= 0f) TryLaneChange(v, lane);
+
+            if (v.WaitTime > 25f && v.Reroutes < 3) { Reroute(v); v.WaitTime = 10f; }
+            else if (v.WaitTime > 90f) Remove(v, despawned: true);
+        }
+
+        void StepOnConnection(Vehicle v, LaneConnection c)
+        {
+            v.LastTick = tick;
+            int index = c.Vehicles.IndexOf(v);
+            var leader = index > 0 ? c.Vehicles[index - 1] : null;
+            float desired = ConnectionSpeed(c, v);
+            float gap = 1000f, leaderSpeed = desired;
+            if (leader != null) { gap = leader.S - leader.Length - v.S; leaderSpeed = leader.Speed; }
+
+            float distToEnd = c.Length - v.S;
+            var last = c.To.Last;
+            if (last != null)
+            {
+                float g = distToEnd + last.S - last.Length;
+                if (g < gap) { gap = g; leaderSpeed = last.Speed; }
+            }
+
+            Advance(v, desired, gap, leaderSpeed, leader);
+            if (v.Speed < 0.3f) v.WaitTime += Dt; else v.WaitTime = 0f;
+
+            if (v.S >= c.Length)
+            {
+                float overshoot = v.S - c.Length;
+                var target = c.To;
+                if (target.Last != null && target.Last.S - target.Last.Length < overshoot + 0.5f)
+                {
+                    v.S = c.Length;
+                    v.Speed = 0f;
+                }
+                else
+                {
+                    c.Vehicles.Remove(v);
+                    v.Connection = null;
+                    v.Lane = target;
+                    v.S = overshoot;
+                    target.Insert(v);
+                    v.RouteIndex++;
+                    v.Planned = null;
+                    v.WaitTime = 0f;
+                }
+            }
+            if (v.WaitTime > 90f) Remove(v, despawned: true);
+        }
+
+        static void Advance(Vehicle v, float desired, float gap, float leaderSpeed, Vehicle leader)
+        {
+            float acc = Idm(v, desired, gap, leaderSpeed);
+            acc = MathF.Max(acc, -9f);
+            v.Speed = Math.Clamp(v.Speed + acc * Dt, 0f, desired * 1.05f);
+            float move = v.Speed * Dt;
+            if (gap < 1000f) move = MathF.Min(move, MathF.Max(0f, gap - 0.3f));
+            if (leader != null) move = MathF.Min(move, MathF.Max(0f, leader.S - leader.Length - 0.3f - v.S));
+            if (move < v.Speed * Dt * 0.5f && move < 0.05f) v.Speed = MathF.Min(v.Speed, move / Dt);
+            v.S += move;
+        }
+
+        /// <summary>Wie viel Platz belegen Fahrzeuge, die gerade über die Kreuzung in diese Spur fahren?</summary>
+        float JunctionQueue(LaneConnection exit)
+        {
+            float sum = 0f;
+            foreach (var c in Lanes.GetConnections(exit.Node.Id))
+            {
+                if (c.To != exit.To) continue;
+                foreach (var v in c.Vehicles) sum += v.Length + MinGap;
+            }
+            return sum;
+        }
+
+        void EnterConnection(Vehicle v, LaneConnection c, float overshoot)
+        {
+            v.Lane.Vehicles.Remove(v);
+            v.Connection = c;
+            v.S = MathF.Min(overshoot, c.Length);
+            c.Insert(v);
+            v.Planned = null;
+            v.StopLineWait = 0f;
+            v.WaitTime = 0f;
+        }
+
+        // ------------------------------------------------------------ Spurwahl
+
+        LaneConnection ChooseConnection(Vehicle v)
+        {
+            if (!RouteValid(v))
+            {
+                Reroute(v);
+                if (v.IsOnFinalEdge || !RouteValid(v)) return null;
+            }
+            var next = v.NextEdge.Value;
+            var after = v.EdgeAfterNext;
+            var node = v.Lane.To;
+            LaneConnection best = null;
+            float bestScore = float.MaxValue;
+            foreach (var c in v.Lane.Outgoing)
+            {
+                if (!c.To.Edge.Equals(next) || (c.To.Allowed & v.Class) == 0) continue;
+                if (!Rules.IsTurnAllowed(node.Id, v.Lane.Segment.Id, c.To.Segment.Id, v.Class)) continue;
+                float score = c.To.Vehicles.Count + c.Vehicles.Count;
+                if (after.HasValue && !HasConnection(c.To, after.Value, v.Class)) score += 20f;
+                if (v.Class == VehicleClass.Bus && c.To.Definition.Kind == LaneKind.Bus) score -= 5f;
+                if (score < bestScore) { bestScore = score; best = c; }
+            }
+            return best;
+        }
+
+        bool HasConnection(Lane lane, EdgeKey edge, VehicleClass cls)
+        {
+            foreach (var o in lane.Outgoing)
+                if (o.To.Edge.Equals(edge) && (o.To.Allowed & cls) != 0 &&
+                    Rules.IsTurnAllowed(o.Node.Id, lane.Segment.Id, o.To.Segment.Id, cls)) return true;
+            return false;
+        }
+
+        bool RouteValid(Vehicle v)
+        {
+            for (int i = v.RouteIndex + 1; i < v.Route.Count; i++)
+            {
+                var e = v.Route[i];
+                if (network.GetSegment(e.SegmentId) == null || !Rules.IsSegmentAllowed(e.SegmentId, v.Class)) return false;
+            }
+            return v.Destination != null && network.Contains(v.Destination);
+        }
+
+        /// <summary>Wechselt auf eine Nachbarspur, wenn nur von dort die nächste Abbiegung möglich ist.</summary>
+        void TryLaneChange(Vehicle v, Lane lane)
+        {
+            var next = v.NextEdge;
+            if (!next.HasValue || HasConnection(lane, next.Value, v.Class)) return;
+            if (lane.Length - v.S < 6f) return;
+
+            // Nächstgelegene passende Spur suchen
+            Lane target = null;
+            int bestDistance = int.MaxValue;
+            foreach (var l in Lanes.LanesOf(lane.Edge))
+            {
+                if ((l.Allowed & v.Class) == 0 || !HasConnection(l, next.Value, v.Class)) continue;
+                int d = Math.Abs(l.Rank - lane.Rank);
+                if (d < bestDistance) { bestDistance = d; target = l; }
+            }
+            if (target == null) return;
+            var neighbor = target.Rank < lane.Rank ? lane.LeftNeighbor : lane.RightNeighbor;
+            if (neighbor == null || (neighbor.Allowed & v.Class) == 0) return;
+
+            // Lücke prüfen
+            Vehicle front = null, back = null;
+            foreach (var o in neighbor.Vehicles)
+            {
+                if (o.S >= v.S) front = o;
+                else { back = o; break; }
+            }
+            if (front != null && front.S - front.Length - v.S < 3f + v.Speed * 0.6f) return;
+            if (back != null && v.S - v.Length - back.S < 4f + back.Speed * 0.9f) return;
+
+            lane.Vehicles.Remove(v);
+            v.Lateral += lane.Offset - neighbor.Offset;
+            v.Lane = neighbor;
+            neighbor.Insert(v);
+            v.Planned = null;
+            v.LaneChangeCooldown = 1.5f;
+        }
+
+        void Reroute(Vehicle v)
+        {
+            if (v.Lane == null || v.InJunction) return;
+            v.Reroutes++;
+            var path = Paths.FindPath(v.Lane.Edge, v.Destination, v.Class, v.Lane) ??
+                       Paths.FindPath(v.Lane.Edge, v.Destination, v.Class);
+            if (path == null)
+            {
+                // Ziel nicht mehr erreichbar → neues Ziel
+                RefreshEndpoints();
+                var dest = PickDestination(v.Class, v.Lane.To);
+                if (dest != null) path = Paths.FindPath(v.Lane.Edge, dest.Node, v.Class);
+                if (dest == null || path == null) { Remove(v, despawned: true); return; }
+                v.Destination = dest.Node;
+            }
+            v.Route = path;
+            v.RouteIndex = 0;
+            v.Planned = null;
+        }
+
+        // ------------------------------------------------------------ Kreuzungen
+
+        /// <summary>Darf das Fahrzeug jetzt in die Kreuzung einfahren?</summary>
+        bool CanEnter(Vehicle v, LaneConnection c, float distToEnd)
+        {
+            var j = Junctions.Get(c.Node);
+            if (!j.IsJunction) return true;
+            int mine = c.From.Segment.Id;
+
+            if (j.Control == JunctionControl.TrafficLights)
+            {
+                var light = Junctions.LightFor(j, mine, Time);
+                // Bei Gelb noch fahren, wenn Anhalten nicht mehr möglich ist
+                return light == LightState.Green || (light == LightState.Yellow && distToEnd < v.Speed * 1.2f);
+            }
+
+            if (j.SignOf(mine) == ApproachSign.Stop && v.StopLineWait < 1.5f) return false;
+
+            int rank = j.RankOf(mine);
+            foreach (int other in j.Approaches)
+            {
+                if (other == mine) continue;
+                int r = j.RankOf(other);
+                bool yieldTo = r > rank || (r == rank && rank == 1 && j.FromRight(mine, other) && v.WaitTime < 6f);
+                if (yieldTo && ApproachBusy(j, other)) return false;
+            }
+
+            // Fahrzeuge anderer Zufahrten in der Kreuzung abwarten (außer Vorfahrtströme untereinander)
+            foreach (var conn in Lanes.GetConnections(c.Node.Id))
+            {
+                if (conn.Vehicles.Count == 0) continue;
+                int from = conn.From.Segment.Id;
+                if (from == mine) continue;
+                if (conn.To == c.To) return false;   // fährt gerade in dieselbe Spur ein
+                if (rank == 2) continue;             // Vorfahrtstrom: die anderen haben gewartet
+                if (j.RankOf(from) >= rank) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Nähert sich auf dieser Zufahrt ein Fahrzeug, das (noch) fahren will?</summary>
+        static bool ApproachBusy(JunctionInfo j, int approach)
+        {
+            foreach (var lane in j.IncomingLanes[approach])
+            {
+                if (lane.Vehicles.Count == 0) continue;
+                var f = lane.Vehicles[0];
+                float dist = lane.Length - f.S;
+                if (dist > 15f + f.Speed * 3f) continue;
+                if (f.Speed < 0.3f && f.WaitTime > 2f) continue; // steht selbst und wartet
+                return true;
+            }
+            return false;
+        }
+
+        // ------------------------------------------------------------ Entstehen / Verschwinden
+
+        void RefreshEndpoints()
+        {
+            if (endpointsVersion == Lanes.Version) return;
+            endpointsVersion = Lanes.Version;
+            endpoints.Clear();
+            foreach (var node in network.Nodes)
+            {
+                bool edge = node.Position.X < worldMin.X + 40f || node.Position.Y < worldMin.Y + 40f ||
+                            node.Position.X > worldMax.X - 40f || node.Position.Y > worldMax.Y - 40f;
+                if (node.SegmentIds.Count != 1 && !edge) continue;
+                var ep = new Endpoint { Node = node };
+                ep.Out.AddRange(Lanes.OutgoingLanes(node));
+                ep.In.AddRange(Lanes.IncomingLanes(node));
+                foreach (int id in node.SegmentIds) if (network.GetSegment(id).Type.IsHighway) ep.Highway = true;
+                if (ep.Out.Count > 0 || ep.In.Count > 0) endpoints.Add(ep);
+            }
+        }
+
+        /// <summary>Anzahl der Verkehrsquellen (Sackgassen und Kartenrand).</summary>
+        public int EndpointCount { get { RefreshEndpoints(); return endpoints.Count; } }
+
+        void Spawn()
+        {
+            RefreshEndpoints();
+            if (endpoints.Count < 2) return;
+            float expected = Demand * endpoints.Count * 0.02f;
+            int count = (int)expected + (rng.NextDouble() < expected - (int)expected ? 1 : 0);
+            for (int i = 0; i < count && Vehicles.Count < MaxVehicles; i++) TrySpawnOne();
+        }
+
+        void TrySpawnOne()
+        {
+            var origin = endpoints[rng.Next(endpoints.Count)];
+            if (origin.Out.Count == 0) return;
+
+            VehicleClass cls;
+            bool hasTram = origin.Out.Any(l => l.Allowed == VehicleClass.Tram);
+            double roll = rng.NextDouble();
+            if (hasTram && roll < 0.12) cls = VehicleClass.Tram;
+            else if (origin.Highway) cls = roll < 0.75 ? VehicleClass.Car : VehicleClass.Truck;
+            else cls = roll < 0.82 ? VehicleClass.Car : roll < 0.92 ? VehicleClass.Truck : VehicleClass.Bus;
+
+            var lanes = origin.Out.Where(l => (l.Allowed & cls) != 0 && Rules.IsSegmentAllowed(l.Segment.Id, cls)).ToList();
+            if (lanes.Count == 0) return;
+
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                var dest = PickDestination(cls, origin.Node);
+                if (dest == null) return;
+                var startEdge = lanes[rng.Next(lanes.Count)].Edge;
+                var path = Paths.FindPath(startEdge, dest.Node, cls);
+                if (path == null) continue;
+
+                // Spur so wählen, dass die erste Abbiegung ohne Spurwechsel geht
+                Lane lane = null;
+                foreach (var l in lanes)
+                {
+                    if (!l.Edge.Equals(startEdge) || l.FreeSpaceAtStart < VehicleClasses.Length(cls) + 4f) continue;
+                    if (lane == null || (path.Count > 1 && HasConnection(l, path[1], cls) && !HasConnection(lane, path[1], cls))) lane = l;
+                }
+                if (lane == null) return;
+
+                var v = new Vehicle
+                {
+                    Id = nextId++,
+                    Class = cls,
+                    Length = VehicleClasses.Length(cls),
+                    MaxSpeed = VehicleClasses.MaxSpeed(cls) * (0.9f + (float)rng.NextDouble() * 0.15f),
+                    Acceleration = VehicleClasses.Acceleration(cls),
+                    Variant = rng.Next(8),
+                    Lane = lane,
+                    Destination = dest.Node,
+                    Route = path,
+                };
+                v.S = MathF.Min(v.Length, lane.Length);
+                v.Speed = MathF.Min(8f, LaneSpeed(lane, v));
+                lane.Insert(v);
+                SamplePosition(v);
+                v.PrevPosition = v.Position;
+                v.PrevHeight = v.Height;
+                v.PrevDirection = v.Direction;
+                Vehicles.Add(v);
+                Stats.Spawned++;
+                return;
+            }
+        }
+
+        Endpoint PickDestination(VehicleClass cls, RoadNode except)
+        {
+            if (endpoints.Count == 0) return null;
+            for (int i = 0; i < 6; i++)
+            {
+                var e = endpoints[rng.Next(endpoints.Count)];
+                if (e.Node == except) continue;
+                if (e.In.Any(l => (l.Allowed & cls) != 0)) return e;
+            }
+            return null;
+        }
+
+        void Arrive(Vehicle v)
+        {
+            Stats.Arrived++;
+            Remove(v, despawned: false);
+        }
+
+        void Remove(Vehicle v, bool despawned)
+        {
+            if (!removed.Add(v)) return;
+            v.Lane?.Vehicles.Remove(v);
+            v.Connection?.Vehicles.Remove(v);
+            v.Lane = null;
+            v.Connection = null;
+            if (despawned) Stats.Despawned++;
+        }
+
+        // ------------------------------------------------------------ Darstellung / Statistik
+
+        void UpdatePositionsAndStats()
+        {
+            float speedSum = 0f;
+            int active = 0, waiting = 0;
+            foreach (var v in Vehicles)
+            {
+                if (removed.Contains(v)) continue;
+                v.PrevPosition = v.Position;
+                v.PrevHeight = v.Height;
+                v.PrevDirection = v.Direction;
+                if (MathF.Abs(v.Lateral) > 0.01f)
+                    v.Lateral = MathF.Sign(v.Lateral) * MathF.Max(0f, MathF.Abs(v.Lateral) - 2.5f * Dt);
+                else v.Lateral = 0f;
+                SamplePosition(v);
+                speedSum += v.Speed;
+                active++;
+                if (v.Speed < 0.5f) waiting++;
+            }
+            Stats.Active = active;
+            Stats.Waiting = waiting;
+            Stats.AverageSpeedKmh = active > 0 ? speedSum / active * 3.6f : 0f;
+
+            // Stauindex je Spur (gleitender Mittelwert)
+            var perLane = new Dictionary<Lane, (float sum, int n)>();
+            foreach (var v in Vehicles)
+            {
+                if (v.Lane == null || removed.Contains(v)) continue;
+                float ratio = v.Speed / MathF.Max(1f, LaneSpeed(v.Lane, v));
+                perLane.TryGetValue(v.Lane, out var acc);
+                perLane[v.Lane] = (acc.sum + ratio, acc.n + 1);
+            }
+            foreach (var kv in perLane)
+                kv.Key.SpeedRatio += (kv.Value.sum / kv.Value.n - kv.Key.SpeedRatio) * 0.05f;
+        }
+
+        void RelaxIdleLanes()
+        {
+            foreach (var lane in Lanes.AllLanes)
+                if (lane.Vehicles.Count == 0) lane.SpeedRatio += (1f - lane.SpeedRatio) * 0.3f;
+        }
+
+        static void SamplePosition(Vehicle v)
+        {
+            Vector2 pos, dir;
+            float h;
+            if (v.Connection != null)
+            {
+                v.Connection.Sample(MathF.Max(0f, v.S - v.Length * 0.5f), out pos, out h, out dir);
+            }
+            else if (v.Lane != null)
+            {
+                v.Lane.Sample(MathF.Max(0f, v.S - v.Length * 0.5f), v.Lateral, out pos, out h, out dir);
+            }
+            else return;
+            v.Position = pos;
+            v.Height = h;
+            v.Direction = dir;
+        }
+
+        /// <summary>Lichtzustand einer Zufahrt (für die Anzeige).</summary>
+        public LightState LightAt(RoadNode node, int approachSegment)
+        {
+            var j = Junctions.Get(node);
+            return Junctions.LightFor(j, approachSegment, Time);
+        }
+    }
+}

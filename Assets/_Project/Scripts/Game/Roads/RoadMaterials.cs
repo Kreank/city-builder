@@ -12,6 +12,8 @@ namespace CityBuilder.Game.Roads
         TramBed = 4,
         Rail = 5,
         Median = 6,
+        /// <summary>Geländekante am Trog (gleiche Farbe wie der Boden).</summary>
+        Ground = 7,
     }
 
     /// <summary>
@@ -20,7 +22,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadMaterials
     {
-        public const int SurfaceCount = 7;
+        public const int SurfaceCount = 8;
 
         static readonly Color[] Colors =
         {
@@ -31,6 +33,7 @@ namespace CityBuilder.Game.Roads
             new Color(0.38f, 0.36f, 0.33f), // Gleisbett
             new Color(0.12f, 0.11f, 0.10f), // Schiene
             new Color(0.33f, 0.45f, 0.26f), // Mittelstreifen
+            new Color(0.36f, 0.52f, 0.28f), // Boden (wie Ground-Material aus ProjectSetup)
         };
 
         public Material[] All { get; } = new Material[SurfaceCount];

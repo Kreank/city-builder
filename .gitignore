@@ -14,6 +14,10 @@
 sysinfo.txt
 crashlytics-build.properties
 
+# Asset-Store-Pakete (Lizenz: nicht weitergeben; Liste in CLAUDE.md, neu importieren über "My Assets")
+/Assets/ThirdParty/
+/Assets/ThirdParty.meta
+
 # Von Unity generierte IDE-Dateien
 .vs/
 .idea/

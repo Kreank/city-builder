@@ -1,5 +1,6 @@
 using System;
 using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.Roads;
 
 namespace CityBuilder.Simulation.Environment
 {
@@ -25,7 +26,10 @@ namespace CityBuilder.Simulation.Environment
                 for (int i = 0; i < samples; i++)
                 {
                     float t = i / (float)(samples - 1);
-                    noise.StampRadialMax(segment.Evaluate(t), type.NoiseRadius, type.NoiseLevel);
+                    // Tunnel sind still, im offenen Trog dämpfen die Wände
+                    float h = segment.HeightAt(t);
+                    float level = segment.IsCoveredAt(t) ? 0f : h < -0.3f ? type.NoiseLevel * 0.5f : type.NoiseLevel;
+                    noise.StampRadialMax(segment.Evaluate(t), type.NoiseRadius, level);
                 }
             }
         }

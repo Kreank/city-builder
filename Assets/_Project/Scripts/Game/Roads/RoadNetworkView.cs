@@ -22,6 +22,9 @@ namespace CityBuilder.Game.Roads
         RoadNetwork network;
         RoadMaterials materials;
 
+        /// <summary>Beleuchtetes Basis-Material (URP Lit) – auch für Fahrzeuge und Schilder.</summary>
+        public Material BaseMaterial => roadMaterial;
+
         void Start()
         {
             materials = new RoadMaterials(roadMaterial);
@@ -31,10 +34,23 @@ namespace CityBuilder.Game.Roads
             network.NodeRemoved += OnNodeRemoved;
 
             foreach (var s in network.Segments) OnSegmentAdded(s);
+            runner.World.Terrain.Changed += OnTerrainChanged;
+        }
+
+        /// <summary>Gelände geändert → Brücken/Tröge in dem Bereich neu bauen (Pfeilerlänge, Trogwände).</summary>
+        void OnTerrainChanged(System.Numerics.Vector2 min, System.Numerics.Vector2 max)
+        {
+            foreach (var s in network.Segments)
+            {
+                CityBuilder.Simulation.Roads.Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var smin, out var smax);
+                if (smax.X < min.X || smax.Y < min.Y || smin.X > max.X || smin.Y > max.Y) continue;
+                dirtySegments.Add(s.Id);
+            }
         }
 
         void OnDestroy()
         {
+            if (runner != null && runner.World != null) runner.World.Terrain.Changed -= OnTerrainChanged;
             if (network != null)
             {
                 network.SegmentAdded -= OnSegmentAdded;
@@ -94,24 +110,17 @@ namespace CityBuilder.Game.Roads
         /// <summary>Kreuzung = ab 3 Straßen. Dort wird die Fläche frei gehalten (keine Markierungen).</summary>
         static bool IsJunction(RoadNode node) => node.SegmentIds.Count >= 3;
 
-        float JunctionRadius(RoadNode node)
-        {
-            float r = 0f;
-            foreach (int id in node.SegmentIds) r = Mathf.Max(r, network.GetSegment(id).Type.HalfWidth);
-            return r;
-        }
-
         void RebuildSegment(RoadSegment seg)
         {
-            float trimStart = IsJunction(seg.Start) ? JunctionRadius(seg.Start) : 0f;
-            float trimEnd = IsJunction(seg.End) ? JunctionRadius(seg.End) : 0f;
+            float trimStart = IsJunction(seg.Start) ? RoadMeshBuilder.JunctionTrim(network, seg.Start, seg) : 0f;
+            float trimEnd = IsJunction(seg.End) ? RoadMeshBuilder.JunctionTrim(network, seg.End, seg) : 0f;
 
             if (!segmentObjects.TryGetValue(seg.Id, out var mf))
             {
                 mf = CreateMeshObject($"Road {seg.Id} ({seg.Type.DisplayName})", materials.All);
                 segmentObjects[seg.Id] = mf;
             }
-            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh);
+            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground);
         }
 
         void RebuildNode(RoadNode node)
@@ -128,22 +137,26 @@ namespace CityBuilder.Game.Roads
                 return;
             }
 
-            // Grad 2: kleine Scheibe schließt Lücken in Knicken. Kreuzung: volle Fläche.
-            float radius = 0f;
-            foreach (int id in node.SegmentIds)
-            {
-                var t = network.GetSegment(id).Type;
-                radius = Mathf.Max(radius, IsJunction(node) ? t.HalfWidth : t.CarriagewayHalfWidth);
-            }
-
             if (!nodeObjects.TryGetValue(node.Id, out var mf))
             {
                 mf = CreateMeshObject($"Node {node.Id}", new[] { materials[RoadSurface.Asphalt] });
-                mf.transform.position = SimConvert.ToWorld(node.Position);
                 nodeObjects[node.Id] = mf;
             }
-            // Leicht unter der Fahrbahn, damit Markierungen der Segmente sichtbar bleiben.
-            mf.sharedMesh = RoadMeshBuilder.BuildDisc(radius, RoadMeshBuilder.RoadHeight - 0.002f, mf.sharedMesh);
+            var mr = mf.GetComponent<MeshRenderer>();
+
+            if (IsJunction(node))
+            {
+                // Kreuzung: Fläche aus den Fahrbahnkanten mit gerundeten Ecken + Gehweg-Ecken
+                mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt], materials[RoadSurface.Sidewalk] };
+                mf.sharedMesh = RoadMeshBuilder.BuildJunction(network, node, mf.sharedMesh);
+                return;
+            }
+
+            // Grad 2: kleine Scheibe schließt Lücken in Knicken (leicht unter der Fahrbahn, Markierungen bleiben sichtbar)
+            float radius = 0f;
+            foreach (int id in node.SegmentIds) radius = Mathf.Max(radius, network.GetSegment(id).Type.CarriagewayHalfWidth);
+            mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt] };
+            mf.sharedMesh = RoadMeshBuilder.BuildDisc(node.Position, radius, node.Height + RoadMeshBuilder.RoadHeight - 0.002f, mf.sharedMesh);
         }
 
         MeshFilter CreateMeshObject(string name, Material[] mats)

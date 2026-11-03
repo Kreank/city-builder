@@ -7,5 +7,11 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Zellgröße der Umwelt-Raster (Lärm, Abgas ...) in Metern.</summary>
         public float EnvironmentCellSize = 16f;
+
+        /// <summary>Hügel/Fluss erzeugen (sonst flacher Boden auf 0 – z. B. für Tests).</summary>
+        public bool GenerateTerrain;
+        public int TerrainSeed = 4711;
+        /// <summary>Abstand der Gitterpunkte der Höhenkarte in Metern.</summary>
+        public float TerrainCellSize = 4f;
     }
 }

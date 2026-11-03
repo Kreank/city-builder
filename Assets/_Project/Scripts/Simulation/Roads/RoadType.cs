@@ -42,6 +42,9 @@ namespace CityBuilder.Simulation.Roads
 
         public bool IsHighway => Category == RoadCategory.Highway;
 
+        /// <summary>Maximale Steigung (Anteil, 0.06 = 6 %).</summary>
+        public float MaxSlope => Category == RoadCategory.Highway ? 0.06f : Category == RoadCategory.Ramp ? 0.08f : 0.10f;
+
         RoadType(string id, string displayName, RoadCategory category, List<LaneDefinition> lanes,
             float speedLimitKmh, float costPerMeter, float noiseLevel, float noiseRadius)
         {

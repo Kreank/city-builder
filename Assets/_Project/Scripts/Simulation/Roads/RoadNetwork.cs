@@ -6,11 +6,13 @@ namespace CityBuilder.Simulation.Roads
 {
     /// <summary>
     /// Das Straßennetz als Graph (Knoten + Segmente) mit den Grundoperationen.
-    /// Das eigentliche Bauen mit Prüfungen, Kreuzungen und Kreisverkehren macht <see cref="RoadBuilder"/>.
+    /// Das eigentliche Bauen mit Prüfungen, Kreuzungen, Kreisverkehren und Vorlagen macht <see cref="RoadBuilder"/>.
     /// </summary>
     public sealed class RoadNetwork
     {
         public const float MinSegmentLength = 4f;
+        /// <summary>Höhenunterschied, bis zu dem zwei Straßen als „gleiche Ebene“ gelten.</summary>
+        public const float SameLevelTolerance = 1.5f;
 
         readonly Dictionary<int, RoadNode> nodes = new Dictionary<int, RoadNode>();
         readonly Dictionary<int, RoadSegment> segments = new Dictionary<int, RoadSegment>();
@@ -21,6 +23,17 @@ namespace CityBuilder.Simulation.Roads
         public event Action<RoadSegment> SegmentRemoved;
         public event Action<RoadNode> NodeAdded;
         public event Action<RoadNode> NodeRemoved;
+        /// <summary>
+        /// Ein Segment wurde durch andere ersetzt (Zerteilen, Typwechsel, Umdrehen).
+        /// Wird nach SegmentRemoved/SegmentAdded ausgelöst – z. B. um Verkehrsregeln zu übernehmen.
+        /// </summary>
+        public event Action<RoadSegment, IReadOnlyList<RoadSegment>> SegmentReplaced;
+
+        /// <summary>Wird bei jeder Änderung erhöht.</summary>
+        public int Version { get; private set; }
+
+        /// <summary>Gelände unter dem Netz (Standard: flach auf 0).</summary>
+        public IGround Ground { get; set; } = FlatGround.Instance;
 
         public IEnumerable<RoadNode> Nodes => nodes.Values;
         public IEnumerable<RoadSegment> Segments => segments.Values;
@@ -32,23 +45,25 @@ namespace CityBuilder.Simulation.Roads
         public bool Contains(RoadNode node) => node != null && nodes.ContainsKey(node.Id);
         public bool Contains(RoadSegment segment) => segment != null && segments.ContainsKey(segment.Id);
 
-        public RoadNode AddNode(Vector2 position)
+        public RoadNode AddNode(Vector2 position, float height = 0f)
         {
-            var node = new RoadNode(nextNodeId++, position);
+            var node = new RoadNode(nextNodeId++, position, height);
             nodes.Add(node.Id, node);
+            Version++;
             NodeAdded?.Invoke(node);
             return node;
         }
 
         /// <summary>Verbindet zwei Knoten. Liefert null, wenn das Segment zu kurz oder doppelt wäre.</summary>
-        public RoadSegment AddSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type)
+        public RoadSegment AddSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type,
+            RoadSegmentFlags flags = RoadSegmentFlags.None)
         {
             if (start == null || end == null || type == null) throw new ArgumentNullException();
             if (start == end) return null;
             if (!Contains(start) || !Contains(end)) throw new ArgumentException("Knoten gehört nicht zu diesem Netz.");
             if (Vector2.Distance(start.Position, end.Position) < MinSegmentLength) return null;
             if (HasMatchingSegment(start, end, control)) return null;
-            return CreateSegment(start, end, control, type);
+            return CreateSegment(start, end, control, type, flags);
         }
 
         public bool RemoveSegment(int segmentId)
@@ -61,8 +76,8 @@ namespace CityBuilder.Simulation.Roads
         }
 
         /// <summary>
-        /// Zerteilt ein Segment bei t in zwei Segmente gleichen Typs und gleicher Richtung.
-        /// Liefert den neuen Knoten an der Schnittstelle.
+        /// Zerteilt ein Segment bei t in zwei Segmente gleichen Typs, gleicher Richtung und Flags.
+        /// Liefert den neuen Knoten an der Schnittstelle (Höhe interpoliert).
         /// </summary>
         public RoadNode SplitSegment(RoadSegment segment, float t)
         {
@@ -70,19 +85,42 @@ namespace CityBuilder.Simulation.Roads
             Bezier.Split(segment.Start.Position, segment.Control, segment.End.Position, t,
                 out var leftControl, out var point, out var rightControl);
 
-            var node = AddNode(point);
+            var node = AddNode(point, segment.HeightAt(t));
             DetachSegment(segment);
-            CreateSegment(segment.Start, node, leftControl, segment.Type);
-            CreateSegment(node, segment.End, rightControl, segment.Type);
+            var a = CreateSegment(segment.Start, node, leftControl, segment.Type, segment.Flags);
+            var b = CreateSegment(node, segment.End, rightControl, segment.Type, segment.Flags);
+            SegmentReplaced?.Invoke(segment, new[] { a, b });
             return node;
         }
 
-        public RoadNode FindNearestNode(Vector2 position, float maxDistance)
+        /// <summary>Tauscht den Straßentyp (gleiche Form/Richtung). Liefert das neue Segment.</summary>
+        public RoadSegment ReplaceType(RoadSegment segment, RoadType type)
+        {
+            if (!Contains(segment)) throw new ArgumentException("Segment gehört nicht zu diesem Netz.");
+            DetachSegment(segment);
+            var replacement = CreateSegment(segment.Start, segment.End, segment.Control, type, segment.Flags);
+            SegmentReplaced?.Invoke(segment, new[] { replacement });
+            return replacement;
+        }
+
+        /// <summary>Dreht die Fahrtrichtung um (wichtig für Einbahnstraßen). Liefert das neue Segment.</summary>
+        public RoadSegment Reverse(RoadSegment segment)
+        {
+            if (!Contains(segment)) throw new ArgumentException("Segment gehört nicht zu diesem Netz.");
+            DetachSegment(segment);
+            var replacement = CreateSegment(segment.End, segment.Start, segment.Control, segment.Type, segment.Flags);
+            SegmentReplaced?.Invoke(segment, new[] { replacement });
+            return replacement;
+        }
+
+        /// <summary>Nächster Knoten im Umkreis; mit <paramref name="height"/> nur Knoten auf gleicher Ebene.</summary>
+        public RoadNode FindNearestNode(Vector2 position, float maxDistance, float? height = null)
         {
             RoadNode best = null;
             float bestDist = maxDistance;
             foreach (var node in nodes.Values)
             {
+                if (height.HasValue && MathF.Abs(node.Height - height.Value) > SameLevelTolerance) continue;
                 float d = Vector2.Distance(node.Position, position);
                 if (d <= bestDist)
                 {
@@ -93,8 +131,11 @@ namespace CityBuilder.Simulation.Roads
             return best;
         }
 
-        /// <summary>Nächstes Segment, dessen Fahrbahnrand höchstens <paramref name="maxDistance"/> entfernt ist (0 = Punkt liegt auf der Straße).</summary>
-        public RoadSegment FindNearestSegment(Vector2 position, float maxDistance)
+        /// <summary>
+        /// Nächstes Segment, dessen Fahrbahnrand höchstens <paramref name="maxDistance"/> entfernt ist
+        /// (0 = Punkt liegt auf der Straße). Mit <paramref name="height"/> nur Straßen auf gleicher Ebene.
+        /// </summary>
+        public RoadSegment FindNearestSegment(Vector2 position, float maxDistance, float? height = null)
         {
             RoadSegment best = null;
             float bestDist = maxDistance;
@@ -105,7 +146,9 @@ namespace CityBuilder.Simulation.Roads
                 if (position.X < min.X - margin || position.Y < min.Y - margin ||
                     position.X > max.X + margin || position.Y > max.Y + margin) continue;
 
-                float d = segment.DistanceTo(position) - segment.Type.HalfWidth;
+                float t = segment.ClosestT(position);
+                if (height.HasValue && MathF.Abs(segment.HeightAt(t) - height.Value) > SameLevelTolerance) continue;
+                float d = Vector2.Distance(segment.Evaluate(t), position) - segment.Type.HalfWidth;
                 if (d <= bestDist)
                 {
                     bestDist = d;
@@ -140,15 +183,17 @@ namespace CityBuilder.Simulation.Roads
         public void RemoveNodeIfOrphan(RoadNode node)
         {
             if (node.segmentIds.Count > 0 || !nodes.Remove(node.Id)) return;
+            Version++;
             NodeRemoved?.Invoke(node);
         }
 
-        RoadSegment CreateSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type)
+        RoadSegment CreateSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type, RoadSegmentFlags flags)
         {
-            var segment = new RoadSegment(nextSegmentId++, start, end, control, type);
+            var segment = new RoadSegment(nextSegmentId++, start, end, control, type, flags, Ground);
             segments.Add(segment.Id, segment);
             start.segmentIds.Add(segment.Id);
             end.segmentIds.Add(segment.Id);
+            Version++;
             SegmentAdded?.Invoke(segment);
             return segment;
         }
@@ -158,6 +203,7 @@ namespace CityBuilder.Simulation.Roads
             segments.Remove(segment.Id);
             segment.Start.segmentIds.Remove(segment.Id);
             segment.End.segmentIds.Remove(segment.Id);
+            Version++;
             SegmentRemoved?.Invoke(segment);
         }
     }

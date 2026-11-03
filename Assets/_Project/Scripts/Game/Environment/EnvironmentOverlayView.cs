@@ -40,14 +40,11 @@ namespace CityBuilder.Game.Environment
             };
             pixels = new Color32[layer.Width * layer.Height];
 
-            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            quad.name = "Environment Overlay";
-            Destroy(quad.GetComponent<Collider>());
+            // Fläche folgt dem Gelände (Gitter im Raster des Umwelt-Layers)
+            var quad = new GameObject("Environment Overlay");
             quad.transform.SetParent(transform, false);
-            float size = layer.Width * layer.CellSize;
-            quad.transform.position = new Vector3(layer.Origin.X + size * 0.5f, height, layer.Origin.Y + size * 0.5f);
-            quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            quad.transform.localScale = new Vector3(size, size, 1f);
+            quad.AddComponent<MeshFilter>().sharedMesh = BuildTerrainGrid(layer);
+            quad.AddComponent<MeshRenderer>();
 
             materialInstance = new Material(overlayMaterial) { mainTexture = texture };
             quadRenderer = quad.GetComponent<MeshRenderer>();
@@ -58,6 +55,37 @@ namespace CityBuilder.Game.Environment
 
             if (noiseGradient == null || noiseGradient.colorKeys.Length < 2) noiseGradient = DefaultGradient(new Color(1f, 0.9f, 0.2f), new Color(0.9f, 0.1f, 0.1f));
             if (pollutionGradient == null || pollutionGradient.colorKeys.Length < 2) pollutionGradient = DefaultGradient(new Color(0.6f, 0.5f, 0.3f), new Color(0.25f, 0.15f, 0.05f));
+        }
+
+        Mesh BuildTerrainGrid(GridLayer layer)
+        {
+            var terrain = runner.World.Terrain;
+            int n = layer.Width;
+            var verts = new Vector3[(n + 1) * (n + 1)];
+            var uvs = new Vector2[verts.Length];
+            for (int y = 0; y <= n; y++)
+            for (int x = 0; x <= n; x++)
+            {
+                var p = layer.Origin + new System.Numerics.Vector2(x * layer.CellSize, y * layer.CellSize);
+                float h = Mathf.Max(terrain.HeightAt(p), terrain.WaterLevel) + height + 1f;
+                verts[y * (n + 1) + x] = new Vector3(p.X, h, p.Y);
+                uvs[y * (n + 1) + x] = new Vector2(x / (float)n, y / (float)n);
+            }
+            var tris = new int[n * n * 6];
+            int k = 0;
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int b = y * (n + 1) + x;
+                tris[k++] = b; tris[k++] = b + n + 1; tris[k++] = b + 1;
+                tris[k++] = b + 1; tris[k++] = b + n + 1; tris[k++] = b + n + 2;
+            }
+            var mesh = new Mesh { name = "OverlayGrid", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         void OnDestroy()

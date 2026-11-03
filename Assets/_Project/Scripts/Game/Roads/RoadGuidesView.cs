@@ -12,8 +12,10 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadGuidesView : MonoBehaviour
     {
-        const float LineHeight = 0.45f;
+        const float LineOffset = 0.45f;
         const int ArcSegments = 24;
+        /// <summary>Höhe der Hilfslinien – folgt der Bauhöhe (Brücken).</summary>
+        float LineHeight = LineOffset;
 
         static readonly Color GuideColor = new Color(1f, 1f, 1f, 0.35f);
         static readonly Color ArcColor = new Color(1f, 0.85f, 0.2f, 0.95f);
@@ -49,12 +51,18 @@ namespace CityBuilder.Game.Roads
                 float camDist = Vector3.Distance(tool.Camera.transform.position, SimConvert.ToWorld(tool.Cursor));
                 float width = Mathf.Max(0.15f, camDist * 0.0025f);
 
-                DrawSnapMarker(tool.CursorAnchor, width);
                 var g = tool.Guide;
+                LineHeight = LineOffset + (g.Active ? Mathf.Max(g.StartHeight, g.EndHeight) : tool.CursorHeight);
+                DrawSnapMarker(tool.CursorAnchor, width);
                 if (g.Active)
                 {
-                    if (g.IsRoundabout) DrawRoundabout(g, width);
+                    if (g.LabelOnly) DrawLabels(g);
+                    else if (g.IsRoundabout) DrawRoundabout(g, width);
                     else DrawRoad(g, width, camDist);
+                }
+                else if (tool.IsBuildMode && Mathf.Abs(tool.BuildHeight) > 0.1f)
+                {
+                    labels.Add((SimConvert.ToWorld(tool.Cursor, LineHeight), $"Bauhöhe {tool.BuildHeight:0} m", false));
                 }
             }
 
@@ -67,7 +75,18 @@ namespace CityBuilder.Game.Roads
         {
             if (anchor.Kind == AnchorKind.Free) return;
             float r = anchor.Kind == AnchorKind.Node ? 3f : 2f;
+            float old = LineHeight;
+            LineHeight = LineOffset + anchor.Height;
             Circle(anchor.Position, r + width * 4f, SnapColor, width * 1.2f, 20);
+            LineHeight = old;
+        }
+
+        void DrawLabels(RoadTool.GuideState g)
+        {
+            if (!string.IsNullOrEmpty(g.Info))
+                labels.Add((SimConvert.ToWorld(g.Start, LineHeight + 3f), g.Info, false));
+            if (!string.IsNullOrEmpty(g.Error))
+                labels.Add((SimConvert.ToWorld(g.Start, LineHeight + 3f), g.Error, true));
         }
 
         void DrawRoad(RoadTool.GuideState g, float width, float camDist)
@@ -117,6 +136,7 @@ namespace CityBuilder.Game.Roads
                 string text = g.PlacingControl
                     ? $"{g.Length:0} m (Richtung)"
                     : $"{g.Length:0} m · {g.Cost:0} €";
+                if (!string.IsNullOrEmpty(g.Info)) text += "\n" + g.Info;
                 labels.Add((SimConvert.ToWorld(labelPos, LineHeight), text, false));
             }
 
@@ -152,7 +172,7 @@ namespace CityBuilder.Game.Roads
 
         static SimVector2 SafeDir(SimVector2 v) => v.LengthSquared() > 1e-6f ? SimVector2.Normalize(v) : SimVector2.UnitY;
 
-        static Vector3 ArcLabelPos(SimVector2 center, SimVector2 from, SimVector2 to, float radius)
+        Vector3 ArcLabelPos(SimVector2 center, SimVector2 from, SimVector2 to, float radius)
         {
             float half = RoadGeometry.SignedAngle(from, to) * 0.5f;
             var dir = RoadGeometry.Rotate(from, half);

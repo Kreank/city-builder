@@ -15,6 +15,9 @@ namespace CityBuilder.Game
         [Tooltip("Ticks pro Echtzeit-Sekunde bei Geschwindigkeit 1.")]
         [SerializeField] float ticksPerSecond = 10f;
         [SerializeField] int maxTicksPerFrame = 20;
+        [Header("Gelände")]
+        [SerializeField] bool generateTerrain = true;
+        [SerializeField] int terrainSeed = 4711;
 
         static readonly int[] SpeedMultipliers = { 0, 1, 3, 10 };
 
@@ -25,9 +28,17 @@ namespace CityBuilder.Game
         public int SpeedMultiplier => SpeedMultipliers[SpeedIndex];
         public bool IsPaused => SpeedIndex == 0;
 
+        /// <summary>Anteil (0..1) zwischen letztem und nächstem Tick – für flüssige Darstellung (Interpolation).</summary>
+        public float TickAlpha => Mathf.Clamp01(accumulator);
+
         void Awake()
         {
-            World = SimulationWorld.CreateDefault(new WorldSettings { SizeMeters = worldSize });
+            World = SimulationWorld.CreateDefault(new WorldSettings
+            {
+                SizeMeters = worldSize,
+                GenerateTerrain = generateTerrain,
+                TerrainSeed = terrainSeed,
+            });
         }
 
         void Update()

@@ -92,11 +92,14 @@ namespace CityBuilder.Simulation.Roads
             u = v = 0f;
             Vector2 r = a1 - a0, s = b1 - b0;
             float denom = r.X * s.Y - r.Y * s.X;
-            if (System.Math.Abs(denom) < 1e-9f) return false; // parallel
+            // Relativ prüfen: (fast) parallele/kollineare Stücke liefern sonst numerischen Unsinn
+            if (System.Math.Abs(denom) < 1e-4f * r.Length() * s.Length()) return false;
             Vector2 qp = b0 - a0;
             u = (qp.X * s.Y - qp.Y * s.X) / denom;
             v = (qp.X * r.Y - qp.Y * r.X) / denom;
-            return u >= 0f && u <= 1f && v >= 0f && v <= 1f;
+            if (u < 0f || u > 1f || v < 0f || v > 1f) return false;
+            // Gegenprobe: beide Parameter müssen auf denselben Punkt zeigen
+            return Vector2.DistanceSquared(a0 + r * u, b0 + s * v) < 0.01f;
         }
 
         /// <summary>Achsenparalleler Hüllquader (Kurve liegt immer in der konvexen Hülle der Kontrollpunkte).</summary>

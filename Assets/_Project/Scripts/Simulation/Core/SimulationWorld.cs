@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
+using CityBuilder.Simulation.Traffic;
 
 namespace CityBuilder.Simulation.Core
 {
@@ -23,17 +24,30 @@ namespace CityBuilder.Simulation.Core
         public Vector2 Min => new Vector2(-Settings.SizeMeters * 0.5f);
         public Vector2 Max => new Vector2(Settings.SizeMeters * 0.5f);
 
+        /// <summary>Höhenkarte. Ebenerdige Straßen passen das Gelände an (Damm/Einschnitt).</summary>
+        public TerrainMap Terrain { get; }
+
         public SimulationWorld(WorldSettings settings)
         {
             Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             Environment = new EnvironmentLayers(Min, settings.SizeMeters, settings.EnvironmentCellSize);
+            Terrain = settings.GenerateTerrain
+                ? TerrainMap.Generate(Min, settings.SizeMeters, settings.TerrainCellSize, settings.TerrainSeed)
+                : TerrainMap.Flat(Min, settings.SizeMeters, settings.TerrainCellSize);
+            Roads.Ground = Terrain;
+            Roads.SegmentAdded += Terrain.ConformTo;
         }
 
+        /// <summary>Verkehr (Spurgraph, Regeln, Fahrzeuge). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public TrafficSystem Traffic { get; private set; }
+
         /// <summary>Welt mit den Standard-Systemen.</summary>
-        public static SimulationWorld CreateDefault(WorldSettings settings = null)
+        public static SimulationWorld CreateDefault(WorldSettings settings = null, int seed = 12345)
         {
             var world = new SimulationWorld(settings ?? new WorldSettings());
             world.AddSystem(new NoiseSystem());
+            world.Traffic = new TrafficSystem(world.Roads, world.Min, world.Max, seed);
+            world.AddSystem(world.Traffic);
             return world;
         }
 

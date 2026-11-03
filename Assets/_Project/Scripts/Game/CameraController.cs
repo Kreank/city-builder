@@ -27,8 +27,12 @@ namespace CityBuilder.Game
         [SerializeField] float smoothing = 12f;
 
         float targetDistance;
+        float groundHeight;
+        SimulationRunner runner;
 
         void Awake() => targetDistance = distance;
+
+        void Start() => runner = FindAnyObjectByType<SimulationRunner>();
 
         void LateUpdate()
         {
@@ -75,7 +79,13 @@ namespace CityBuilder.Game
 
             focus.x = Mathf.Clamp(focus.x, -worldHalfSize, worldHalfSize);
             focus.z = Mathf.Clamp(focus.z, -worldHalfSize, worldHalfSize);
-            focus.y = 0f;
+            // Fokuspunkt folgt dem Gelände (weich, damit die Kamera nicht springt)
+            if (runner != null && runner.World != null)
+            {
+                float g = Mathf.Max(runner.World.Terrain.HeightAt(SimConvert.ToSim(focus)), runner.World.Terrain.WaterLevel);
+                groundHeight = Mathf.Lerp(groundHeight, g, 1f - Mathf.Exp(-4f * dt));
+            }
+            focus.y = groundHeight;
 
             Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
             transform.position = focus - rot * Vector3.forward * distance;
