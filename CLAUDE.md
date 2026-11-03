@@ -5,6 +5,20 @@ Umwelt-Overlays), Anno (Produktionsketten, Bedürfnisstufen). Ziel: Start bei 0 
 mehreren Städten → Handel mit anderen Reichen (Bots, später echte Spieler, asynchron).
 Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-Asset).
 
+## Vision (vom Spieler formuliert, Leitlinie für alle Etappen)
+- **Fiktive Erde:** Man erschafft sein eigenes Land, baut eine Stadt, später weitere Städte (selbst oder durch NPCs).
+  Jedes Land hat andere natürliche Vorkommen und Stärken (Tourismus, Rohstoffe, Technik …).
+- **Handel intern und extern:** zwischen eigenen Städten und zwischen Ländern; Regierungen können gebildet werden.
+  **Freunde einladen** (Multiplayer, asynchron): eigene Städte im eigenen Land oder als fremdes Land, Handel untereinander.
+- **Zwei Bauarten:** (1) **Gebiete** markieren, Leute kommen und bebauen selbst – Wohnen (gering/mittel/dicht),
+  Industrie (mehrere Formen), Büro + Läden. (2) **Einzeln baubare Gebäude mit Einflussradius:** Polizei, Feuerwehr,
+  Schulen, Bibliothek, Parks, Strom, Wasser und Abwasser, Medien (Zeitung, Radio, TV-Sender), Taxi-/Bus-/Zug-Depot,
+  Müllhalde, Verbrennungsanlage, Flughafen, Hafen, S-Bahn, Fernbahn, U-Bahn.
+- **Bevölkerung & Wirtschaft mit ausgeklügelter Logik:** Besiedlung folgt Angebot und Nachfrage; die Bilanz muss gehalten,
+  optimal Einnahmen erzielt werden. Das Spiel soll eine echte **Herausforderung** sein (ggf. KI für Besiedlung/NPCs).
+- **Alles, was es wirklich gibt:** Schiffe, Flugzeuge, Züge, Autobahnen, Straßen, Tunnel, Brücken, Zugbrücken,
+  Solarparks, Kohle- und Atomkraftwerke … – Schritt für Schritt. **Tiefgang ist sehr wichtig** (lieber tief als breit).
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
@@ -177,13 +191,17 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht. Später: Abwasser, schwankende Erzeugung, Kosten abbuchen
-   - G4 Dienste: Polizei, Feuerwehr, Gesundheit, Bildung, Parks, Müll
+   - G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
+     Bibliothek, Parks, Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Müll (Müllhalde, Verbrennungsanlage)
    - G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
+     (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
+   - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
+   - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - G6 Bodenwert, Zufriedenheit, Ausbaustufen
-5. Welt: Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator)
+5. Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
-7. Reich: mehrere Städte, Transport dazwischen
-8. Handel: Bot-Nationen, Marktpreise, Verträge
-9. Online-Handel, Mobile-Port
+7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
+8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
+9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port

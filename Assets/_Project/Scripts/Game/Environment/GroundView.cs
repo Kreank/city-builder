@@ -103,19 +103,19 @@ namespace CityBuilder.Game.Environment
 
             roads.SegmentAdded += s => MarkHoles(s);
             roads.SegmentRemoved += s => MarkHoles(s);
-            terrain.Changed += OnTerrainChanged;
+            terrain.Changed += HandleTerrainChanged;
             foreach (var s in roads.Segments) MarkHoles(s);
         }
 
         void OnDestroy()
         {
-            if (terrain != null) terrain.Changed -= OnTerrainChanged;
+            if (terrain != null) terrain.Changed -= HandleTerrainChanged;
             foreach (var m in new[] { transparentMaterial, waterMaterial, vertexColorMaterial }) if (m != null) Destroy(m);
             if (chunkFilters == null) return;
             foreach (var f in chunkFilters) if (f != null && f.sharedMesh != null) Destroy(f.sharedMesh);
         }
 
-        void OnTerrainChanged(SimVector2 min, SimVector2 max)
+        void HandleTerrainChanged(SimVector2 min, SimVector2 max)
         {
             CellRange(min, max, out int x0, out int y0, out int x1, out int y1);
             MarkChunks(x0 - 1, y0 - 1, x1 + 1, y1 + 1);

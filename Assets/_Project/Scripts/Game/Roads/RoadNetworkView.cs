@@ -34,11 +34,11 @@ namespace CityBuilder.Game.Roads
             network.NodeRemoved += OnNodeRemoved;
 
             foreach (var s in network.Segments) OnSegmentAdded(s);
-            runner.World.Terrain.Changed += OnTerrainChanged;
+            runner.World.Terrain.Changed += HandleTerrainChanged;
         }
 
         /// <summary>Gelände geändert → Brücken/Tröge in dem Bereich neu bauen (Pfeilerlänge, Trogwände).</summary>
-        void OnTerrainChanged(System.Numerics.Vector2 min, System.Numerics.Vector2 max)
+        void HandleTerrainChanged(System.Numerics.Vector2 min, System.Numerics.Vector2 max)
         {
             foreach (var s in network.Segments)
             {
@@ -50,7 +50,7 @@ namespace CityBuilder.Game.Roads
 
         void OnDestroy()
         {
-            if (runner != null && runner.World != null) runner.World.Terrain.Changed -= OnTerrainChanged;
+            if (runner != null && runner.World != null) runner.World.Terrain.Changed -= HandleTerrainChanged;
             if (network != null)
             {
                 network.SegmentAdded -= OnSegmentAdded;
