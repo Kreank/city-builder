@@ -13,6 +13,16 @@ namespace CityBuilder.Simulation.Roads
         bool IsWater(Vector2 position);
     }
 
+    /// <summary>
+    /// Wasserstraße (Stufe 3): Gelände, das über schiffbaren Fahrrinnen eine Mindesthöhe für Brücken kennt
+    /// (lichte Durchfahrtshöhe + Tragwerk über dem Wasserspiegel, 0 = keine Fahrrinne). Die automatische Trassierung
+    /// (<see cref="Profiles.FollowTerrain"/>) und die vorgebauten Strecken der Welt bleiben darüber.
+    /// </summary>
+    public interface INavigableGround
+    {
+        float NavigationFloor(Vector2 position);
+    }
+
     /// <summary>Flacher Boden auf Höhe 0 ohne Wasser (Standard, z. B. für Tests).</summary>
     public sealed class FlatGround : IGround
     {

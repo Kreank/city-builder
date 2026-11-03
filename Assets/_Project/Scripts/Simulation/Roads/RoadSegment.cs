@@ -14,6 +14,11 @@ namespace CityBuilder.Simulation.Roads
         /// Kosten und Unterhalt trägt die Welt. Bleibt beim Zerteilen erhalten (Anschluss neuer Rampen ist erlaubt).
         /// </summary>
         Locked = 2,
+        /// <summary>
+        /// Wasserstraße (Stufe 3): Klappbrücke über die Fahrrinne – öffnet für Schiffe, Schranken davor halten den Verkehr an.
+        /// Bleibt beim Zerteilen erhalten (nur das Stück über der Fahrrinne hat eine Klappe).
+        /// </summary>
+        Drawbridge = 4,
     }
 
     /// <summary>
@@ -46,6 +51,8 @@ namespace CityBuilder.Simulation.Roads
         public bool IsRoundabout => (Flags & RoadSegmentFlags.Roundabout) != 0;
         /// <summary>Gehört der Welt (Gateways): der Spieler darf es nicht abreißen, umbauen oder umdrehen.</summary>
         public bool IsLocked => (Flags & RoadSegmentFlags.Locked) != 0;
+        /// <summary>Wasserstraße: Klappbrücke (Darstellung zeichnet hier das Brückenmodell statt der Fahrbahn).</summary>
+        public bool IsDrawbridge => (Flags & RoadSegmentFlags.Drawbridge) != 0;
         public float Slope => Length > 0f ? MathF.Abs(End.Height - Start.Height) / Length : 0f;
 
         /// <summary>Höhe der Fahrbahn über dem Gelände an Stelle t (negativ = unter der Erde).</summary>

@@ -137,6 +137,7 @@ namespace CityBuilder.Simulation.Gateways
         public string TradeRouteText(int country)
         {
             var gw = GatewayToward(country, out bool viaPort);
+            if (viaPort) { var harbor = HarborRouteText?.Invoke(country); if (harbor != null) return harbor; } // --- Wasserstraße: eigener Hafen
             if (gw == null) return "kein Straßen-Anschluss";
             var route = world.Trade?.Geography.Route(world.Trade.PlayerId, country);
             if (viaPort) return $"Seeweg: Lkw über {gw.Name} zum Hafen außerhalb (bis Wasserstraße/Hafen fertig)";

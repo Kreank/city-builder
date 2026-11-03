@@ -68,6 +68,13 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Einnahme: Stationsentgelte (Halt Fern-/Güterzug), Fahrgeldanteil je Ein-/Aussteiger, Umschlag je Ladung.</summary>
         RailFares,
         // --- Ende Bahn
+
+        // --- Wasserstraße & Hafen (Stufe 3, hinten angefügt; Einnahme/Ausgabe s. Budget.IsIncome)
+        /// <summary>Ausgabe: Bau von Häfen und Klappbrücken (Mechanik; die Fahrbahn bucht der Straßenbau).</summary>
+        HarborConstruction,
+        /// <summary>Einnahme: Hafengeld je Schiffsanlauf und Umschlag je Ladung.</summary>
+        HarborFees,
+        // --- Ende Wasserstraße & Hafen
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -81,13 +88,14 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.RailFares + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, dann Bahn)
+        public const int Count = (int)BudgetCategory.HarborFees + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, dann Hafen)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
             c < BudgetCategory.RoadConstruction
             || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived // Etappe 8
-            || c == BudgetCategory.RailFares; // Bahn
+            || c == BudgetCategory.RailFares  // Bahn
+            || c == BudgetCategory.HarborFees; // Wasserstraße & Hafen
 
         public static BudgetCategory TaxCategory(TaxKind kind)
         {
@@ -132,6 +140,8 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
                 case BudgetCategory.RailConstruction: return "Bau Bahn";              // Bahn
                 case BudgetCategory.RailFares: return "Bahn: Entgelte & Fahrgeld";   // Bahn
+                case BudgetCategory.HarborConstruction: return "Bau Hafen & Klappbrücken"; // Wasserstraße & Hafen
+                case BudgetCategory.HarborFees: return "Hafen: Hafengeld & Umschlag";      // Wasserstraße & Hafen
                 default: return c.ToString();
             }
         }

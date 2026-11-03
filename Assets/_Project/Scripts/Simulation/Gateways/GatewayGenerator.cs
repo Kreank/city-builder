@@ -395,7 +395,7 @@ namespace CityBuilder.Simulation.Gateways
             {
                 var p = from + d * MathF.Min(length, k * ds);
                 water[k] = ground.IsWater(p);
-                raw[k] = water[k] ? ground.WaterLevel + Profiles.WaterClearance : ground.HeightAt(p);
+                raw[k] = water[k] ? Profiles.WaterFloor(ground, p) : ground.HeightAt(p); // Wasserstraße: Fahrrinne verlangt lichte Höhe
             }
             int win = Math.Max(1, (int)(GatewayRules.GradeSmoothing / ds));
             var smooth = BoxSmooth(raw, win);
