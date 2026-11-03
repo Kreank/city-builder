@@ -72,6 +72,7 @@ namespace CityBuilder.Game.Inspect
                     ui.Field("Baukosten", BuildLabels.Money((float)d.Type.Cost));
                     ui.Field("Unterhalt", $"{BuildLabels.Money((float)d.Type.UpkeepPerWeek)}/Woche + {BuildLabels.Money((float)TransitRules.BusUpkeepPerWeek)} je Bus");
                 }
+                MoveAction(ui, SelectionKind.TransitDepot, d.Id, (float)d.Type.Cost); // UX: Verschieben
                 ui.Section("Busse");
                 foreach (var b in t.Buses.Where(x => x.DepotId == d.Id))
                 {

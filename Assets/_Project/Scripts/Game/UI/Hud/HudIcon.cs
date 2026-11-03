@@ -15,6 +15,8 @@ namespace CityBuilder.Game.UI.Hud
         LandValue,
         /// <summary>Welt: Globus (Weltkarte), Edelstein (Rohstoffe).</summary>
         Globe, Resource,
+        /// <summary>UX: Mauszeiger (Auswählen-Modus).</summary>
+        Cursor,
         /// <summary>ÖPNV: Bus von der Seite.</summary>
         Bus,
     }
@@ -186,6 +188,9 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Resource:
                     Poly(true, 7, 4, 17, 4, 21, 9, 12, 20, 3, 9); Line(3, 9, 21, 9); Poly(false, 9.5f, 4, 8, 9, 12, 20, 16, 9, 14.5f, 4);
+                    break;
+                case HudIconKind.Cursor: // Pfeil-Mauszeiger (Auswählen)
+                    Poly(true, 6, 3, 6, 19, 10.5f, 15, 13.5f, 21.5f, 16.5f, 20.2f, 13.5f, 13.8f, 19, 13.5f);
                     break;
                 case HudIconKind.Help:
                     Circle(12, 12, 9);

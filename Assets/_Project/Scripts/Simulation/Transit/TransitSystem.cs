@@ -92,6 +92,8 @@ namespace CityBuilder.Simulation.Transit
             roads.SegmentRemoved += OnSegmentRemoved;
             roads.SegmentReplaced += OnSegmentReplaced;
             roads.SegmentAdded += OnSegmentAdded;
+            // UX: Bauwerks-Sperre – Straßen dürfen Depots nicht überbauen (Haltestellen liegen auf der Straße, sperren nicht)
+            roads.RegisterStructures(DepotBlocks);
 
             // Auf Depotflächen wächst nichts; Terraforming gesperrt; Versorger/Dienste nicht auf Depots (Hooks verketten)
             if (city != null)
@@ -153,10 +155,12 @@ namespace CityBuilder.Simulation.Transit
             return null;
         }
 
-        bool DepotOverlaps(Vector2 c, Vector2 f, float w, float d)
+        bool DepotOverlaps(Vector2 c, Vector2 f, float w, float d) => DepotOverlaps(c, f, w, d, 0);
+
+        bool DepotOverlaps(Vector2 c, Vector2 f, float w, float d, int exceptId)
         {
             foreach (var dp in depots)
-                if (ServiceGeometry.RectsOverlap(c, f, w, d, dp.Position, dp.Front, dp.Type.Width, dp.Type.Depth)) return true;
+                if (dp.Id != exceptId && ServiceGeometry.RectsOverlap(c, f, w, d, dp.Position, dp.Front, dp.Type.Width, dp.Type.Depth)) return true;
             return false;
         }
 
@@ -552,6 +556,14 @@ namespace CityBuilder.Simulation.Transit
         /// <see cref="BlocksRoad"/>). Hier nur Zufahrten neu bestimmen.
         /// </summary>
         void OnSegmentAdded(RoadSegment s) => routesDirty = true;
+
+        // --- UX: Bauwerks-Sperre im Straßennetz (RoadNetwork.RegisterStructures)
+        IEnumerable<StructureBlock> DepotBlocks()
+        {
+            foreach (var d in depots)
+                yield return new StructureBlock("depot", d.Id, d.Type.DisplayName, new Footprint(d.Position, d.Front, d.Type.Width, d.Type.Depth), d.Height);
+        }
+        // --- Ende UX
 
         // --- Abfragen für den Straßenblocker (Bauregel „Straße überschneidet Depot“)
         /// <summary>Schneidet die ebenerdige Fahrbahn des Segments eine Depot-Grundfläche? Liefert das Depot (sonst null).</summary>

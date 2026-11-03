@@ -68,6 +68,13 @@ namespace CityBuilder.Game.UI.Hud
             buildBar.Add(buildPanel);
 
             var cats = El("cb-panel", "cb-catbar");
+            // UX: „Auswählen“ ganz links – Standard, nichts in der Maus; aktiv im Auswählen-Modus, Kategorien klappen zu
+            var select = Btn(null, tool.ReturnToSelect, () => tool.IsSelectMode,
+                "Auswählen: nichts bauen, Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst oder Versorger · Esc/Rechtsklick aus jedem Werkzeug",
+                null, "cb-cat");
+            select.Add(Icon(HudIconKind.Cursor, "cb-icon--l"));
+            select.Add(Text("Auswählen", "cb-cat__label"));
+            cats.Add(select);
             CategoryButton(cats, Category.Roads, HudIconKind.Road, "Straßen", "Stadtstraßen: Gerade/Kurve (R), Kreisverkehr (K), Ausbauen (U), Richtung (I) · Tab Typ wechseln");
             CategoryButton(cats, Category.Highway, HudIconKind.Highway, "Autobahn", "Autobahnen, Auf-/Abfahrten und Knoten-Vorlagen · H Doppelbau · , . drehen");
             CategoryButton(cats, Category.Zones, HudIconKind.Zones, "Zonen", "Zonen malen (Z) · [ ] Pinselgröße");
@@ -114,6 +121,8 @@ namespace CityBuilder.Game.UI.Hud
 
         void SelectCategory(Category c)
         {
+            // UX: aktive Kategorie erneut anklicken = zurück zum Auswählen
+            if (currentCategory == c) { tool.ReturnToSelect(); return; }
             var mode = tool.CurrentMode;
             switch (c)
             {
@@ -190,6 +199,12 @@ namespace CityBuilder.Game.UI.Hud
                 text = "Unter Straßen und Gebäuden ist das Gelände gesperrt";
                 error = true;
             }
+            // UX: Rückweg zum Auswählen immer nennen; im Auswählen-Modus kurz erklären (Verschieben läuft → dessen Hinweis)
+            var mover = tool.GetComponent<CityBuilder.Game.Inspect.FacilityMover>();
+            string back = mover != null && mover.Moving ? "Verschieben: Klick setzt · , . drehen · Esc/Rechtsklick bricht ab"
+                : tool.IsSelectMode ? null : tool.ReturnHint;
+            if (back != null && !error) text = text == null ? back : text + "  ·  " + back;
+            else if (back != null && text == null) text = back;
 
             hint.EnableInClassList("cb-hidden", text == null);
             if (text == null) return;

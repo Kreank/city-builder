@@ -37,6 +37,12 @@ namespace CityBuilder.Simulation.Utilities
         public float PollutionRadius { get; }
         /// <summary>Muss am Wasser stehen (Pumpe am Fluss, Abwasser-Auslass, Kühlwasser des Atomkraftwerks).</summary>
         public bool NeedsWater { get; }
+        /// <summary>
+        /// Braucht eine Straßenzufahrt an der Vorderseite (Brennstoff, Personal, Wartung) und wird beim Platzieren zur Straße
+        /// ausgerichtet. Windrad, Solarpark und Pumpe am Ufer nicht: dort fährt im Alltag niemand hin, die Pumpe richtet sich
+        /// nach dem Wasser. Der Netzanschluss (Leitung/Rohr ≤ <see cref="UtilitySystem.RoadReach"/>) ist davon unabhängig.
+        /// </summary>
+        public bool NeedsRoadFront { get; }
 
         // --- Abwasser & Atom (G3 erweitert)
         /// <summary>
@@ -57,8 +63,9 @@ namespace CityBuilder.Simulation.Utilities
 
         public UtilityFacilityType(string id, string name, UtilityKind kind, float capacity, float width, float depth, float cost,
             float upkeep, float noise = 0f, float noiseRadius = 0f, float pollution = 0f, float pollutionRadius = 0f, bool needsWater = false,
-            bool untreated = false, bool dryFootprint = false, float concernRadius = 0f)
+            bool untreated = false, bool dryFootprint = false, float concernRadius = 0f, bool roadFront = false)
         {
+            NeedsRoadFront = roadFront;
             Id = id;
             DisplayName = name;
             Kind = kind;
@@ -85,11 +92,11 @@ namespace CityBuilder.Simulation.Utilities
     {
         public static readonly UtilityFacilityType CoalPlant = new UtilityFacilityType(
             "power_coal", "Kohlekraftwerk", UtilityKind.Power, 40000f, 48f, 36f, 60000f, 900f,
-            noise: 0.6f, noiseRadius: 140f, pollution: 0.06f, pollutionRadius: 220f);
+            noise: 0.6f, noiseRadius: 140f, pollution: 0.06f, pollutionRadius: 220f, roadFront: true);
 
         public static readonly UtilityFacilityType GasPlant = new UtilityFacilityType(
             "power_gas", "Gaskraftwerk", UtilityKind.Power, 25000f, 36f, 28f, 45000f, 800f,
-            noise: 0.45f, noiseRadius: 100f, pollution: 0.025f, pollutionRadius: 160f);
+            noise: 0.45f, noiseRadius: 100f, pollution: 0.025f, pollutionRadius: 160f, roadFront: true);
 
         public static readonly UtilityFacilityType WindTurbine = new UtilityFacilityType(
             "power_wind", "Windrad", UtilityKind.Power, 3000f, 12f, 12f, 12000f, 120f,
@@ -109,12 +116,12 @@ namespace CityBuilder.Simulation.Utilities
             noise: 0.2f, noiseRadius: 40f, needsWater: true);
 
         public static readonly UtilityFacilityType WaterTower = new UtilityFacilityType(
-            "water_tower", "Brunnen + Wasserturm", UtilityKind.Water, 80f, 12f, 12f, 6000f, 80f);
+            "water_tower", "Brunnen + Wasserturm", UtilityKind.Water, 80f, 12f, 12f, 6000f, 80f, roadFront: true);
 
         // --- Abwasser (G3 erweitert)
         public static readonly UtilityFacilityType SewagePlant = new UtilityFacilityType(
             "sewage_plant", "Kläranlage", UtilityKind.Sewage, 500f, 40f, 32f, 45000f, 500f,
-            noise: 0.15f, noiseRadius: 50f);
+            noise: 0.15f, noiseRadius: 50f, roadFront: true); // Klärschlamm-Abfuhr, Personal
 
         public static readonly UtilityFacilityType SewageOutlet = new UtilityFacilityType(
             "sewage_outlet", "Abwasser-Auslass (ungeklärt ins Gewässer)", UtilityKind.Sewage, 1500f, 8f, 8f, 3000f, 25f,

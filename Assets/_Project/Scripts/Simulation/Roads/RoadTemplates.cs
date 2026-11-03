@@ -33,6 +33,8 @@ namespace CityBuilder.Simulation.Roads
         public readonly List<TemplatePiece> Pieces = new List<TemplatePiece>();
         public RoadBuildError Error;
         public float Cost;
+        /// <summary>Bauwerk, das ein Teilstück überschneiden würde (Bauwerks-Sperre).</summary>
+        public StructureBlock BlockedBy;
         public bool IsValid => Error == RoadBuildError.None;
     }
 
@@ -101,7 +103,7 @@ namespace CityBuilder.Simulation.Roads
                 var rp = RoadBuilder.Plan(network, piece.P0, 0f, piece.Control, piece.P2, 0f, piece.Type, piece.H0, piece.H2,
                     followTerrain: piece.FollowTerrain);
                 plan.Cost += rp.Cost;
-                if (!rp.IsValid && rp.Error != RoadBuildError.Duplicate && plan.Error == RoadBuildError.None) plan.Error = rp.Error;
+                if (!rp.IsValid && rp.Error != RoadBuildError.Duplicate && plan.Error == RoadBuildError.None) { plan.Error = rp.Error; plan.BlockedBy = rp.BlockedBy; }
             }
             if (plan.Error == RoadBuildError.None && !RoadBuilder.Affordable(network, plan.Cost)) plan.Error = RoadBuildError.InsufficientFunds;
             return plan;

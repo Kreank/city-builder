@@ -364,6 +364,8 @@ namespace CityBuilder.Simulation.Transit
         public TransitBuildError Error;
         public int AccessSegmentId = -1;
         public float AccessT;
+        /// <summary>UX Verschieben: Id des bestehenden Depots (0 = Neubau).</summary>
+        public int MovingId;
         public readonly List<Building> Displaced = new List<Building>();
         public bool IsValid => Error == TransitBuildError.None;
     }
