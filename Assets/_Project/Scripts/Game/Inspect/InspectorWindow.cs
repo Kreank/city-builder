@@ -140,6 +140,7 @@ namespace CityBuilder.Game.Inspect
                 }
             }
             if (TransitHead(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
+            if (GatewayHead(ui, world, s)) return; // Außenanbindung
             // Keine (gültige) Auswahl: Stadtübersicht
             Head(ui, "Stadtübersicht (C)", Tone.Accent, GameHud.CityName, "Klick auf Gebäude, Fahrzeug, Dienst oder Versorger wählt aus · × schließt");
         }
@@ -204,6 +205,7 @@ namespace CityBuilder.Game.Inspect
                 }
             }
             if (TransitBody(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
+            if (GatewayBody(ui, world, s)) return; // Außenanbindung
             CityBody(ui, world);
         }
 

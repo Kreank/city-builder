@@ -738,6 +738,7 @@ namespace CityBuilder.Game.Inspect
             }
             if (s.ExternalConnections == 0)
                 ui.Message("Keine Außenanschlüsse", "Straße bis an den Kartenrand bauen, dann kommen Pendler und Durchgangsverkehr.", Tone.Warn);
+            GatewayOverview(ui, world); // Außenanbindungen (Autobahn, Bahn, Wasser, Luft)
 
             ui.Section("Alter");
             int maxAge = Mathf.Max(1, s.AgeGroups.Max());

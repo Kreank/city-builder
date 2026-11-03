@@ -30,6 +30,13 @@ namespace CityBuilder.Game
         [Tooltip("Region der Stadt (−1 = automatisch: gemäßigt, fruchtbar, Fluss/Küste).")]
         [SerializeField] int startRegion = -1;
         // --- Ende Welt
+        // --- Außenanbindungen (Gateways)
+        [Header("Außenanbindung")]
+        [Tooltip("Beim Kartenstart eine Autobahn mit Anschlussstelle + Zubringer bauen (wie Cities: Skylines); dazu Bahn-/Wasserwege vorbereitet.")]
+        [SerializeField] bool prebuiltConnections = true;
+        [Tooltip("Zuzug und Handel nur über Anschlüsse (die Stadt muss an die Autobahn angeschlossen werden).")]
+        [SerializeField] bool requireGateways = true;
+        // --- Ende Gateways
 
         static readonly int[] SpeedMultipliers = { 0, 1, 3, 10 };
 
@@ -89,6 +96,10 @@ namespace CityBuilder.Game
             GenerateWorld = generateWorld,   // Welt (Etappe 5)
             WorldSeed = worldSeed ?? this.worldSeed,
             StartRegion = startRegion ?? this.startRegion,
+            // --- Außenanbindungen (Gateways)
+            PrebuiltConnections = prebuiltConnections,
+            RequireGatewayForMoveIn = requireGateways,
+            RequireGatewayForTrade = requireGateways,
         };
 
         /// <summary>Ersetzt die laufende Welt (geladener Spielstand oder neues Spiel) und meldet <see cref="WorldReplaced"/>.</summary>

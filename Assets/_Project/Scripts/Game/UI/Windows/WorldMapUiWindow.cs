@@ -120,6 +120,17 @@ namespace CityBuilder.Game.UI.Windows
                                             $"{(r.HasRiver ? "Fluss" : "kein Fluss")}, {(r.IsCoastal ? "Küste" : "Binnenland")}");
                 }
             }
+            // --- Außenanbindungen: Richtungen der Anschlüsse (auf der Karte als Strahlen ab der Startregion)
+            var gateways = World?.Gateways;
+            if (c.IsPlayer && gateways != null && gateways.All.Count > 0)
+            {
+                ui.Section("Anschlüsse der Stadt", "rot = Autobahn · braun = Bahn (folgt) · hellblau = Wasser (folgt)");
+                using (ui.Fields())
+                    foreach (var g in gateways.All)
+                        ui.Field($"{g.KindName} → {(g.HasLocation ? g.CompassText : "–")}", $"{g.Name} · {g.StatusText}",
+                            g.IsOperational ? Tone.Good : Tone.Muted);
+            }
+            // --- Ende Außenanbindungen
 
             ui.Section("Stärken", "Rang unter allen Ländern");
             using (ui.Card())
