@@ -437,8 +437,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
   Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
   Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
-  Arbeitslosigkeit ≥ 12 %. Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
-  {Einwohner} {Prozent} {Medium}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  Arbeitslosigkeit ≥ 12 %, Handel (Vertrag, Embargo, Zollerhöhung über `Report`, s. Etappe 8). Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium} {Land}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
   **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
   `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
   `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
@@ -697,7 +697,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kapazität je Kopf aus Profil/Vorkommen, Ernte und Heizbedarf aus dem Klima der Hauptstadt, Vorleistungen (Erz+Energie+Holz →
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
-  Startpreis spiegelt Knappheit). `Balance(cat)` = Überschuss/Defizit je Tag für die spätere Handels-KI, `WorldPrice` =
+  Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
   produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
   vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
@@ -788,9 +788,21 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Weltpreise mit Wochentrend + lokalem Preis + Grenzlager, Angebote (annehmen/ablehnen, eigene mit Antwort/Begründung, neues Angebot
   mit Vorschau der NPC-Einschätzung über `PreviewOffer` + `Evaluate`), Verträge (Lieferstatus, unterwegs, Grenzlager, Kündigen),
   Zölle (Grundzoll, Satz je Land, Handelsbuchungen der Kasse). Aktionen per `Execute` (wirkt auch bei Pause). Optik ungetestet.
-- **Leistung** (Testprojekt): 36 Länder, 1 Jahr Länder + Handel ≈ 70 ms (≈ 0,2 ms/Tag), Handel allein ≈ 40 ms/Jahr, Wege 4 ms.
-- **Befund Etappe 5:** Die Länder-Volkswirtschaften sind weltweit knapp (Produktion/Bedarf < 1 in fast allen Kategorien, Industrie
-  ≈ 0,4, Technik ≈ 0 – vermutlich, weil Konsum in der Produktionsreihenfolge die Industriegüter vorher verbraucht; nicht geprüft) – Handel verteilt nur um; Balancing gehört in `NationEconomy`.
+- **Leistung** (Testprojekt): 36 Länder, 1 Jahr Länder + Handel ≈ 120 ms (≈ 0,33 ms/Tag, seit der Kalibrierung mehr Verträge),
+  Handel allein ≈ 60 ms/Jahr, Wege 8 ms.
+- **Kalibrierung der Länder-Volkswirtschaften** (`WorldEconomy.Calibrate`, `NationEconomy.TickDay`): Vorher war die Welt global knapp
+  (Produktion/Bedarf Industrie 0,43, Technik 0,00). Ursachen: (1) Vorleistungen nach Reihenfolge – Konsum nahm alle Industriegüter,
+  Technik bekam nichts; jetzt bekommt jeder Abnehmer seinen Anteil (Lager / noch offener Bedarf aller späteren Abnehmer).
+  (2) Kapazitäten je Kopf passten nicht zum Bedarf inkl. Vorleistungen (überschlagen: Industrie ~0,19 statt ~0,35 je Kopf, Energie ~0,5 statt
+  ~1,1). Jetzt wird beim Erzeugen je Kategorie weltweit skaliert, rückwärts durch die Kette (Endprodukte gegen Haushalte, Industrie
+  gegen Haushalte + Vorleistungen, dann Rohstoffe; Heizen/Kühlen, Ernte und Tourismus-Saison im Jahresmittel): Σ Kapazität =
+  Σ Bedarf × 1,04 (Lebensmittel 1,12 wegen 0,5 %/Tag Verderb). Länderunterschiede bleiben relativ. Ergebnis (Seeds 2024/7):
+  Welt-Produktion/Bedarf je Kategorie 0,90–1,09; Länder mit Primärstärke haben 1,16–1,64 × Kapazität ihres Bedarfs (übrige 0,9–1,6).
+  Ein Jahr ohne Handel: Lagerlücke (Wert unter 20 Tagen Reichweite) wächst von 544 auf 607 G€; mit Handel Tag 365 269 G€,
+  Summe Tag 60–365 36 % kleiner.
+- **Medien** (`TradeMedia.Connect` in `CreateDefault`, Event `TradeSystem.News`): Schlagzeilen-Themen `TradeDeal` („Handelsvertrag
+  mit {Land}“ bei jedem Vertrag/Abkommen des Spielers), `Embargo` (Beziehung zum Spieler fällt unter −50), `TariffRaise` (ein Land
+  erhöht seinen Zoll gegen uns); neuer Platzhalter {Land}. Nur mit Medienhaus sichtbar, Sperrfristen wie üblich.
 - **Später (Stufe 2+):** Regierungen/Bündnisse (Zollunion, gemeinsame Außenzölle, Sanktionen, Abstimmungen), Diplomatie-Aktionen
   (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße, Tourismus als
   Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
@@ -953,5 +965,6 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
      Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
      Persönlichkeit/Gedächtnis, Beziehungen, Vertrauen, Zölle, Handelsabkommen, Stadtkasse (Zölle, Strafen, Vertragshandel),
-     Handelsfenster F11 (im Editor noch nicht visuell abgenommen). Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
+     Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
+     Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port
