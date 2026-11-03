@@ -20,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone, Terraform }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -151,6 +151,9 @@ namespace CityBuilder.Game.Roads
             zoneView = Ensure<ZoneView>();
             zoneView.Init(runner, previewMaterial);
             if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
+
+            // Terraforming-Werkzeug (Modus Terraform, Taste L)
+            Ensure<CityBuilder.Game.Terrain.TerraformTool>().Init(this, previewMaterial);
         }
 
         ZoneView zoneView;
@@ -272,6 +275,7 @@ namespace CityBuilder.Game.Roads
             switch (CurrentMode)
             {
                 case Mode.Zone: UpdateZone(raw); break;
+                case Mode.Terraform: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // TerraformTool
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;
