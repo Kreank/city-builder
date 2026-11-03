@@ -5,6 +5,7 @@ using CityBuilder.Game.UI;
 using CityBuilder.Game.Zoning;
 using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Core;
+using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
 using CityBuilder.Simulation.Utilities;
 using CityBuilder.Simulation.Zoning;
@@ -152,8 +153,10 @@ namespace CityBuilder.Game.Inspect
                 // Rückfall: Geländepunkt unter der Maus
                 var b = world.City.BuildingAt(tool.Cursor);
                 var f = b == null ? world.Utilities.FacilityAt(tool.Cursor) : null;
+                var sf = b == null && f == null ? world.Services.FacilityAt(tool.Cursor) : null; // G4
                 if (b != null) hit = new Selection(SelectionKind.Building, b.Id);
                 else if (f != null) hit = new Selection(SelectionKind.Facility, f.Id);
+                else if (sf != null) hit = new Selection(SelectionKind.Service, sf.Id);
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -169,6 +172,9 @@ namespace CityBuilder.Game.Inspect
                     break;
                 case SelectionKind.Facility:
                     if (world.Utilities.GetFacility(selection.Id) == null) selection = Selection.None;
+                    break;
+                case SelectionKind.Service:
+                    if (world.Services.GetFacility(selection.Id) == null) selection = Selection.None;
                     break;
                 case SelectionKind.Citizen:
                     if (world.Citizens.Get(selection.Id) == null) selection = Selection.None;
@@ -223,6 +229,12 @@ namespace CityBuilder.Game.Inspect
                 {
                     var f = world.Utilities.GetFacility(selection.Id);
                     if (f != null) primary.Rect(f.Corners(), f.Height + 0.3f, f.Height + InspectorPicking.FacilityHeight(f) + 0.5f, width);
+                    break;
+                }
+                case SelectionKind.Service:
+                {
+                    var f = world.Services.GetFacility(selection.Id);
+                    if (f != null) primary.Rect(f.Corners(), f.Height + 0.3f, f.Height + InspectorPicking.ServiceHeight(f) + 0.5f, width);
                     break;
                 }
                 case SelectionKind.Vehicle:
@@ -287,6 +299,11 @@ namespace CityBuilder.Game.Inspect
                     var f = world.Utilities.GetFacility(selection.Id);
                     return f != null ? SimConvert.ToWorld(f.Position, f.Height) : (Vector3?)null;
                 }
+                case SelectionKind.Service:
+                {
+                    var f = world.Services.GetFacility(selection.Id);
+                    return f != null ? SimConvert.ToWorld(f.Position, f.Height) : (Vector3?)null;
+                }
                 default: return null;
             }
         }
@@ -330,7 +347,7 @@ namespace CityBuilder.Game.Inspect
                 link = new GUIStyle(GUI.skin.button) { fontSize = 12, richText = true, alignment = TextAnchor.MiddleLeft, wordWrap = false };
             }
 
-            var area = new Rect(Screen.width - 450f, 10f, 440f, Mathf.Min(Screen.height - 170f, 720f));
+            var area = new Rect(Screen.width - 450f, HudLayout.TopInset, 440f, Mathf.Min(Screen.height - HudLayout.TopInset - HudLayout.BottomInset, 720f));
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
             GUILayout.BeginArea(new Rect(area.x + 10f, area.y + 8f, area.width - 20f, area.height - 16f));
@@ -356,6 +373,7 @@ namespace CityBuilder.Game.Inspect
             {
                 case SelectionKind.Building: BuildingPanel(world, world.City.GetBuilding(selection.Id)); break;
                 case SelectionKind.Facility: FacilityPanel(world, world.Utilities.GetFacility(selection.Id)); break;
+                case SelectionKind.Service: ServicePanel(world, world.Services.GetFacility(selection.Id)); break;
                 case SelectionKind.Vehicle: VehiclePanel(world, FindVehicle(world, selection.Id)); break;
                 case SelectionKind.Citizen: CitizenDetail(world, world.Citizens.Get(selection.Id)); break;
                 default: CityPanel(world); break;
@@ -557,9 +575,23 @@ namespace CityBuilder.Game.Inspect
             Line("Bodenplatte", $"{b.Height:0.0} m (Wasserspiegel {terrain.WaterLevel:0} m)");
             Line("Ursprüngliches Gelände", $"{natural:0.0} m ({(b.Height - natural >= 0 ? "+" : "")}{b.Height - natural:0.0} m eingeebnet)");
 
+            // G4: Abdeckung je Dienstart (0..1, sinkt mit Fahrzeit und Überlastung)
+            Section("Dienste in Reichweite");
+            var services = world.Services;
+            foreach (var k in ServiceKinds.All)
+            {
+                float c = services.Coverage(k, b);
+                string col = "#" + ColorUtility.ToHtmlStringRGB(Color.Lerp(CityBuilder.Game.Services.ServiceOverlayView.CoverageColor(c), Color.white, 0.25f));
+                string extra = k == ServiceKinds.Education
+                    ? $" (Grundschule {services.Coverage(ServiceKinds.EducationPrimary, b) * 100f:0} %, Oberschule {services.Coverage(ServiceKinds.EducationSecondary, b) * 100f:0} %)"
+                    : "";
+                Line(ServiceKinds.DisplayName(k), $"<color={col}>{c * 100f:0} %</color>{extra}");
+            }
+            Line("Müll am Gebäude", $"{services.GarbageAt(b):0.##} t ({services.GarbageLevel(b) * 100f:0} % voll)");
+            Line("Brandrisiko", $"{services.FireRisk(b) * 100f:0} % (Kennwert, noch ohne Brände)");
+
             Section("Später");
             Line("Bodenwert", "<color=#9aa4b0>— (kommt mit G6)</color>");
-            Line("Dienste in Reichweite", "<color=#9aa4b0>— (kommt mit G4)</color>");
             Line("Zufriedenheit Umfeld", Pending);
         }
 
@@ -751,6 +783,35 @@ namespace CityBuilder.Game.Inspect
             if (t.Pollution > 0f) Line("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
             if (t.NeedsWater) Line("Standort", "braucht Wasser in Reichweite");
             Line("Zustand", "<color=#9aa4b0>— (Verschleiß/Wartung später)</color>");
+        }
+
+        // ------------------------------------------------------------ Dienstgebäude (G4)
+
+        void ServicePanel(SimulationWorld world, ServiceFacility f)
+        {
+            if (f == null) return;
+            var t = f.Type;
+            GUILayout.Label($"{t.DisplayName} #{f.Id}", header);
+            GUILayout.Label($"Dienst {ServiceKinds.DisplayName(t.Channel)}", small);
+
+            Section("Leistung");
+            Line("Kapazität", $"{t.Capacity:0} {t.CapacityUnit} je Tag" + (f.IsFull ? " <color=#ff9080>(voll – nimmt nichts mehr an)</color>" : ""));
+            string load = f.EffectiveCapacity > 0f ? $"{f.Utilization * 100f:0} %" : "—";
+            string over = f.Utilization > 1f ? $" <color=#ffb040>überlastet → Wirkung × {f.LoadFactor:0.00}</color>" : "";
+            Line("Auslastung", $"{load} · Last {f.Load:0.#} {t.CapacityUnit}{over}");
+            Line("Versorgt", $"{f.ServedBuildings} Gebäude");
+            Line("Reichweite", t.Walking
+                ? $"Fußweg {t.Range:0} m (Luftlinie)"
+                : $"{t.Range:0.#} min Fahrzeit übers Straßennetz (voll bis {ServiceSystem.FullEffectShare * 100f:0} %)" +
+                  (f.HasAccess ? "" : " <color=#ff9080>keine Zufahrt</color>"));
+            if (t.Storage > 0f) Line("Lager", $"{f.Stored:0} / {t.Storage:0} t");
+            if (f.Kind == ServiceKinds.Garbage) Line("Abgeholt", $"{f.CollectedPerDay:0.#} t/Tag");
+
+            Section("Gebäude");
+            Line("Größe", $"{t.Width:0}×{t.Depth:0} m · Boden {f.Height:0.0} m");
+            Line("Kosten / Unterhalt", $"{t.Cost:0} € / {t.UpkeepPerWeek:0} € je Woche (Stadtkasse, Kategorie Dienste)");
+            if (t.NoiseLevel > 0f) Line("Lärm", $"{t.NoiseLevel * 100f:0} % im Umkreis {t.NoiseRadius:0} m");
+            if (t.Pollution > 0f) Line("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
         }
 
         // ------------------------------------------------------------ Stadtübersicht

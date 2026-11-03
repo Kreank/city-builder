@@ -19,7 +19,8 @@ namespace CityBuilder.Game.Terrain
         public const float ApplyRate = 20f;
         const int RingSegments = 72;
 
-        static readonly float[] Strengths = { 1f, 3f, 8f };
+        /// <summary>Stärkestufen sanft/mittel/stark (Bauleiste).</summary>
+        public static readonly float[] Strengths = { 1f, 3f, 8f };
 
         RoadTool tool;
         Material ringMaterial;
@@ -42,6 +43,10 @@ namespace CityBuilder.Game.Terrain
         public float StrokeVolume { get; private set; }
         /// <summary>Pinsel traf zuletzt auf gesperrtes Gelände (Straße/Gebäude).</summary>
         public bool HitLocked { get; private set; }
+        /// <summary>Stadtkasse: letzte Anwendung abgelehnt (zu wenig Geld).</summary>
+        public bool NoFunds { get; private set; }
+        /// <summary>Kosten des aktuellen bzw. letzten Pinselstrichs (€).</summary>
+        public double StrokeCost { get; private set; }
 
         public bool Active => tool != null && tool.CurrentMode == RoadTool.Mode.Terraform;
 
@@ -109,6 +114,8 @@ namespace CityBuilder.Game.Terrain
                 painting = true;
                 inverted = right;
                 StrokeVolume = 0f;
+                StrokeCost = 0;
+                NoFunds = false;
                 HitLocked = false;
                 accumulator = 1f / ApplyRate; // sofort einmal anwenden
                 if (Mode == TerraformMode.Level && left)
@@ -155,6 +162,8 @@ namespace CityBuilder.Game.Terrain
             float strength = Strength * dt * (mode == TerraformMode.Smooth ? 2f : 1f);
             var result = terrain.Terraform(new TerraformBrush(mode, center, Radius, strength, Softness, TargetHeight));
             StrokeVolume += result.Volume;
+            StrokeCost += result.Cost;
+            NoFunds = result.InsufficientFunds;
             if (result.LockedPoints > 0) HitLocked = true;
         }
 
@@ -251,7 +260,8 @@ namespace CityBuilder.Game.Terrain
             string info = Mode == TerraformMode.Level
                 ? (HasTarget ? $"Zielhöhe {TargetHeight:0.0} m (Klick nimmt neue Höhe auf)" : "Klick nimmt die Zielhöhe auf")
                 : "LMB halten = anwenden" + (Mode == TerraformMode.Raise || Mode == TerraformMode.Lower ? " · RMB = umgekehrt" : "");
-            info += $"   ·   Erdmenge {StrokeVolume:0} m³";
+            info += $"   ·   Erdmenge {StrokeVolume:0} m³ ({StrokeCost:0} €)";
+            if (NoFunds) info += "   ·   <color=#ff7060>zu wenig Geld in der Stadtkasse</color>";
             if (HitLocked) info += "   ·   <color=#ffb060>unter Straßen/Gebäuden gesperrt</color>";
             info += "   ·   unter 0 m entsteht Wasser";
             GUILayout.Label(info, infoStyle);

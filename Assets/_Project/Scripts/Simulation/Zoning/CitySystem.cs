@@ -89,6 +89,10 @@ namespace CityBuilder.Simulation.Zoning
         // --- G3 Strom & Wasser (Hook): Punkte, auf denen nichts wachsen darf (Versorger-Bauwerke). Gesetzt vom UtilitySystem.
         public Func<Vector2, bool> LotBlocker { get; set; }
 
+        // --- Stadtkasse (Hook): Faktor je Zonenart auf die Nachfrage (Steuersätze). null = 1. Gesetzt von SimulationWorld.
+        public Func<ZoneType, float> DemandModifier { get; set; }
+        // --- Ende Stadtkasse
+
         public CitySystem(RoadNetwork network, TerrainMap terrain, Vector2 origin, float sizeMeters, int seed = 1)
         {
             this.network = network;
@@ -225,6 +229,10 @@ namespace CityBuilder.Simulation.Zoning
             Demand[ZoneType.Office] = Need(population * 0.07f - 10f, officeJobs) + joblessPull * educatedShare;
             Demand[ZoneType.Industry] = Need(population * 0.14f + 20f, industryJobs) + joblessPull * (1f - educatedShare);
             Demand[ZoneType.Mixed] = (res + Demand[ZoneType.Retail]) * 0.5f;
+            // --- Stadtkasse: hohe Steuern dämpfen die Nachfrage (Standardsatz = Faktor 1)
+            if (DemandModifier != null)
+                foreach (var z in Zones.All) Demand[z] = Demand[z] * DemandModifier(z);
+            // --- Ende Stadtkasse
 
             Stats.Buildings = built;
             Stats.UnderConstruction = constructing;

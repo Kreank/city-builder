@@ -36,7 +36,7 @@ namespace CityBuilder.Game.Utilities
                 small = new GUIStyle(GUI.skin.label) { fontSize = 12, richText = true, wordWrap = true };
             }
 
-            var area = new Rect(Screen.width - 400f, 10f, 390f, Mathf.Min(Screen.height - 170f, 520f));
+            var area = new Rect(Screen.width - 400f, HudLayout.TopInset, 390f, Mathf.Min(Screen.height - HudLayout.TopInset - HudLayout.BottomInset, 520f));
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
             GUILayout.BeginArea(new Rect(area.x + 10f, area.y + 8f, area.width - 20f, area.height - 16f));
