@@ -393,7 +393,7 @@ namespace CityBuilder.Game.UI.Hud
             for (int i = 0; i < SimulationRunner.SpeedCount && i < icons.Length; i++)
             {
                 int index = i;
-                string tip = i == 0 ? "Pause (Leertaste)" : $"Tempo ×{SimulationRunner.MultiplierOf(i)} (Taste {i})";
+                string tip = i == 0 ? "Pause (Leertaste)" : $"Tempo {i}: 1 Spieltag ≈ {Simulation.Core.TimeModel.RealSecondsPerDay(i) / 60f:0.#} min (Taste {i})"; // Zeitmodell
                 var b = Btn(null, () => { if (index == 0) runner.TogglePause(); else runner.SetSpeed(index); },
                     () => runner.SpeedIndex == index, tip, null, "cb-seg-btn");
                 b.AddToClassList("cb-seg-btn--icon");

@@ -187,7 +187,7 @@ namespace CityBuilder.Game.Services
             }
             else ring.enabled = false;
 
-            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
+            string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielmin.)"; // G4 erw.: Funk
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°"; // UX
             string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";

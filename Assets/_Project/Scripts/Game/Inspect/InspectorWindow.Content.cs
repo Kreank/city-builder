@@ -409,7 +409,7 @@ namespace CityBuilder.Game.Inspect
                     else if (c.Mode == TravelMode.Transit) CitizenTransitFields(ui, world, c); // ÖPNV
                     else
                     {
-                        ui.Field("Verkehrsmittel", "zu Fuß/Rad (Platzhalter, Luftlinie 15 km/h)");
+                        ui.Field("Verkehrsmittel", c.TripAirDistance <= Simulation.Core.TimeModel.WalkMaxMeters ? "zu Fuß (Gehtempo 1,3 m/s)" : "Rad/Sonstiges (Platzhalter, 16 km/h)");
                         long eta = c.PlannedArrivalTick - world.Clock.Tick;
                         ui.Field("Ankunft", eta > 0 ? $"≈ {Clock(c.PlannedArrivalTick)} Uhr (in {Duration(eta)})" : "gleich");
                     }
@@ -519,7 +519,7 @@ namespace CityBuilder.Game.Inspect
                 }
             }
             ShipmentSection(ui, world, v); // G5: Ladung des Lkw
-            ui.Note("Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – Autofahrten dauern daher in Spielzeit oft Stunden.");
+            ui.Note($"Zeitmodell: 1 s Fahrzeit = {Simulation.Core.TimeModel.Dilation:0} s Spielzeit – eine Stadtfahrt von 3 min dauert {Simulation.Core.TimeModel.GameMinutes(180):0} Spielminuten.");
             using (ui.Actions())
             {
                 if (c != null) ui.ActionButton("Fahrer zeigen", () => Go(SelectionKind.Citizen, c.Id), ActionStyle.Primary);
@@ -624,7 +624,7 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Versorgt", $"{f.ServedBuildings} Gebäude");
                 ui.Field("Reichweite", t.Broadcast ? $"Funkradius {t.Range:0} m (Luftlinie, keine Zufahrt nötig)" : t.Walking
                     ? $"Fußweg {t.Range:0} m (Luftlinie)"
-                    : $"{t.Range:0.#} min Fahrzeit übers Straßennetz (voll bis {ServiceSystem.FullEffectShare * 100f:0} %)" +
+                    : $"{t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielminuten) übers Straßennetz (voll bis {ServiceSystem.FullEffectShare * 100f:0} %)" +
                       (f.HasAccess ? "" : " · keine Zufahrt"), !t.Walking && !f.HasAccess ? Tone.Warn : Tone.None);
                 if (t.Storage > 0f) ui.Field("Lager", $"{f.Stored:0} / {t.Storage:0} t");
                 if (f.Kind == ServiceKinds.Garbage) ui.Field("Abgeholt", $"{f.CollectedPerDay:0.#} t/Tag");
