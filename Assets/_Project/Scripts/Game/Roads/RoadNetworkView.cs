@@ -45,6 +45,9 @@ namespace CityBuilder.Game.Roads
                 CityBuilder.Simulation.Roads.Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var smin, out var smax);
                 if (smax.X < min.X || smax.Y < min.Y || smin.X > max.X || smin.Y > max.Y) continue;
                 dirtySegments.Add(s.Id);
+                // Eckstücke an Knicken tragen ebenfalls Brücken-/Trogteile
+                if (ShapeOf(s.Start) == NodeShape.Bend) dirtyNodes.Add(s.Start.Id);
+                if (ShapeOf(s.End) == NodeShape.Bend) dirtyNodes.Add(s.End.Id);
             }
         }
 
@@ -107,28 +110,34 @@ namespace CityBuilder.Game.Roads
             dirtySegments.Clear();
         }
 
-        /// <summary>Kreuzung (ab 3 Straßen) oder Typwechsel: eigene Knotenfläche, Segmente enden davor.</summary>
-        bool IsJunction(RoadNode node) => RoadMeshBuilder.NeedsJunctionMesh(network, node);
+        /// <summary>
+        /// Kreuzung (ab 3 Straßen) oder Typwechsel: eigene Knotenfläche, Segmente enden davor.
+        /// Knick gleichen Typs: Eckstück mit vollem Querschnitt, Segmente enden davor. Sonst nichts.
+        /// </summary>
+        NodeShape ShapeOf(RoadNode node) => JunctionGeometry.Classify(network, node);
 
         void RebuildSegment(RoadSegment seg)
         {
-            float trimStart = IsJunction(seg.Start) ? RoadMeshBuilder.JunctionTrim(network, seg.Start, seg) : 0f;
-            float trimEnd = IsJunction(seg.End) ? RoadMeshBuilder.JunctionTrim(network, seg.End, seg) : 0f;
+            float trimStart = RoadMeshBuilder.JunctionTrim(network, seg.Start, seg);
+            float trimEnd = RoadMeshBuilder.JunctionTrim(network, seg.End, seg);
+            // An Knicken bringt das Eckstück Brückenplatte/Trogwände selbst mit; an Kreuzungen laufen sie darunter durch
+            float structStart = ShapeOf(seg.Start) == NodeShape.Bend ? trimStart : 0f;
+            float structEnd = ShapeOf(seg.End) == NodeShape.Bend ? trimEnd : 0f;
 
             if (!segmentObjects.TryGetValue(seg.Id, out var mf))
             {
                 mf = CreateMeshObject($"Road {seg.Id} ({seg.Type.DisplayName})", materials.All);
                 segmentObjects[seg.Id] = mf;
             }
-            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground);
+            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground, structStart, structEnd);
         }
 
         void RebuildNode(RoadNode node)
         {
-            int degree = node.SegmentIds.Count;
-            if (degree <= 1)
+            var shape = ShapeOf(node);
+            if (shape == NodeShape.None)
             {
-                // Sackgasse/Straßenende: keine Knotenfläche
+                // Straßenende, Sackgasse oder gerade Fortsetzung: keine Knotenfläche (Segmente stoßen bündig aneinander)
                 if (nodeObjects.TryGetValue(node.Id, out var old))
                 {
                     DestroyMeshObject(old);
@@ -144,19 +153,17 @@ namespace CityBuilder.Game.Roads
             }
             var mr = mf.GetComponent<MeshRenderer>();
 
-            if (IsJunction(node))
+            if (shape == NodeShape.Junction)
             {
-                // Kreuzung: Fläche aus den Fahrbahnkanten mit gerundeten Ecken + Gehweg-Ecken
+                // Kreuzung: Fahrbahnfläche mit gerundeten Bordsteinecken + Gehweg-Ecken
                 mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt], materials[RoadSurface.Sidewalk] };
                 mf.sharedMesh = RoadMeshBuilder.BuildJunction(network, node, mf.sharedMesh);
                 return;
             }
 
-            // Grad 2: kleine Scheibe schließt Lücken in Knicken (leicht unter der Fahrbahn, Markierungen bleiben sichtbar)
-            float radius = 0f;
-            foreach (int id in node.SegmentIds) radius = Mathf.Max(radius, network.GetSegment(id).Type.CarriagewayHalfWidth);
-            mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt] };
-            mf.sharedMesh = RoadMeshBuilder.BuildDisc(node.Position, radius, node.Height + RoadMeshBuilder.RoadHeight - 0.002f, mf.sharedMesh);
+            // Knick: Eckstück mit vollem Querschnitt (alle Oberflächen wie ein Segment)
+            mr.sharedMaterials = materials.All;
+            mf.sharedMesh = RoadMeshBuilder.BuildBend(JunctionGeometry.Bend(network, node), mf.sharedMesh, network.Ground);
         }
 
         MeshFilter CreateMeshObject(string name, Material[] mats)
