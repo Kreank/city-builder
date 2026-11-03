@@ -58,7 +58,9 @@ namespace CityBuilder.Game.Roads
                 LineHeight = LineOffset + (g.Active ? Mathf.Max(g.StartHeight, g.EndHeight) : tool.CursorHeight);
                 if (tool.CurrentMode == RoadTool.Mode.Zone)
                 {
-                    var c = CityBuilder.Game.Zoning.ZoneView.ZoneColor(tool.SelectedZone);
+                    var c = tool.SelectedFocus.HasValue // Produktion lenken: Schwerpunkt-Pinsel in seiner Farbe
+                        ? CityBuilder.Game.Goods.IndustryFocusView.FocusColor(tool.SelectedFocus.Value)
+                        : CityBuilder.Game.Zoning.ZoneView.ZoneColor(tool.SelectedZone);
                     c.a = 0.95f;
                     LineHeight = LineOffset + tool.CursorHeight + 0.5f;
                     Circle(tool.Cursor, tool.BrushRadius, c, width * 1.5f, 40);

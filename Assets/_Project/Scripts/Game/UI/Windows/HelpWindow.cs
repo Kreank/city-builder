@@ -51,6 +51,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("F9 · F10", "Parallelstraßen: Reihen 4→3→2→1→aus · Blockraster");
                 ui.Field(", .", "Vorlage/Bauwerk drehen");
                 ui.Field("Z · [ ]", "Zonen · Pinselgröße");
+                ui.Field("Z → Schwerpunkt", "Industrie lenken: Schwerpunkt-Gebiet malen (RMB = automatisch), Rohstoff-Ansicht zeigt das Vorkommen"); // Produktion lenken
                 ui.Field("L", "Gelände formen");
                 ui.Field("J", "Versorgung (Strom, Wasser)");
                 ui.Field("4 · ⇧4", "Dienste · Abdeckungs-Ansicht durchschalten");
@@ -67,7 +68,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("X", "Unterirdisch-Ansicht");
                 ui.Field("F2 · F3 · F4", "Bodenwert · Rohstoffe durchschalten · Weltkarte");
                 ui.Field("M", "Stadtkasse");
-                ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen)");
+                ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen, Lenkung: Förderung je Branche)");
                 ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
                 ui.Field("F1", "diese Hilfe");
             }

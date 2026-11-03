@@ -49,6 +49,7 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Kasse", Money(f.Cash), f.Cash < 0 ? Tone.Warn : Tone.None);
                 if (f.LossDays > 0) ui.Field("Verlusttage am Stück", $"{f.LossDays} (Pleite ab {GoodsRules.BankruptAfterLossDays})", Tone.Warn);
             }
+            if (r.IsIndustry && world.Policy != null) PolicyFields(ui, world.Policy, f, b); // Produktion lenken
 
             ui.Section("Gewinnrechnung", "gestern · heute bisher");
             using (ui.Fields())
@@ -58,6 +59,8 @@ namespace CityBuilder.Game.Inspect
                 ui.Columns("Wareneinsatz", "−" + Money(f.Yesterday.InputCost), "−" + Money(f.Today.InputCost));
                 ui.Columns("Löhne", "−" + Money(f.Yesterday.Wages), "(abends)");
                 ui.Columns("Transport", "−" + Money(f.Yesterday.Transport), "−" + Money(f.Today.Transport));
+                if (f.Yesterday.Subsidy > 0 || f.Today.Subsidy > 0) // Produktion lenken
+                    ui.Columns("Förderung", "+" + Money(f.Yesterday.Subsidy), "(abends)");
                 ui.Columns("Gewinn", Signed(yesterday), Signed(today), yesterday >= 0 ? Tone.Good : Tone.Bad, today >= 0 ? Tone.Good : Tone.Warn);
             }
 
