@@ -266,7 +266,7 @@ namespace CityBuilder.Simulation.Tests
         // ------------------------------------------------------------ Regionen und Länder
 
         [Fact]
-        public void Countries_CoverAllLand_AndHaveProfiles()
+        public void Countries_AndFreeLand_PartitionLand_AndHaveProfiles()
         {
             var p = P;
             Assert.True(p.Regions.Count >= 150, $"{p.Regions.Count} Regionen");
@@ -275,14 +275,18 @@ namespace CityBuilder.Simulation.Tests
             {
                 if (!p.IsLand(i)) { Assert.Equal(-1, p.RegionOf[i]); continue; }
                 Assert.InRange(p.RegionOf[i], 0, p.Regions.Count - 1);
-                Assert.NotNull(p.CountryOfCell(i));
+                // Spielstart: Land gehört einem Land oder ist frei (unbesiedelt)
+                var region = p.Regions[p.RegionOf[i]];
+                Assert.Equal(region.IsFree, p.CountryOfCell(i) == null);
             }
-            // jede Region gehört genau einem Land, Zellen addieren sich zur Landfläche
+            // jede besiedelte Region gehört genau einem Land, Zellen addieren sich zur Landfläche ohne freies Land
             var seen = new HashSet<int>();
             foreach (var c in p.Countries)
-                foreach (int r in c.Regions) { Assert.True(seen.Add(r)); Assert.Equal(c.Id, p.Regions[r].CountryId); }
-            Assert.Equal(p.Regions.Count, seen.Count);
-            Assert.Equal(p.RegionOf.Count(r => r >= 0), p.Countries.Sum(c => c.LandCells));
+                foreach (int r in c.Regions) { Assert.True(seen.Add(r)); Assert.Equal(c.Id, p.Regions[r].CountryId); Assert.Same(c, p.Regions[r].Country); }
+            Assert.Equal(p.Regions.Count - p.FreeRegionCount, seen.Count);
+            Assert.All(p.Regions.Where(r => r.IsFree), r => Assert.Null(r.Country));
+            Assert.InRange(p.FreeRegionCount / (float)p.Regions.Count, 0.25f, 0.4f);
+            Assert.Equal(p.Regions.Where(r => !r.IsFree).Sum(r => r.Cells.Count), p.Countries.Sum(c => c.LandCells));
 
             foreach (var c in p.Countries)
             {
@@ -314,7 +318,9 @@ namespace CityBuilder.Simulation.Tests
         [Fact]
         public void StartRegion_SetsPlayerCountry()
         {
-            var p = PlanetGenerator.Generate(31, new PlanetSettings { Width = 180, Height = 90, TargetRegions = 120, TargetCountries = 16 });
+            // Altes Modell (Spielstände vor „Spielstart & Startregion“): alles Land gehört NPC-Ländern, Spieler-Land = Land der Startregion
+            var p = PlanetGenerator.Generate(31, new PlanetSettings { Width = 180, Height = 90, TargetRegions = 120, TargetCountries = 16, FreeLandShare = 0f });
+            Assert.Equal(0, p.FreeRegionCount);
             Assert.Null(p.PlayerCountry);
             int start = p.SuggestStartRegion();
             var r = p.Regions[start];
@@ -323,11 +329,50 @@ namespace CityBuilder.Simulation.Tests
             p.SetStartRegion(start);
             Assert.Equal(r.CountryId, p.PlayerCountryId);
             Assert.True(p.PlayerCountry.IsPlayer);
+            Assert.False(p.PlayerCountry.IsCityState);
             Assert.Equal(1, p.Countries.Count(c => c.IsPlayer));
             int other = p.Regions.First(x => x.CountryId != r.CountryId).Id;
             p.SetStartRegion(other);
             Assert.Equal(1, p.Countries.Count(c => c.IsPlayer));
             Assert.False(p.Countries[r.CountryId].IsPlayer);
+        }
+
+        [Fact]
+        public void StartRegion_FreeRegion_PlayerBecomesCityState()
+        {
+            var p = PlanetGenerator.Generate(31, new PlanetSettings { Width = 180, Height = 90, TargetRegions = 120, TargetCountries = 16 });
+            int npcs = p.Countries.Count;
+            Assert.True(p.FreeRegionCount > 0);
+            int start = p.SuggestStartRegion();
+            var r = p.Regions[start];
+            Assert.True(r.IsFree);
+            Assert.True(r.HasRiver || r.IsCoastal);
+            p.SetStartRegion(start);
+            var me = p.PlayerCountry;
+            Assert.NotNull(me);
+            Assert.True(me.IsPlayer && me.IsCityState);
+            Assert.Equal(npcs, me.Id);                       // hinten angehängt, NPC-Ids bleiben
+            Assert.Equal(npcs + 1, p.Countries.Count);
+            Assert.Equal(new[] { start }, me.Regions);
+            Assert.Same(me, r.Country);
+            Assert.Equal(PlayerRealm.CityStateName(null), me.Name);
+            Assert.Equal(start, p.RegionOf[me.CapitalCell]);
+            Assert.NotNull(me.Economy);
+            Assert.Same(me.Economy, p.Economy.Nations[me.Id]);
+            Assert.Equal(WorldEconomy.CityStatePopulation, me.Economy.Population);
+            Assert.NotEqual(me.Profile.Primary, me.Profile.Secondary);
+            Assert.Equal(1, p.Countries.Count(c => c.IsPlayer));
+
+            // verlegen: gleiche Id, alte Region wieder frei
+            int other = p.Regions.First(x => x.IsFree && x.Cells.Count >= 4).Id;
+            p.SetStartRegion(other);
+            Assert.Same(me, p.PlayerCountry);
+            Assert.Equal(npcs + 1, p.Countries.Count);
+            Assert.True(p.Regions[start].IsFree);
+            Assert.Equal(new[] { other }, me.Regions);
+            // in ein NPC-Land wechseln geht nicht (Stadtstaat bleibt im freien Land)
+            int npcRegion = p.Regions.First(x => !x.IsFree && x.Country != me).Id;
+            Assert.Throws<InvalidOperationException>(() => p.SetStartRegion(npcRegion));
         }
 
         // ------------------------------------------------------------ LOD-Volkswirtschaft

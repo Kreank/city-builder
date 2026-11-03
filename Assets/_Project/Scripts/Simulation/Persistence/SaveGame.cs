@@ -24,7 +24,8 @@ namespace CityBuilder.Simulation.Persistence
         public const string GameVersion = "0.6";
         /// <summary>Abschnitt mit Einstellungen, Seed und Uhr – wird vor allen anderen gelesen (baut die Welt).</summary>
         public const string WorldSectionId = "world";
-        const int WorldSectionVersion = 1;
+        /// <summary>v2 (Spielstart &amp; Startregion): Anteil freies Land + Stadtname. v1-Stände laden mit freiem Land 0 (altes Modell).</summary>
+        const int WorldSectionVersion = 2;
 
         // ------------------------------------------------------------ Speichern
 
@@ -193,6 +194,9 @@ namespace CityBuilder.Simulation.Persistence
             }
             w.Int(world.Seed);
             w.Long(world.Clock.Tick);
+            // v2 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
+            w.Float(s.Planet?.FreeLandShare ?? World.PlanetSettings.DefaultFreeLandShare);
+            w.String(s.CityName);
         }
 
         static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick)
@@ -218,6 +222,18 @@ namespace CityBuilder.Simulation.Persistence
                 };
             seed = r.Int();
             tick = r.Long();
+            // Spielstart: v1 kannte kein freies Land → Welt im alten Modell neu erzeugen (alle Regionen gehören NPC-Ländern,
+            // Spieler-Land = Land der Startregion). Nur so passen die gespeicherten Länder-/Handelsabschnitte (Länder-Ids).
+            float free = 0f;
+            if (version >= 2)
+            {
+                free = r.Float();
+                if (!(free >= 0f && free <= 0.9f)) throw new SaveFormatException("Welteinstellungen ungültig (freies Land).");
+                s.CityName = r.String();
+            }
+            // Standardwert ohne eigene Planet-Einstellungen bleibt null (gleiche Bytes beim erneuten Speichern)
+            if (s.Planet != null) s.Planet.FreeLandShare = free;
+            else if (free != World.PlanetSettings.DefaultFreeLandShare) s.Planet = new World.PlanetSettings { FreeLandShare = free };
             if (!(s.SizeMeters >= 64f && s.SizeMeters <= 65536f) || !(s.EnvironmentCellSize >= 1f) || !(s.TerrainCellSize >= 0.5f) || tick < 0)
                 throw new SaveFormatException("Welteinstellungen ungültig.");
             if (s.SizeMeters / s.TerrainCellSize > 8192f || s.SizeMeters / s.EnvironmentCellSize > 8192f)

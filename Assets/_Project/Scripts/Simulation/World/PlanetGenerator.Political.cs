@@ -297,6 +297,9 @@ namespace CityBuilder.Simulation.World
                     if (d > best) { best = d; owner[r] = k; }
                 }
             }
+            // --- Spielstart: ein Teil des Landes bleibt unbesiedelt (zwischen den Ländern, Randlagen)
+            if (s.FreeLandShare > 0f) FreeLand(p, s, seed, seeds, owner, dist, edges);
+            // --- Ende Spielstart
 
             for (int k = 0; k < seeds.Count; k++)
             {
@@ -306,22 +309,132 @@ namespace CityBuilder.Simulation.World
             for (int r = 0; r < rc; r++)
             {
                 p.Regions[r].CountryId = owner[r];
+                if (owner[r] < 0) continue; // frei
+                p.Regions[r].Country = p.Countries[owner[r]];
                 p.Countries[owner[r]].Regions.Add(r);
             }
             foreach (var country in p.Countries)
-            {
-                var cap = p.Regions[country.CapitalRegionId];
-                int bestCell = cap.CenterCell;
-                float bestScore = float.MinValue;
-                foreach (int i in cap.Cells)
-                {
-                    float sc = p.Fertility[i] + (p.IsRiver(i) ? 0.5f : 0f) + (p.CoastDistance[i] == 1 ? 0.4f : 0f)
-                               - MathF.Abs(p.Temperature[i] - 14f) / 25f - p.Ruggedness(i) / 2000f;
-                    if (sc > bestScore) { bestScore = sc; bestCell = i; }
-                }
-                country.CapitalCell = bestCell;
-            }
+                country.CapitalCell = BestCapitalCell(p, p.Regions[country.CapitalRegionId]);
         }
+
+        // --- Spielstart & Startregion: freies Land
+        /// <summary>
+        /// Macht etwa <see cref="PlanetSettings.FreeLandShare"/> der Regionen zu freiem Land. Bevorzugt Regionen, die weit von
+        /// der eigenen Hauptstadt liegen (relativ zum Land und weltweit, Dijkstra-Abstand), an Grenzen zu anderen Ländern und
+        /// Inseln; ein Hash-Rauschen verteilt das freie Land über alle Klimazonen und Kontinente. Hauptstädte bleiben. Danach
+        /// wird alles frei, was nicht mehr über eigene Regionen (Land- oder Seeweg) mit der Hauptstadt verbunden ist.
+        /// </summary>
+        static void FreeLand(Planet p, PlanetSettings s, int seed, List<int> seeds, int[] owner, float[] dist, List<(int to, float cost)>[] edges)
+        {
+            int rc = p.Regions.Count;
+            var capital = new bool[rc];
+            foreach (int r in seeds) capital[r] = true;
+            var maxDist = new float[seeds.Count];
+            float globalMax = 0f;
+            for (int r = 0; r < rc; r++)
+            {
+                if (owner[r] < 0 || dist[r] == float.MaxValue) continue;
+                maxDist[owner[r]] = MathF.Max(maxDist[owner[r]], dist[r]);
+                globalMax = MathF.Max(globalMax, dist[r]);
+            }
+            var key = new float[rc];
+            var order = new List<int>();
+            for (int r = 0; r < rc; r++)
+            {
+                if (capital[r] || owner[r] < 0) continue;
+                bool unreachable = dist[r] == float.MaxValue;
+                float rel = unreachable ? 1f : maxDist[owner[r]] > 0f ? dist[r] / maxDist[owner[r]] : 0f;
+                float abs = unreachable ? 1f : globalMax > 0f ? dist[r] / globalMax : 0f;
+                var reg = p.Regions[r];
+                bool border = false;
+                foreach (int q in reg.Neighbors) if (owner[q] != owner[r]) { border = true; break; }
+                bool island = reg.Neighbors.Count == 0;
+                float noise = (SimRandom.Hash(seed ^ 0x46524545, r) & 0xFFFF) / 65535f;
+                key[r] = 0.5f * rel + 0.25f * abs + (border ? 0.2f : 0f) + (island ? 0.1f : 0f) + 0.35f * noise;
+                order.Add(r);
+            }
+            order.Sort((a, b) => key[a] != key[b] ? key[b].CompareTo(key[a]) : a.CompareTo(b));
+            int target = Math.Min(order.Count, (int)MathF.Round(Math.Clamp(s.FreeLandShare, 0f, 0.9f) * rc));
+            for (int i = 0; i < target; i++) owner[order[i]] = -1;
+
+            // Zusammenhang: nur, was über eigene Regionen von der Hauptstadt aus erreichbar ist, bleibt beim Land
+            var reached = new bool[rc];
+            var queue = new Queue<int>();
+            foreach (int r in seeds) { reached[r] = true; queue.Enqueue(r); }
+            while (queue.Count > 0)
+            {
+                int r = queue.Dequeue();
+                foreach (var (to, _) in edges[r])
+                {
+                    if (reached[to] || owner[to] != owner[r]) continue;
+                    reached[to] = true;
+                    queue.Enqueue(to);
+                }
+            }
+            for (int r = 0; r < rc; r++) if (owner[r] >= 0 && !reached[r]) owner[r] = -1;
+        }
+
+        /// <summary>
+        /// Stadtstaat des Spielers in einer freien Region anlegen (<paramref name="cityState"/> null) bzw. dorthin verlegen:
+        /// Region zuordnen, Hauptstadtzelle, Kennzahlen, Stärken-Profil (Rang gegen die NPC-Länder, deren Ränge bleiben)
+        /// und eine kleine eigene Volkswirtschaft (Umland der Stadt) – Handel und LOD-Wirtschaft behandeln ihn wie ein Land.
+        /// </summary>
+        internal static void PlaceCityState(Planet p, Country cityState, Region region)
+        {
+            if (cityState == null)
+            {
+                cityState = new Country
+                {
+                    Id = p.Countries.Count, Name = PlayerRealm.CityStateName(null), CapitalName = PlayerRealm.DefaultCityName,
+                    Color = PlayerColor, IsPlayer = true, IsCityState = true,
+                };
+                p.Countries.Add(cityState);
+            }
+            foreach (int old in cityState.Regions.ToArray()) p.AssignRegion(p.Regions[old], null);
+            p.AssignRegion(region, cityState);
+            cityState.CapitalRegionId = region.Id;
+            cityState.CapitalCell = BestCapitalCell(p, region);
+
+            var st = new ProfileStats();
+            foreach (int i in region.Cells) st.AddCell(p, i);
+            for (int i = 0; i < p.CellCount; i++)
+                if (!p.IsLand(i) && p.MaritimeRegion[i] == region.Id) st.AddShelfOil(p, i);
+            float culture = (SimRandom.Hash(p.Seed ^ 0x5C17, region.Id) & 0xFFFF) / 65535f;
+            FillRaw(cityState, st, culture);
+            // Rang gegen die NPC-Länder (deren Ränge ändern sich nicht)
+            int others = 0;
+            var below = new float[CountryProfile.Count];
+            foreach (var o in p.Countries)
+            {
+                if (o == cityState) continue;
+                others++;
+                for (int k = 0; k < CountryProfile.Count; k++)
+                {
+                    float v = cityState.Profile.Raw[k], w = o.Profile.Raw[k];
+                    if (w < v) below[k] += 1f; else if (w == v) below[k] += 0.5f;
+                }
+            }
+            for (int k = 0; k < CountryProfile.Count; k++) cityState.Profile.Rank[k] = others > 0 ? below[k] / others : 0.5f;
+            Comparative(cityState.Profile);
+            p.Economy?.PlaceCityState(p, cityState);
+        }
+
+        /// <summary>Kartenfarbe des Spielers (Gold).</summary>
+        public const uint PlayerColor = 0xE8C547;
+
+        static int BestCapitalCell(Planet p, Region cap)
+        {
+            int bestCell = cap.CenterCell;
+            float bestScore = float.MinValue;
+            foreach (int i in cap.Cells)
+            {
+                float sc = p.Fertility[i] + (p.IsRiver(i) ? 0.5f : 0f) + (p.CoastDistance[i] == 1 ? 0.4f : 0f)
+                           - MathF.Abs(p.Temperature[i] - 14f) / 25f - p.Ruggedness(i) / 2000f;
+                if (sc > bestScore) { bestScore = sc; bestCell = i; }
+            }
+            return bestCell;
+        }
+        // --- Ende Spielstart
 
         static uint CountryColor(int id)
         {
@@ -345,64 +458,54 @@ namespace CityBuilder.Simulation.World
 
         // ------------------------------------------------------------ Stärken-Profile (komparative Vorteile)
 
+        /// <summary>Flächengewichtete Summen über die Zellen eines Landes (Grundlage von <see cref="FillRaw"/>).</summary>
+        sealed class ProfileStats
+        {
+            public float area, temp, prec, fert, forest, ore, coal, oil, gw, mountain, flat, river;
+            public int coastCells, landCells;
+            public readonly float[] biome = new float[Biomes.Count];
+
+            public void AddCell(Planet p, int i)
+            {
+                float a = p.CellAreaKm2(p.YOf(i));
+                area += a; temp += p.Temperature[i] * a; prec += p.Precipitation[i] * a;
+                fert += p.Fertility[i] * a; forest += p.Forest[i] * a; ore += p.Ore[i] * a;
+                coal += p.Coal[i] * a; oil += p.Oil[i] * a; gw += p.Groundwater[i] * a;
+                if (p.Elevation[i] > 1500f) mountain += a;
+                if (p.Ruggedness(i) < 300f) flat += a;
+                if (p.IsRiver(i)) river += a;
+                biome[(int)p.BiomeOf[i]] += a;
+                landCells++;
+                if (p.CoastDistance[i] == 1) coastCells++;
+            }
+
+            /// <summary>Schelf-Öl gehört dem Küstenland (halb gewichtet).</summary>
+            public void AddShelfOil(Planet p, int i) => oil += p.Oil[i] * p.CellAreaKm2(p.YOf(i)) * 0.5f;
+        }
+
         static void Profiles(Planet p, int seed)
         {
             int cc = p.Countries.Count;
             if (cc == 0) return;
-            var area = new float[cc]; var temp = new float[cc]; var prec = new float[cc];
-            var fert = new float[cc]; var forest = new float[cc]; var ore = new float[cc]; var coal = new float[cc];
-            var oil = new float[cc]; var gw = new float[cc]; var mountain = new float[cc]; var flat = new float[cc];
-            var river = new float[cc]; var coastCells = new int[cc]; var landCells = new int[cc];
-            var biome = new float[cc, Biomes.Count];
+            var stats = new ProfileStats[cc];
+            for (int c = 0; c < cc; c++) stats[c] = new ProfileStats();
             for (int i = 0; i < p.CellCount; i++)
             {
                 if (!p.IsLand(i)) continue;
                 int c = p.Regions[p.RegionOf[i]].CountryId;
-                float a = p.CellAreaKm2(p.YOf(i));
-                area[c] += a; temp[c] += p.Temperature[i] * a; prec[c] += p.Precipitation[i] * a;
-                fert[c] += p.Fertility[i] * a; forest[c] += p.Forest[i] * a; ore[c] += p.Ore[i] * a;
-                coal[c] += p.Coal[i] * a; oil[c] += p.Oil[i] * a; gw[c] += p.Groundwater[i] * a;
-                if (p.Elevation[i] > 1500f) mountain[c] += a;
-                if (p.Ruggedness(i) < 300f) flat[c] += a;
-                if (p.IsRiver(i)) river[c] += a;
-                biome[c, (int)p.BiomeOf[i]] += a;
-                landCells[c]++;
-                if (p.CoastDistance[i] == 1) coastCells[c]++;
+                if (c < 0) continue; // freies Land
+                stats[c].AddCell(p, i);
             }
             // Schelf-Öl gehört dem Küstenland
             for (int i = 0; i < p.CellCount; i++)
                 if (!p.IsLand(i) && p.MaritimeRegion[i] >= 0)
-                    oil[p.Regions[p.MaritimeRegion[i]].CountryId] += p.Oil[i] * p.CellAreaKm2(p.YOf(i)) * 0.5f;
+                {
+                    int c = p.Regions[p.MaritimeRegion[i]].CountryId;
+                    if (c >= 0) stats[c].AddShelfOil(p, i);
+                }
 
             var rng = new SimRandom(seed ^ 0x7EC4);
-            for (int c = 0; c < cc; c++)
-            {
-                var country = p.Countries[c];
-                float inv = area[c] > 0f ? 1f / area[c] : 0f;
-                float t = temp[c] * inv, pr = prec[c] * inv;
-                country.AreaKm2 = area[c];
-                country.MeanTemperature = t;
-                country.Precipitation = pr;
-                country.LandCells = landCells[c];
-                country.CoastCells = coastCells[c];
-                float coastRatio = landCells[c] > 0 ? MathF.Min(1f, coastCells[c] / (float)landCells[c] * 1.6f) : 0f;
-                float diversity = 0f;
-                for (int b = 0; b < Biomes.Count; b++) if (biome[c, b] * inv > 0.05f) diversity += 1f;
-                diversity = MathF.Min(1f, diversity / 5f);
-                float growing = WorldNoise.Clamp01(1f - MathF.Abs(t - 17f) / 20f);
-                float water = WorldNoise.SmoothStep(250f, 800f, pr);
-                float culture = rng.NextFloat();
-
-                var raw = country.Profile.Raw;
-                raw[(int)Strength.Agriculture] = WorldNoise.Clamp01(fert[c] * inv * 1.3f * growing * (0.4f + 0.6f * water));
-                raw[(int)Strength.RawMaterials] = WorldNoise.Clamp01((0.32f * ore[c] + 0.25f * coal[c] + 0.3f * oil[c] + 0.13f * forest[c]) * inv * 2.2f);
-                raw[(int)Strength.Industry] = WorldNoise.Clamp01(0.3f * (coal[c] + ore[c]) * inv * 1.5f + 0.2f * gw[c] * inv
-                                                                 + 0.2f * MathF.Min(1f, river[c] * inv * 6f) + 0.15f * flat[c] * inv + 0.15f * coastRatio);
-                float warmSunny = WorldNoise.Clamp01(1f - MathF.Abs(t - 24f) / 12f) * (1f - WorldNoise.SmoothStep(1200f, 2600f, pr));
-                raw[(int)Strength.Tourism] = WorldNoise.Clamp01(0.32f * coastRatio + 0.3f * warmSunny + 0.23f * MathF.Min(1f, mountain[c] * inv * 4f) + 0.15f * diversity);
-                float temperate = WorldNoise.Clamp01(1f - MathF.Abs(t - 12f) / 15f);
-                raw[(int)Strength.Technology] = WorldNoise.Clamp01(0.35f * temperate + 0.25f * coastRatio + 0.15f * MathF.Min(1f, river[c] * inv * 6f) + 0.25f * culture);
-            }
+            for (int c = 0; c < cc; c++) FillRaw(p.Countries[c], stats[c], rng.NextFloat());
             // Rang unter allen Ländern + komparativer Vorteil gegenüber den eigenen anderen Stärken
             for (int k = 0; k < CountryProfile.Count; k++)
                 for (int c = 0; c < cc; c++)
@@ -417,23 +520,53 @@ namespace CityBuilder.Simulation.World
                     }
                     p.Countries[c].Profile.Rank[k] = cc > 1 ? below / (cc - 1) : 0.5f;
                 }
-            foreach (var country in p.Countries)
+            foreach (var country in p.Countries) Comparative(country.Profile);
+        }
+
+        /// <summary>Absolute Eignung (<see cref="CountryProfile.Raw"/>) und Kennzahlen eines Landes aus seinen Zellsummen.</summary>
+        static void FillRaw(Country country, ProfileStats s, float culture)
+        {
+            float inv = s.area > 0f ? 1f / s.area : 0f;
+            float t = s.temp * inv, pr = s.prec * inv;
+            country.AreaKm2 = s.area;
+            country.MeanTemperature = t;
+            country.Precipitation = pr;
+            country.LandCells = s.landCells;
+            country.CoastCells = s.coastCells;
+            float coastRatio = s.landCells > 0 ? MathF.Min(1f, s.coastCells / (float)s.landCells * 1.6f) : 0f;
+            float diversity = 0f;
+            for (int b = 0; b < Biomes.Count; b++) if (s.biome[b] * inv > 0.05f) diversity += 1f;
+            diversity = MathF.Min(1f, diversity / 5f);
+            float growing = WorldNoise.Clamp01(1f - MathF.Abs(t - 17f) / 20f);
+            float water = WorldNoise.SmoothStep(250f, 800f, pr);
+
+            var raw = country.Profile.Raw;
+            raw[(int)Strength.Agriculture] = WorldNoise.Clamp01(s.fert * inv * 1.3f * growing * (0.4f + 0.6f * water));
+            raw[(int)Strength.RawMaterials] = WorldNoise.Clamp01((0.32f * s.ore + 0.25f * s.coal + 0.3f * s.oil + 0.13f * s.forest) * inv * 2.2f);
+            raw[(int)Strength.Industry] = WorldNoise.Clamp01(0.3f * (s.coal + s.ore) * inv * 1.5f + 0.2f * s.gw * inv
+                                                             + 0.2f * MathF.Min(1f, s.river * inv * 6f) + 0.15f * s.flat * inv + 0.15f * coastRatio);
+            float warmSunny = WorldNoise.Clamp01(1f - MathF.Abs(t - 24f) / 12f) * (1f - WorldNoise.SmoothStep(1200f, 2600f, pr));
+            raw[(int)Strength.Tourism] = WorldNoise.Clamp01(0.32f * coastRatio + 0.3f * warmSunny + 0.23f * MathF.Min(1f, s.mountain * inv * 4f) + 0.15f * diversity);
+            float temperate = WorldNoise.Clamp01(1f - MathF.Abs(t - 12f) / 15f);
+            raw[(int)Strength.Technology] = WorldNoise.Clamp01(0.35f * temperate + 0.25f * coastRatio + 0.15f * MathF.Min(1f, s.river * inv * 6f) + 0.25f * culture);
+        }
+
+        /// <summary>Komparativer Vorteil gegenüber den eigenen anderen Stärken → Primär-/Sekundärstärke.</summary>
+        static void Comparative(CountryProfile pr)
+        {
+            float mean = 0f;
+            for (int k = 0; k < CountryProfile.Count; k++) mean += pr.Rank[k] + 0.05f;
+            mean /= CountryProfile.Count;
+            int first = 0, second = -1;
+            for (int k = 0; k < CountryProfile.Count; k++)
             {
-                var pr = country.Profile;
-                float mean = 0f;
-                for (int k = 0; k < CountryProfile.Count; k++) mean += pr.Rank[k] + 0.05f;
-                mean /= CountryProfile.Count;
-                int first = 0, second = -1;
-                for (int k = 0; k < CountryProfile.Count; k++)
-                {
-                    pr.Comparative[k] = (pr.Rank[k] + 0.05f) / mean;
-                    if (pr.Comparative[k] > pr.Comparative[first]) first = k;
-                }
-                for (int k = 0; k < CountryProfile.Count; k++)
-                    if (k != first && (second < 0 || pr.Comparative[k] > pr.Comparative[second])) second = k;
-                pr.Primary = (Strength)first;
-                pr.Secondary = (Strength)second;
+                pr.Comparative[k] = (pr.Rank[k] + 0.05f) / mean;
+                if (pr.Comparative[k] > pr.Comparative[first]) first = k;
             }
+            for (int k = 0; k < CountryProfile.Count; k++)
+                if (k != first && (second < 0 || pr.Comparative[k] > pr.Comparative[second])) second = k;
+            pr.Primary = (Strength)first;
+            pr.Secondary = (Strength)second;
         }
     }
 }

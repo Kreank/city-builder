@@ -17,6 +17,12 @@ namespace CityBuilder.Simulation.World
         public float LandFraction = 0.30f;
         public int TargetRegions = 300;
         public int TargetCountries = 36;
+        /// <summary>
+        /// Spielstart: Anteil der Regionen, die unbesiedelt bleiben (kein Land; dort startet der Spieler als Stadtstaat).
+        /// 0 = altes Modell (alles Land gehört NPC-Ländern, Spielstände vor „Spielstart &amp; Startregion“).
+        /// </summary>
+        public float FreeLandShare = DefaultFreeLandShare;
+        public const float DefaultFreeLandShare = 0.32f;
     }
 
     /// <summary>
