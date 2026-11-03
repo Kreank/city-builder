@@ -335,7 +335,10 @@ namespace CityBuilder.Game.Roads
             if (kb.tKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Traffic ? Mode.Straight : Mode.Traffic);
             if (kb.hKey.wasPressedThisFrame) ToggleDualCarriageway();
             if (kb.xKey.wasPressedThisFrame) ToggleUndergroundView();
-            if (kb.zKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Zone ? Mode.Straight : Mode.Zone);
+            // Zonen über das gedruckte Zeichen „Z“ der aktuellen Tastaturbelegung (Input System liest sonst die
+            // US-Lage: auf QWERTZ läge „Zonen“ auf der Taste Y)
+            var zoneKey = kb.FindKeyOnCurrentKeyboardLayout("z") ?? kb.zKey;
+            if (zoneKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Zone ? Mode.Straight : Mode.Zone);
             if (kb.cKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Inspect ? Mode.Straight : Mode.Inspect); // G2 Bürger-Info
             if (CurrentMode == Mode.Zone)
             {
