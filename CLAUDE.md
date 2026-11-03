@@ -73,6 +73,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Hilfe „Netz entlang Straßen verlegen“ (einzelne oder alle Stadtstraßen, normale Kosten, Vorschau) – v. a. für
   bestehende Städte/alte Spielstände (Übergangsfrist 5 Tage nach dem Laden eines Stands v1).
 
+## Entscheidung: Bauart (2026-11-03, Spieler)
+- **Freie Straßen bleiben** (kein Anno-Raster).
+- **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
+  sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
+- **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
+  Schwerpunkte/Förderung statt selbst gebauter Produktionsketten.
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
