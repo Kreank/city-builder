@@ -54,6 +54,8 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: eigene Vertragsstrafen und Kündigungsgebühren.</summary>
         PenaltiesPaid,
         // --- Ende Etappe 8
+        /// <summary>Ausgabe: Bau/Umzug einzeln gesetzter Wohnhäuser (Anno-Stil).</summary>
+        HouseConstruction,
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -67,7 +69,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.PenaltiesPaid + 1; // letzte Kategorie (Etappe 8 hinter ÖPNV)
+        public const int Count = (int)BudgetCategory.HouseConstruction + 1; // letzte Kategorie (Wohnhäuser hinter Etappe 8)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -113,6 +115,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.TradePurchases: return "Handel: Einkauf";
                 case BudgetCategory.PenaltiesPaid: return "Vertragsstrafen (gezahlt)";
                 // --- Ende Etappe 8
+                case BudgetCategory.HouseConstruction: return "Bau Wohnhäuser";
                 default: return c.ToString();
             }
         }

@@ -9,11 +9,14 @@ namespace CityBuilder.Simulation.Zoning
     /// gelesenen Geländehöhen – das Raster wird nur bei Netzänderungen neu gebaut, ein Neuaufbau beim Laden würde
     /// zwischenzeitliche Geländeänderungen vorwegnehmen), Gebäude (Stufe, Zustand, Bau, Belegung, Zufahrt),
     /// Nachfrage, Bürgerdaten für die Nachfrage, Statistik, Zufall und Id-Zähler. Räumlicher Index neu aufgebaut.
+    /// v2 (Wohnhäuser setzen): Herkunft je Gebäude (Zone/Spieler); v1-Stände → alle Gebäude „aus Zone“.
     /// </summary>
     public sealed partial class CitySystem : ISaveable
     {
         public string SaveId => "city";
-        public int SaveVersion => 1;
+        public int SaveVersion => 2;
+        /// <summary>Nur Tests (Migration): Abschnitt im alten Layout v1 schreiben (ohne Herkunft).</summary>
+        internal bool WriteLegacyV1;
 
         public void Write(SaveWriter w)
         {
@@ -54,6 +57,7 @@ namespace CityBuilder.Simulation.Zoning
                 w.Int(b.Workers);
                 w.Float(b.Construction);
                 w.Float(b.Condition);
+                if (!WriteLegacyV1) w.Name(b.Origin); // v2
             });
         }
 
@@ -104,12 +108,15 @@ namespace CityBuilder.Simulation.Zoning
                     Construction = r.Float(),
                     Condition = r.Float(),
                 };
+                b.Origin = version >= 2 ? r.Name<BuildingOrigin>() : BuildingOrigin.Zone; // v1: alles aus Zonen gewachsen
                 if (b.WidthCells < 1 || b.DepthCells < 1 || b.WidthCells > 64 || b.DepthCells > 64) throw new SaveFormatException($"Gebäude {b.Id}: Grundstück ungültig.");
                 return new KeyValuePair<int, Building>(b.Id, b);
             });
 
             // Räumlicher Index: Listen je Feld in Bau-Reihenfolge (= Id-Reihenfolge) wie beim Wachsen
             buildingBuckets.Clear();
+            playerHouses = 0;
+            foreach (var b in buildings.Values) if (b.IsPlayerPlaced) playerHouses++;
             var sorted = new List<Building>(buildings.Values);
             sorted.Sort((a, b) => a.Id.CompareTo(b.Id));
             foreach (var b in sorted)

@@ -343,6 +343,9 @@ namespace CityBuilder.Simulation.Services
                     if (ServiceGeometry.RectsOverlap(position, plan.Front, type.Width, type.Depth, b.Position, b.Front, b.Width, b.Depth))
                         plan.Displaced.Add(b);
             }
+            // --- Wohnhäuser setzen: gesetzte Häuser werden nicht abgerissen – Plan ungültig (Spieler reißt selbst ab)
+            if (plan.Displaced.Exists(b => b.IsPlayerPlaced)) { plan.Error = ServiceBuildError.OverlapsFacility; plan.Displaced.Clear(); }
+            // --- Ende Wohnhäuser
             return plan;
         }
 

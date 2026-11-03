@@ -28,6 +28,17 @@ namespace CityBuilder.Simulation.LandValue
         public int EmptyDays;
         /// <summary>Die Werte, nach denen bewertet wird.</summary>
         public BuildingFacts Facts;
+
+        // --- Wohnhäuser setzen (Anno-Stil): nur bei gesetzten Häusern belegt
+        /// <summary>Vom Spieler gesetztes Haus – Stufen nach <see cref="HouseRules"/> statt Bodenwert.</summary>
+        public bool PlayerHouse;
+        /// <summary>Anforderungen der nächsten Stufe (kumuliert) mit ✓/✗ (bei höchster Stufe: die der eigenen Stufe).</summary>
+        public List<HouseNeedStatus> Needs;
+        /// <summary>Weiche Bedingungen der nächsten Stufe: nötige Zufriedenheit/Belegung.</summary>
+        public float NeedSatisfaction, NeedOccupancy;
+        /// <summary>Fehlt eine Anforderung der eigenen Stufe? (Dann laufen die Abstiegs-Tage.)</summary>
+        public bool OwnNeedsMissing;
+        // --- Ende Wohnhäuser
     }
 
     public sealed partial class LandValueSystem
@@ -73,13 +84,17 @@ namespace CityBuilder.Simulation.LandValue
                 // Zustand
                 st.EmptyDays = f.Occupancy <= 0f ? st.EmptyDays + 1 : 0;
                 b.Condition = Math.Clamp(b.Condition + LandValueRules.ConditionDelta(f, st.EmptyDays), 0f, 1f);
-                if (b.Condition <= 0f && DemolishDecayed)
+                if (b.Condition <= 0f && DemolishDecayed && !b.IsPlayerPlaced) // gesetzte Häuser verfallen nicht bis zum Abriss
                 {
                     DecayedBuildings++;
                     BuildingDecayed?.Invoke(b);
                     world.City.RemoveBuilding(b);
                     continue;
                 }
+
+                // --- Wohnhäuser setzen: gesetzte Häuser steigen nach Anforderungen (HouseRules) auf/ab
+                if (b.IsPlayerPlaced) { EvaluateHouse(b, st, f); continue; }
+                // --- Ende Wohnhäuser
 
                 // Aufstieg
                 var gap = LandValueRules.Missing(b.Zone, b.Level, b.Condition, f);
@@ -112,7 +127,7 @@ namespace CityBuilder.Simulation.LandValue
         void SetLevel(Building b, int level)
         {
             int old = b.Level;
-            level = Math.Clamp(level, 1, LandValueRules.MaxLevel);
+            level = Math.Clamp(level, 1, b.IsPlayerPlaced ? HouseRules.MaxLevel : LandValueRules.MaxLevel);
             if (level == old) return;
             b.Level = level;
             int cells = b.WidthCells * b.DepthCells;
@@ -171,6 +186,7 @@ namespace CityBuilder.Simulation.LandValue
         {
             var info = new BuildingLevelInfo { MaxLevel = LandValueRules.MaxLevel, DeclineDaysLimit = LandValueRules.DeclineDays };
             if (b == null) return info;
+            if (b.IsPlayerPlaced) return HouseLevelInfo(b, info); // Wohnhäuser setzen: Anforderungen statt Bodenwert
             info.Level = b.Level;
             info.Condition = b.Condition;
             info.ConditionText = LandValueRules.ConditionText(b.Condition);

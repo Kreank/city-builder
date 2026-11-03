@@ -81,6 +81,8 @@ namespace CityBuilder.Simulation.LandValue
         Condition = 32,
         MaxLevel = 64,
         UnderConstruction = 128,
+        /// <summary>Gesetztes Wohnhaus: Anforderungen (Einrichtungen in Reichweite, <see cref="Zoning.HouseRules"/>) fehlen.</summary>
+        Needs = 256,
     }
 
     /// <summary>Werte eines Gebäudes, aus denen Aufstieg, Abstieg und Zustand folgen (täglich gesammelt).</summary>
@@ -290,6 +292,7 @@ namespace CityBuilder.Simulation.LandValue
             if ((g & LevelGap.Education) != 0) parts.Add("Bildung/Fachkräfte");
             if ((g & LevelGap.Occupancy) != 0) parts.Add("Belegung");
             if ((g & LevelGap.Condition) != 0) parts.Add("Zustand");
+            if ((g & LevelGap.Needs) != 0) parts.Add("Einrichtungen in Reichweite");
             return string.Join(", ", parts);
         }
 

@@ -119,6 +119,11 @@ namespace CityBuilder.Simulation.Zoning
             Grid = new ZoneGrid(network);
             ZoneMap = new ZoneMap(origin, sizeMeters);
             network.SegmentAdded += OnSegmentAdded;
+            // --- Wohnhäuser setzen (Anno-Stil): Weltgrenzen für die Platzprüfung, Bauwerks-Sperre wie Dienste (Art „house“)
+            worldMin = origin;
+            worldMax = origin + new Vector2(sizeMeters, sizeMeters);
+            network.RegisterStructures(HouseBlocks);
+            // --- Ende Wohnhäuser
         }
 
         public Building GetBuilding(int id) => buildings.TryGetValue(id, out var b) ? b : null;
@@ -136,9 +141,9 @@ namespace CityBuilder.Simulation.Zoning
                 if (ZoneMap.Get(cell.Center) == zone) continue;
                 ZoneMap.SetCell(cell.Center, zone);
                 n++;
-                // Umgewidmete Zelle: Gebäude anderer Art darauf wird abgerissen
+                // Umgewidmete Zelle: Gebäude anderer Art darauf wird abgerissen (gesetzte Wohnhäuser nicht – Spielerentscheidung)
                 var b = BuildingAt(cell.Center);
-                if (b != null && b.Zone != zone) RemoveBuilding(b);
+                if (b != null && b.Zone != zone && !b.IsPlayerPlaced) RemoveBuilding(b);
             }
             if (n > 0) Version++;
             return n;
@@ -156,8 +161,8 @@ namespace CityBuilder.Simulation.Zoning
         public bool RemoveBuilding(Building b)
         {
             if (!buildings.Remove(b.Id)) return false;
-            foreach (var key in BucketKeys(b))
-                if (buildingBuckets.TryGetValue(key, out var list)) list.Remove(b);
+            RemoveFromIndex(b);
+            if (b.IsPlayerPlaced) playerHouses--;
             Version++;
             BuildingRemoved?.Invoke(b);
             return true;
@@ -359,6 +364,7 @@ namespace CityBuilder.Simulation.Zoning
                 var cell = b[c, r];
                 if (!cell.Valid || ZoneMap.Get(cell.Center) != zone || BuildingAt(cell.Center) != null) return false;
                 if (LotBlocker != null && LotBlocker(cell.Center)) return false; // G3-Hook
+                if (playerHouses > 0 && PlayerHouseNear(cell.Center, ZoneGrid.CellSize * 0.5f)) return false; // gesetztes Haus (auch schräg)
                 minH = MathF.Min(minH, cell.Height);
                 maxH = MathF.Max(maxH, cell.Height);
             }
@@ -397,14 +403,32 @@ namespace CityBuilder.Simulation.Zoning
                 Jobs = (int)MathF.Round(Zones.JobsPerCell(zone) * cells),
             };
             terrain.FlattenArea(center, front, building.Width, building.Depth, height);
+            AddBuilding(building);
+        }
+
+        /// <summary>Neues Gebäude eintragen (Liste, räumlicher Index, Version, Event) – gewachsen oder gesetzt.</summary>
+        void AddBuilding(Building building)
+        {
             buildings[building.Id] = building;
+            AddToIndex(building);
+            if (building.IsPlayerPlaced) playerHouses++;
+            Version++;
+            BuildingAdded?.Invoke(building);
+        }
+
+        void AddToIndex(Building building)
+        {
             foreach (var key in BucketKeys(building))
             {
                 if (!buildingBuckets.TryGetValue(key, out var list)) buildingBuckets[key] = list = new List<Building>();
                 list.Add(building);
             }
-            Version++;
-            BuildingAdded?.Invoke(building);
+        }
+
+        void RemoveFromIndex(Building b)
+        {
+            foreach (var key in BucketKeys(b))
+                if (buildingBuckets.TryGetValue(key, out var list)) list.Remove(b);
         }
 
         // ------------------------------------------------------------ Straßenänderungen
@@ -422,8 +446,8 @@ namespace CityBuilder.Simulation.Zoning
                 foreach (var key in NearKeys(p, s.Type.HalfWidth + BuildingBucket))
                 {
                     if (!buildingBuckets.TryGetValue(key, out var list)) continue;
-                    foreach (var b in list)
-                        if (!hit.Contains(b) && b.Contains(p, s.Type.HalfWidth - 0.5f)) hit.Add(b);
+                    foreach (var b in list) // gesetzte Häuser sperren Straßen (Bauwerks-Sperre) – nie hier abreißen
+                        if (!b.IsPlayerPlaced && !hit.Contains(b) && b.Contains(p, s.Type.HalfWidth - 0.5f)) hit.Add(b);
                 }
             }
             foreach (var b in hit) RemoveBuilding(b);
@@ -435,6 +459,7 @@ namespace CityBuilder.Simulation.Zoning
             var remove = new List<Building>();
             foreach (var b in buildings.Values)
             {
+                if (b.IsPlayerPlaced) { RevalidateHouseAccess(b); continue; } // bleibt stehen, Zufahrt neu suchen
                 var seg = network.FindNearestSegment(b.Entrance, 3f);
                 if (seg == null || seg.Type.Category != RoadCategory.City) remove.Add(b);
                 else

@@ -3,11 +3,23 @@ using System.Numerics;
 
 namespace CityBuilder.Simulation.Zoning
 {
-    /// <summary>Ein (gewachsenes) Gebäude auf einem Grundstück aus Zonenzellen.</summary>
+    /// <summary>Herkunft eines Gebäudes: aus einer Zone gewachsen oder vom Spieler einzeln gesetzt (Anno-Stil).</summary>
+    public enum BuildingOrigin : byte
+    {
+        /// <summary>Private Bauherren auf gemalter Zone (G1) – Stufen nach Bodenwert (G6).</summary>
+        Zone = 0,
+        /// <summary>Vom Spieler gesetztes Wohnhaus – Stufen nach Bedürfnissen in Reichweite (<see cref="HouseRules"/>).</summary>
+        Player,
+    }
+
+    /// <summary>Ein Gebäude: aus Zonenzellen gewachsen oder vom Spieler gesetzt (<see cref="Origin"/>).</summary>
     public sealed class Building
     {
         public int Id { get; internal set; }
         public ZoneType Zone { get; internal set; }
+        /// <summary>Herkunft (Zone oder Spieler). Spieler-Häuser reißt keine Zonenlogik ab, sie sperren Straßen wie Dienste.</summary>
+        public BuildingOrigin Origin { get; internal set; }
+        public bool IsPlayerPlaced => Origin == BuildingOrigin.Player;
         public int WidthCells { get; internal set; }
         public int DepthCells { get; internal set; }
         /// <summary>Mittelpunkt des Grundstücks.</summary>
@@ -53,6 +65,14 @@ namespace CityBuilder.Simulation.Zoning
             var d = p - Position;
             return MathF.Abs(Vector2.Dot(d, Side)) <= Width * 0.5f + margin && MathF.Abs(Vector2.Dot(d, Front)) <= Depth * 0.5f + margin;
         }
+
+        /// <summary>Grundfläche (gemeinsamer Baustein mit Straßensperre und Ausrichtung).</summary>
+        public Roads.Footprint Footprint => new Roads.Footprint(Position, Front, Width, Depth);
+
+        Roads.StructureBlock block;
+        /// <summary>Eintrag für die Bauwerks-Sperre (nur Spieler-Häuser, Art „house“).</summary>
+        internal Roads.StructureBlock Block => block ??= new Roads.StructureBlock("house", Id, HouseCatalog.NameOf(this), Footprint, Height);
+        internal void InvalidateBlock() => block = null;
 
         /// <summary>Punkt mitten an der Straßenseite des Grundstücks (Zufahrt).</summary>
         public Vector2 Entrance => Position + Front * (Depth * 0.5f);

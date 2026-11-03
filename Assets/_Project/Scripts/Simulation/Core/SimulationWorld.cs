@@ -197,6 +197,7 @@ namespace CityBuilder.Simulation.Core
             world.Utilities.Budget = world.Economy;
             world.City.DemandModifier = world.Economy.DemandFactor;
             world.Services.Budget = world.Economy;          // G4: Baukosten Dienste
+            world.City.Budget = world.Economy;              // Wohnhäuser setzen: Baukosten
             world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
             world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
             world.Transit.Budget = world.Economy;            // ÖPNV: Baukosten
