@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using CityBuilder.Game.Environment;
 using CityBuilder.Game.Traffic;
 using CityBuilder.Game.UI;
+using CityBuilder.Game.Zoning;
+using CityBuilder.Simulation.Zoning;
 using CityBuilder.Simulation.Roads;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -18,7 +20,7 @@ namespace CityBuilder.Game.Roads
     /// </summary>
     public sealed class RoadTool : MonoBehaviour
     {
-        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze }
+        public enum Mode { Straight, Curve, Roundabout, Upgrade, Reverse, Template, Traffic, Bulldoze, Zone }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -144,6 +146,37 @@ namespace CityBuilder.Game.Roads
                 ground.Init(runner, groundRenderer, previewMaterial);
             }
             Ensure<ScenicPropsView>().Init(runner);
+
+            // Zonen und Gebäude
+            zoneView = Ensure<ZoneView>();
+            zoneView.Init(runner, previewMaterial);
+            if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
+        }
+
+        ZoneView zoneView;
+
+        /// <summary>Gewählte Zone im Zonen-Werkzeug (<see cref="ZoneType.None"/> = Zonen entfernen).</summary>
+        public ZoneType SelectedZone { get; private set; } = ZoneType.ResidentialLow;
+        public float BrushRadius { get; private set; } = 12f;
+
+        public void SelectZone(ZoneType zone)
+        {
+            SelectedZone = zone;
+            SetMode(Mode.Zone);
+        }
+
+        public void SetBrush(float radius) => BrushRadius = Mathf.Clamp(radius, 4f, 60f);
+
+        void UpdateZone(SimVector2 raw)
+        {
+            Cursor = raw;
+            CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw));
+            HidePreview();
+            var mouse = Mouse.current;
+            var city = runner.World.City;
+            // Malen mit gedrückter linker, Löschen mit gedrückter rechter Maustaste
+            if (mouse.leftButton.isPressed) city.Paint(raw, BrushRadius, SelectedZone);
+            else if (mouse.rightButton.isPressed) city.Paint(raw, BrushRadius, ZoneType.None);
         }
 
         GroundView ground;
@@ -234,8 +267,11 @@ namespace CityBuilder.Game.Roads
             bool clicked = mouse.leftButton.wasPressedThisFrame;
             var ray = cam.ScreenPointToRay(screen);
 
+            if (zoneView != null) zoneView.Visible = CurrentMode == Mode.Zone;
+
             switch (CurrentMode)
             {
+                case Mode.Zone: UpdateZone(raw); break;
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;
@@ -256,6 +292,12 @@ namespace CityBuilder.Game.Roads
             if (kb.tKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Traffic ? Mode.Straight : Mode.Traffic);
             if (kb.hKey.wasPressedThisFrame) ToggleDualCarriageway();
             if (kb.xKey.wasPressedThisFrame) ToggleUndergroundView();
+            if (kb.zKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Zone ? Mode.Straight : Mode.Zone);
+            if (CurrentMode == Mode.Zone)
+            {
+                if (kb.leftBracketKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame) SetBrush(BrushRadius - 4f);
+                if (kb.rightBracketKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame) SetBrush(BrushRadius + 4f);
+            }
             if (kb.tabKey.wasPressedThisFrame) CycleType(kb.shiftKey.isPressed ? -1 : 1);
             if (kb.gKey.wasPressedThisFrame) ToggleSnap();
             if (kb.pageUpKey.wasPressedThisFrame) ChangeHeight(HeightStep);
@@ -321,7 +363,8 @@ namespace CityBuilder.Game.Roads
 
             if (step == Step.Control)
             {
-                var dirPlan = RoadBuilder.Plan(roads, startPoint, 0.5f, null, target, targetSnap, SelectedType, startHeight, AbsHeight(target));
+                var dirPlan = RoadBuilder.Plan(roads, startPoint, 0.5f, null, target, targetSnap, SelectedType, startHeight, AbsHeight(target),
+                    followTerrain: AutoTrace);
                 ShowPlan(roads, dirPlan, placingControl: true);
                 if (clicked && SimVector2.Distance(startPoint, target) >= RoadNetwork.MinSegmentLength)
                 {
@@ -335,7 +378,8 @@ namespace CityBuilder.Game.Roads
 
             if (UsesDualCarriageway)
             {
-                var dual = RoadBuilder.PlanDualCarriageway(roads, startPoint, control, target, SelectedType, snapDistance, startHeight, AbsHeight(target));
+                var dual = RoadBuilder.PlanDualCarriageway(roads, startPoint, control, target, SelectedType, snapDistance, startHeight, AbsHeight(target),
+                    followTerrain: AutoTrace);
                 ShowDual(roads, dual);
                 if (clicked && dual.IsValid && runner.World.Contains(target))
                 {
@@ -347,7 +391,8 @@ namespace CityBuilder.Game.Roads
                 return;
             }
 
-            var plan = RoadBuilder.Plan(roads, startPoint, 0.5f, control, target, targetSnap, SelectedType, startHeight, AbsHeight(target));
+            var plan = RoadBuilder.Plan(roads, startPoint, 0.5f, control, target, targetSnap, SelectedType, startHeight, AbsHeight(target),
+                followTerrain: AutoTrace);
             ShowPlan(roads, plan, placingControl: false);
 
             if (clicked && plan.IsValid && runner.World.Contains(plan.End))
@@ -401,7 +446,7 @@ namespace CityBuilder.Game.Roads
             Guide = g;
 
             previewCurves.Clear();
-            previewCurves.Add(new RoadMeshBuilder.PreviewCurve(plan.Start, plan.Control, plan.End, plan.Type.Width, plan.StartHeight, plan.EndHeight));
+            previewCurves.Add(new RoadMeshBuilder.PreviewCurve(plan.Start, plan.Control, plan.End, plan.Type.Width, plan.StartHeight, plan.EndHeight, plan.Profile));
             ShowPreviewMesh(g.Valid);
         }
 
@@ -424,7 +469,7 @@ namespace CityBuilder.Game.Roads
 
             previewCurves.Clear();
             foreach (var p in new[] { dual.Right, dual.Left })
-                if (p != null) previewCurves.Add(new RoadMeshBuilder.PreviewCurve(p.Start, p.Control, p.End, p.Type.Width, p.StartHeight, p.EndHeight));
+                if (p != null) previewCurves.Add(new RoadMeshBuilder.PreviewCurve(p.Start, p.Control, p.End, p.Type.Width, p.StartHeight, p.EndHeight, p.Profile));
             ShowPreviewMesh(dual.IsValid);
         }
 
@@ -432,14 +477,20 @@ namespace CityBuilder.Game.Roads
         static string HeightInfo(RoadNetwork roads, RoadPlan plan)
         {
             RoadBuilder.ElevationRange(roads.Ground, plan, out float low, out float high);
+            float limit = plan.Profile != null ? CityBuilder.Simulation.Environment.TerrainMap.MaxCutFill
+                                               : CityBuilder.Simulation.Environment.TerrainMap.ConformRange;
             string kind = low <= -RoadBuilder.TunnelDepth ? "Tunnel"
-                : low < -CityBuilder.Simulation.Environment.TerrainMap.ConformRange ? "Trog"
-                : high > CityBuilder.Simulation.Environment.TerrainMap.ConformRange ? "Brücke"
+                : low < -limit ? "Trog"
+                : high > limit ? "Brücke"
                 : null;
             float e0 = plan.StartHeight - roads.Ground.HeightAt(plan.Start);
             float e1 = plan.EndHeight - roads.Ground.HeightAt(plan.End);
-            string s = kind == null ? (Mathf.Abs(e0) < 0.3f && Mathf.Abs(e1) < 0.3f ? "ebenerdig" : "Damm/Einschnitt")
-                                    : $"{kind} · {e0:0}→{e1:0} m über Gelände";
+            string s;
+            if (plan.Profile != null)
+                s = kind == null ? "folgt dem Gelände (wird eingeebnet)" : $"automatisch: {kind} + Gelände eingeebnet";
+            else
+                s = kind == null ? (Mathf.Abs(e0) < 0.3f && Mathf.Abs(e1) < 0.3f ? "ebenerdig" : "Damm/Einschnitt")
+                                 : $"{kind} · {e0:0}→{e1:0} m über Gelände";
             float dh = plan.EndHeight - plan.StartHeight;
             if (plan.Length > 1f && Mathf.Abs(dh) > 0.1f) s += $" · {(dh > 0 ? "↗" : "↘")} {Mathf.Abs(dh) / plan.Length * 100f:0.#} %";
             if (plan.GradeSeparations > 0) s += $" · {plan.GradeSeparations}× kreuzungsfrei";
@@ -447,6 +498,9 @@ namespace CityBuilder.Game.Roads
         }
 
         float GroundAt(SimVector2 p) => runner.World.Roads.Ground.HeightAt(p);
+
+        /// <summary>Bauhöhe 0 = automatische Trassierung (folgt Gelände, Tunnel durch Berge, Brücken über Täler).</summary>
+        public bool AutoTrace => Mathf.Abs(BuildHeight) < 0.05f;
 
         /// <summary>Absolute Bauhöhe an einem Punkt: Gelände + eingestellte Höhe über Gelände.</summary>
         float AbsHeight(SimVector2 p) => GroundAt(p) + BuildHeight;
@@ -491,7 +545,7 @@ namespace CityBuilder.Game.Roads
             CursorAnchor = RoadAnchor.Free(raw);
 
             var type = RoundaboutType;
-            currentRoundabout = RoadBuilder.PlanRoundabout(roads, startPoint, radius, type, startHeight);
+            currentRoundabout = RoadBuilder.PlanRoundabout(roads, startPoint, radius, type, startHeight, AutoTrace);
             Guide = new GuideState
             {
                 Active = true,

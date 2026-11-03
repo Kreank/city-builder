@@ -33,6 +33,30 @@ namespace CityBuilder.Game.Assets
         public ModelEntry[] TrafficLights = new ModelEntry[0];
         public ModelEntry[] Trees = new ModelEntry[0];
 
+        // Gebäude je Zonenart (Grundfläche normiert, beim Zeichnen ans Grundstück angepasst)
+        public ModelEntry[] ResidentialLow = new ModelEntry[0];
+        public ModelEntry[] ResidentialMedium = new ModelEntry[0];
+        public ModelEntry[] ResidentialHigh = new ModelEntry[0];
+        public ModelEntry[] Mixed = new ModelEntry[0];
+        public ModelEntry[] Retail = new ModelEntry[0];
+        public ModelEntry[] Office = new ModelEntry[0];
+        public ModelEntry[] Industry = new ModelEntry[0];
+
+        public ModelEntry[] Buildings(CityBuilder.Simulation.Zoning.ZoneType zone)
+        {
+            switch (zone)
+            {
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialLow: return ResidentialLow;
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialMedium: return ResidentialMedium;
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialHigh: return ResidentialHigh;
+                case CityBuilder.Simulation.Zoning.ZoneType.Mixed: return Mixed;
+                case CityBuilder.Simulation.Zoning.ZoneType.Retail: return Retail;
+                case CityBuilder.Simulation.Zoning.ZoneType.Office: return Office;
+                case CityBuilder.Simulation.Zoning.ZoneType.Industry: return Industry;
+                default: return null;
+            }
+        }
+
         static AssetCatalog cached;
         static bool loaded;
 

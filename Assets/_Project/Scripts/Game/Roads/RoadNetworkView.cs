@@ -107,8 +107,8 @@ namespace CityBuilder.Game.Roads
             dirtySegments.Clear();
         }
 
-        /// <summary>Kreuzung = ab 3 Straßen. Dort wird die Fläche frei gehalten (keine Markierungen).</summary>
-        static bool IsJunction(RoadNode node) => node.SegmentIds.Count >= 3;
+        /// <summary>Kreuzung (ab 3 Straßen) oder Typwechsel: eigene Knotenfläche, Segmente enden davor.</summary>
+        bool IsJunction(RoadNode node) => RoadMeshBuilder.NeedsJunctionMesh(network, node);
 
         void RebuildSegment(RoadSegment seg)
         {

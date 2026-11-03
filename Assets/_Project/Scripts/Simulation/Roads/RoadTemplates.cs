@@ -20,6 +20,8 @@ namespace CityBuilder.Simulation.Roads
         public Vector2 P0, Control, P2;
         public float H0, H2;
         public RoadType Type;
+        /// <summary>Ebenerdiges Teilstück: folgt dem Gelände.</summary>
+        public bool FollowTerrain;
     }
 
     public sealed class TemplatePlan
@@ -86,7 +88,8 @@ namespace CityBuilder.Simulation.Roads
             {
                 var w = p;
                 w.P0 = Tf(p.P0); w.Control = Tf(p.Control); w.P2 = Tf(p.P2);
-                // Vorlagenhöhen sind relativ zum Gelände
+                // Vorlagenhöhen sind relativ zum Gelände; ebenerdige Stücke folgen ihm
+                w.FollowTerrain = p.H0 < 0.01f && p.H2 < 0.01f;
                 w.H0 = p.H0 + network.Ground.HeightAt(w.P0);
                 w.H2 = p.H2 + network.Ground.HeightAt(w.P2);
                 plan.Pieces.Add(w);
@@ -95,7 +98,8 @@ namespace CityBuilder.Simulation.Roads
             // Prüfen gegen den Bestand (die Teilstücke untereinander sind per Konstruktion verträglich).
             foreach (var piece in plan.Pieces)
             {
-                var rp = RoadBuilder.Plan(network, piece.P0, 0f, piece.Control, piece.P2, 0f, piece.Type, piece.H0, piece.H2);
+                var rp = RoadBuilder.Plan(network, piece.P0, 0f, piece.Control, piece.P2, 0f, piece.Type, piece.H0, piece.H2,
+                    followTerrain: piece.FollowTerrain);
                 plan.Cost += rp.Cost;
                 if (!rp.IsValid && rp.Error != RoadBuildError.Duplicate && plan.Error == RoadBuildError.None) plan.Error = rp.Error;
             }
@@ -108,7 +112,8 @@ namespace CityBuilder.Simulation.Roads
             if (plan == null || !plan.IsValid) return built;
             foreach (var piece in plan.Pieces)
             {
-                var rp = RoadBuilder.Plan(network, piece.P0, 0.5f, piece.Control, piece.P2, 0.5f, piece.Type, piece.H0, piece.H2);
+                var rp = RoadBuilder.Plan(network, piece.P0, 0.5f, piece.Control, piece.P2, 0.5f, piece.Type, piece.H0, piece.H2,
+                    followTerrain: piece.FollowTerrain);
                 built.AddRange(RoadBuilder.Build(network, rp));
             }
             return built;

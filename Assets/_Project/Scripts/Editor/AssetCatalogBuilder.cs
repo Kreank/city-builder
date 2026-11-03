@@ -18,7 +18,7 @@ namespace CityBuilder.Editor
         const string Folder = ThirdPartySetup.Root + "/_Catalog/Resources";
         const string AssetPath = Folder + "/AssetCatalog.asset";
 
-        enum Fit { Length, Height }
+        enum Fit { Length, Height, Footprint }
 
         sealed class Spec
         {
@@ -36,6 +36,44 @@ namespace CityBuilder.Editor
         /// <summary>Vorschau-/Präsentationsteile in Store-Prefabs, die nicht zum Modell gehören.</summary>
         static readonly string[] ExcludedParts = { "Ground", "Railway", "Floor", "Plane", "Shadow", "Interior" };
         static Spec P(string hint, string name, float height) => new Spec { Hint = hint, Name = name, Fit = Fit.Height, Target = height };
+        /// <summary>Gebäude: größte Grundflächen-Seite auf <paramref name="size"/> Meter.</summary>
+        static Spec B(string hint, string name, float size) => new Spec { Hint = hint, Name = name, Fit = Fit.Footprint, Target = size };
+
+        const string SimplePolyBuildings = "SimplePoly City - Low Poly Assets/Prefab/Buildings";
+        const string Panda = "Pandazole_Ultimate_Pack";
+
+        static Spec[] Many(string hint, string pattern, int from, int to, float size, string suffix = "")
+        {
+            var list = new List<Spec>();
+            for (int i = from; i <= to; i++) list.Add(B(hint, string.Format(pattern, i) + suffix, size));
+            return list.ToArray();
+        }
+
+        static readonly Spec[] ResLow = Many("SimplePoly", "Building_House_0{0}_color01", 1, 4, 12f)
+            .Concat(Many("SimplePoly", "Building_House_0{0}_color02", 1, 4, 12f))
+            .Concat(Many("SimplePoly", "Building_House_0{0}_color03", 1, 4, 12f)).ToArray();
+        static readonly Spec[] ResMedium = Many("SimplePoly", "Building_Residential_color0{0}", 1, 3, 20f)
+            .Concat(Many(Panda, "Env_ResidentBuilding_0{0}", 1, 6, 20f))
+            .Concat(new[] { B(Colorful, "Building4_a_Medium_LP_0", 20f), B(Colorful, "Building12_a_MediumBlock_LP_0", 22f) }).ToArray();
+        static readonly Spec[] ResHigh = Many("SimplePoly", "Building Sky_small_color0{0}", 1, 3, 24f)
+            .Concat(new[] { B(Colorful, "Building3_a_Tall1_LP_0", 24f), B(Colorful, "Building7_a_Tall2_LP_0", 24f) }).ToArray();
+        static readonly Spec[] MixedB = Many(Panda, "Env_CommercialBuilding_0{0}", 1, 4, 20f)
+            .Concat(new[] { B(Colorful, "Building9_a_Block_LP_0", 22f), B(Colorful, "Building2_a_Long1_LP_0", 22f) }).ToArray();
+        static readonly Spec[] RetailB = new[]
+        {
+            "Building_Bakery", "Building_Bar", "Building_Books Shop", "Building_Chicken Shop", "Building_Clothing", "Building_Coffee Shop",
+            "Building_Drug Store", "Building_Fast Food", "Building_Fruits  Shop", "Building_Gift Shop", "Building_Music Store", "Building_Pizza",
+            "Building_Restaurant", "Building_Shoes Shop", "Building_Super Market",
+        }.Select(n => B("SimplePoly", n, n.Contains("Super") ? 22f : 14f)).ToArray();
+        static readonly Spec[] OfficeB = Many("SimplePoly", "Building Sky_big_color0{0}", 1, 3, 28f)
+            .Concat(Many(Panda, "Env_CompanyBuilding_0{0}", 1, 4, 26f))
+            .Concat(new[] { B(Colorful, "Building1_a_MainHall_LP_0", 28f), B(Colorful, "Building6_a_Cube_LP_0", 24f) }).ToArray();
+        static readonly Spec[] IndustryB = new[]
+        {
+            B("SimplePoly", "Building_Factory", 30f), B("SimplePoly", "Building_Auto Service", 22f),
+            B(Colorful, "Building11_a_Hangar_LP_0", 30f), B(Colorful, "Building13_a_Workshop_LP_0", 24f),
+            B(Colorful, "Building5_a_Long2_LP_0", 28f), B(Colorful, "Building8_a_Long2_LP_0", 28f),
+        };
 
         const string SimplePoly = "SimplePoly City - Low Poly Assets/Prefab/Vehicles/Vehicle with Static Wheels";
         const string Nebula = "Nebula - Free low poly car pack/Prefabs/Simple Vehicles";
@@ -89,6 +127,13 @@ namespace CityBuilder.Editor
             catalog.StreetLamps = BakeAll(catalog, allPrefabs, Lamps);
             catalog.TrafficLights = BakeAll(catalog, allPrefabs, Lights).Take(1).ToArray();
             catalog.Trees = BakeAll(catalog, allPrefabs, Trees);
+            catalog.ResidentialLow = BakeAll(catalog, allPrefabs, ResLow);
+            catalog.ResidentialMedium = BakeAll(catalog, allPrefabs, ResMedium);
+            catalog.ResidentialHigh = BakeAll(catalog, allPrefabs, ResHigh);
+            catalog.Mixed = BakeAll(catalog, allPrefabs, MixedB);
+            catalog.Retail = BakeAll(catalog, allPrefabs, RetailB);
+            catalog.Office = BakeAll(catalog, allPrefabs, OfficeB);
+            catalog.Industry = BakeAll(catalog, allPrefabs, IndustryB);
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -96,7 +141,9 @@ namespace CityBuilder.Editor
             foreach (var e in group)
                 Debug.Log($"[Catalog]   {e.Name}: {e.Size.x:0.0} × {e.Size.y:0.0} × {e.Size.z:0.0} m, {e.Mesh.vertexCount} Vertices, {e.Materials.Length} Materialien");
             Debug.Log($"[Catalog] Pkw {catalog.Cars.Length}, Lkw {catalog.Trucks.Length}, Bus {catalog.Buses.Length}, Tram {catalog.Trams.Length}, " +
-                      $"Laternen {catalog.StreetLamps.Length}, Ampeln {catalog.TrafficLights.Length}, Bäume {catalog.Trees.Length} → {AssetPath}");
+                      $"Laternen {catalog.StreetLamps.Length}, Ampeln {catalog.TrafficLights.Length}, Bäume {catalog.Trees.Length}, " +
+                      $"Gebäude W {catalog.ResidentialLow.Length}/{catalog.ResidentialMedium.Length}/{catalog.ResidentialHigh.Length}, " +
+                      $"Misch {catalog.Mixed.Length}, Handel {catalog.Retail.Length}, Büro {catalog.Office.Length}, Industrie {catalog.Industry.Length} → {AssetPath}");
         }
 
         static ModelEntry[] BakeAll(AssetCatalog catalog, List<string> prefabs, Spec[] specs)
@@ -208,7 +255,9 @@ namespace CityBuilder.Editor
             }
 
             var bounds = Bounds(v);
-            float current = spec.Fit == Fit.Length ? bounds.size.z : bounds.size.y;
+            float current = spec.Fit == Fit.Length ? bounds.size.z
+                : spec.Fit == Fit.Footprint ? Mathf.Max(bounds.size.x, bounds.size.z)
+                : bounds.size.y;
             float s = current > 1e-4f ? spec.Target / current : 1f;
             if (bounds.size.x * s > spec.MaxWidth) s = spec.MaxWidth / bounds.size.x;
             var offset = new Vector3(-bounds.center.x, -bounds.min.y, -bounds.center.z);

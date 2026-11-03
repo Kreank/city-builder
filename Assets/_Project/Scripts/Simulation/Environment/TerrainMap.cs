@@ -99,6 +99,8 @@ namespace CityBuilder.Simulation.Environment
 
         /// <summary>Bis zu diesem Höhenunterschied wird das Gelände an die Straße angepasst (Damm/Einschnitt).</summary>
         public const float ConformRange = 4f;
+        /// <summary>Größte Dammhöhe/Einschnitttiefe bei geländefolgenden Straßen.</summary>
+        public const float MaxCutFill = 6f;
         const float Band = 10f;
 
         /// <summary>
@@ -109,6 +111,8 @@ namespace CityBuilder.Simulation.Environment
         {
             float hw = segment.Type.HalfWidth + 1f;
             float reach = hw + Band;
+            // Geländefolgende Straßen: Damm/Einschnitt bis 6 m (darüber hinaus Brücke bzw. Trog/Tunnel)
+            float range = segment.FollowsTerrain ? MaxCutFill : ConformRange;
             int samples = Math.Max(2, (int)MathF.Ceiling(segment.Length / (CellSize * 0.5f)));
             Vector2 min = new Vector2(float.MaxValue), max = new Vector2(float.MinValue);
             // Je Gitterpunkt: stärkstes Gewicht und die Fahrbahnhöhe des nächsten Abtastpunkts
@@ -120,7 +124,7 @@ namespace CityBuilder.Simulation.Environment
                 var c = segment.Evaluate(t);
                 float road = segment.HeightAt(t) - 0.03f;
                 float e = road - HeightAt(c);
-                if (MathF.Abs(e) > ConformRange || NaturalHeightAt(c) < WaterLevel) continue;
+                if (MathF.Abs(e) > range || NaturalHeightAt(c) < WaterLevel) continue;
 
                 int x0 = Math.Max(0, (int)MathF.Floor((c.X - reach - Origin.X) / CellSize));
                 int x1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((c.X + reach - Origin.X) / CellSize));
@@ -150,6 +154,40 @@ namespace CityBuilder.Simulation.Environment
             if (!changed) return;
             Version++;
             Changed?.Invoke(min, max);
+        }
+
+        /// <summary>
+        /// Ebnet ein (gedrehtes) Rechteck auf die Höhe <paramref name="height"/> ein, mit weicher Böschung
+        /// außen herum (für Grundstücke). <paramref name="front"/> = Richtung der Tiefe.
+        /// </summary>
+        public void FlattenArea(Vector2 center, Vector2 front, float width, float depth, float height, float band = 6f)
+        {
+            var side = new Vector2(-front.Y, front.X);
+            float reach = MathF.Max(width, depth) * 0.75f + band;
+            int x0 = Math.Max(0, (int)MathF.Floor((center.X - reach - Origin.X) / CellSize));
+            int x1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((center.X + reach - Origin.X) / CellSize));
+            int y0 = Math.Max(0, (int)MathF.Floor((center.Y - reach - Origin.Y) / CellSize));
+            int y1 = Math.Min(Resolution - 1, (int)MathF.Ceiling((center.Y + reach - Origin.Y) / CellSize));
+            bool changed = false;
+            for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                var d = PointAt(x, y) - center;
+                float ox = MathF.Max(0f, MathF.Abs(Vector2.Dot(d, side)) - width * 0.5f);
+                float oy = MathF.Max(0f, MathF.Abs(Vector2.Dot(d, front)) - depth * 0.5f);
+                float outside = MathF.Sqrt(ox * ox + oy * oy);
+                if (outside > band) continue;
+                int idx = y * Resolution + x;
+                if (natural[idx] < WaterLevel) continue;
+                float w = outside <= 0f ? 1f : 1f - SmoothStep(0f, band, outside);
+                float target = Lerp(current[idx], height, w);
+                if (MathF.Abs(target - current[idx]) < 0.01f) continue;
+                current[idx] = target;
+                changed = true;
+            }
+            if (!changed) return;
+            Version++;
+            Changed?.Invoke(center - new Vector2(reach), center + new Vector2(reach));
         }
 
         // ------------------------------------------------------------ Rauschen

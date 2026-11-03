@@ -4,6 +4,7 @@ using System.Numerics;
 using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Traffic;
+using CityBuilder.Simulation.Zoning;
 
 namespace CityBuilder.Simulation.Core
 {
@@ -48,8 +49,13 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(new NoiseSystem());
             world.Traffic = new TrafficSystem(world.Roads, world.Min, world.Max, seed);
             world.AddSystem(world.Traffic);
+            world.City = new CitySystem(world.Roads, world.Terrain, world.Min, world.Settings.SizeMeters, seed);
+            world.AddSystem(world.City);
             return world;
         }
+
+        /// <summary>Zonen und Gebäude. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public CitySystem City { get; private set; }
 
         public void AddSystem(ISimulationSystem system)
         {

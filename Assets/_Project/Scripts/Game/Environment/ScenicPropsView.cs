@@ -109,8 +109,8 @@ namespace CityBuilder.Game.Environment
             foreach (var s in roads.Segments)
             {
                 if (s.Type.Category != RoadCategory.City) continue;
-                float trim0 = s.Start.SegmentIds.Count >= 3 ? RoadMeshBuilder.JunctionTrim(roads, s.Start, s) : 0f;
-                float trim1 = s.End.SegmentIds.Count >= 3 ? RoadMeshBuilder.JunctionTrim(roads, s.End, s) : 0f;
+                float trim0 = RoadMeshBuilder.JunctionTrim(roads, s.Start, s);
+                float trim1 = RoadMeshBuilder.JunctionTrim(roads, s.End, s);
                 foreach (var lane in s.Type.Lanes)
                 {
                     if (lane.Kind != LaneKind.Sidewalk) continue;

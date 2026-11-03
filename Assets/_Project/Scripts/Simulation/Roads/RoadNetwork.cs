@@ -56,14 +56,14 @@ namespace CityBuilder.Simulation.Roads
 
         /// <summary>Verbindet zwei Knoten. Liefert null, wenn das Segment zu kurz oder doppelt wäre.</summary>
         public RoadSegment AddSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type,
-            RoadSegmentFlags flags = RoadSegmentFlags.None)
+            RoadSegmentFlags flags = RoadSegmentFlags.None, float[] profile = null)
         {
             if (start == null || end == null || type == null) throw new ArgumentNullException();
             if (start == end) return null;
             if (!Contains(start) || !Contains(end)) throw new ArgumentException("Knoten gehört nicht zu diesem Netz.");
             if (Vector2.Distance(start.Position, end.Position) < MinSegmentLength) return null;
             if (HasMatchingSegment(start, end, control)) return null;
-            return CreateSegment(start, end, control, type, flags);
+            return CreateSegment(start, end, control, type, flags, profile);
         }
 
         public bool RemoveSegment(int segmentId)
@@ -87,8 +87,14 @@ namespace CityBuilder.Simulation.Roads
 
             var node = AddNode(point, segment.HeightAt(t));
             DetachSegment(segment);
-            var a = CreateSegment(segment.Start, node, leftControl, segment.Type, segment.Flags);
-            var b = CreateSegment(node, segment.End, rightControl, segment.Type, segment.Flags);
+            float[] pa = null, pb = null;
+            if (segment.FollowsTerrain)
+            {
+                pa = Profiles.Resample(segment.HeightAt, 0f, t, segment.Length);
+                pb = Profiles.Resample(segment.HeightAt, t, 1f, segment.Length);
+            }
+            var a = CreateSegment(segment.Start, node, leftControl, segment.Type, segment.Flags, pa);
+            var b = CreateSegment(node, segment.End, rightControl, segment.Type, segment.Flags, pb);
             SegmentReplaced?.Invoke(segment, new[] { a, b });
             return node;
         }
@@ -98,7 +104,7 @@ namespace CityBuilder.Simulation.Roads
         {
             if (!Contains(segment)) throw new ArgumentException("Segment gehört nicht zu diesem Netz.");
             DetachSegment(segment);
-            var replacement = CreateSegment(segment.Start, segment.End, segment.Control, type, segment.Flags);
+            var replacement = CreateSegment(segment.Start, segment.End, segment.Control, type, segment.Flags, segment.Profile);
             SegmentReplaced?.Invoke(segment, new[] { replacement });
             return replacement;
         }
@@ -108,7 +114,9 @@ namespace CityBuilder.Simulation.Roads
         {
             if (!Contains(segment)) throw new ArgumentException("Segment gehört nicht zu diesem Netz.");
             DetachSegment(segment);
-            var replacement = CreateSegment(segment.End, segment.Start, segment.Control, segment.Type, segment.Flags);
+            var profile = segment.Profile;
+            if (profile != null) Array.Reverse(profile);
+            var replacement = CreateSegment(segment.End, segment.Start, segment.Control, segment.Type, segment.Flags, profile);
             SegmentReplaced?.Invoke(segment, new[] { replacement });
             return replacement;
         }
@@ -187,9 +195,10 @@ namespace CityBuilder.Simulation.Roads
             NodeRemoved?.Invoke(node);
         }
 
-        RoadSegment CreateSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type, RoadSegmentFlags flags)
+        RoadSegment CreateSegment(RoadNode start, RoadNode end, Vector2 control, RoadType type, RoadSegmentFlags flags,
+            float[] profile = null)
         {
-            var segment = new RoadSegment(nextSegmentId++, start, end, control, type, flags, Ground);
+            var segment = new RoadSegment(nextSegmentId++, start, end, control, type, flags, Ground, profile);
             segments.Add(segment.Id, segment);
             start.segmentIds.Add(segment.Id);
             end.segmentIds.Add(segment.Id);

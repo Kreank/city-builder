@@ -35,6 +35,10 @@ namespace CityBuilder.Game.Roads
             public float Length => dist[dist.Count - 1];
 
             public Curve(SimVector2 p0, SimVector2 p1, SimVector2 p2, float h0 = 0f, float h1 = 0f, IGround ground = null)
+                : this(p0, p1, p2, t => Mathf.Lerp(h0, h1, t), ground) { }
+
+            /// <summary>Kurve mit beliebigem Höhenverlauf (z. B. geländefolgendes Profil).</summary>
+            public Curve(SimVector2 p0, SimVector2 p1, SimVector2 p2, System.Func<float, float> heightAt, IGround ground = null)
             {
                 float approx = Bezier.ApproximateLength(p0, p1, p2);
                 int n = Mathf.Clamp(Mathf.CeilToInt(approx / 2f), 2, 512);
@@ -50,7 +54,7 @@ namespace CityBuilder.Game.Roads
                     points.Add(p);
                     rights.Add(new SimVector2(tan.Y, -tan.X));
                     dist.Add(d);
-                    heights.Add(Mathf.Lerp(h0, h1, t));
+                    heights.Add(heightAt(t));
                     grounds.Add(ground != null ? ground.HeightAt(p) : 0f);
                 }
             }
@@ -362,8 +366,7 @@ namespace CityBuilder.Game.Roads
         public static Mesh BuildSegment(RoadSegment segment, float trimStart, float trimEnd, Mesh mesh = null, IGround ground = null)
         {
             var type = segment.Type;
-            var curve = new Curve(segment.Start.Position, segment.Control, segment.End.Position,
-                segment.Start.Height, segment.End.Height, ground);
+            var curve = new Curve(segment.Start.Position, segment.Control, segment.End.Position, segment.HeightAt, ground);
             float d0 = Mathf.Clamp(trimStart, 0f, curve.Length * 0.45f);
             float d1 = curve.Length - Mathf.Clamp(trimEnd, 0f, curve.Length * 0.45f);
 
@@ -551,16 +554,35 @@ namespace CityBuilder.Game.Roads
         /// </summary>
         public static float JunctionTrim(RoadNetwork network, RoadNode node, RoadSegment segment)
         {
-            if (node.SegmentIds.Count < 3) return 0f;
+            if (!NeedsJunctionMesh(network, node)) return 0f;
             var arms = SortedArms(network, node);
             int i = arms.FindIndex(a => a.Segment == segment);
             if (i < 0) return 0f;
             return Trim(arms, i);
         }
 
+        /// <summary>
+        /// Braucht der Knoten eine eigene Fläche? Kreuzungen (ab 3 Straßen) und Übergänge zwischen
+        /// unterschiedlichen Straßentypen (z. B. 4-spurig → 2-spurig).
+        /// </summary>
+        public static bool NeedsJunctionMesh(RoadNetwork network, RoadNode node)
+        {
+            int n = node.SegmentIds.Count;
+            if (n >= 3) return true;
+            if (n != 2) return false;
+            return network.GetSegment(node.SegmentIds[0]).Type != network.GetSegment(node.SegmentIds[1]).Type;
+        }
+
         static float Trim(List<Arm> arms, int i)
         {
             var me = arms[i];
+            if (arms.Count == 2)
+            {
+                // Übergang zweier Straßentypen: Länge nach Breitenunterschied (ca. 1:4 Verjüngung)
+                var other = arms[1 - i];
+                float dw = Mathf.Abs(me.Segment.Type.HalfWidth - other.Segment.Type.HalfWidth);
+                return Mathf.Min(Mathf.Max(6f, dw * 4f + 4f), me.Segment.Length * 0.45f, 60f);
+            }
             float needed = 0f;
             foreach (int k in new[] { (i + arms.Count - 1) % arms.Count, (i + 1) % arms.Count })
             {
@@ -609,7 +631,7 @@ namespace CityBuilder.Game.Roads
                 var b = arms[(i + 1) % arms.Count];
                 ring.Add((a.Point + a.Right * a.Carriageway, a.Height));
                 // Ecke von der linken Fahrbahnkante von a zur rechten von b (enthält beide Endpunkte)
-                var corner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway);
+                var corner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway, arms.Count == 2);
                 for (int k = 0; k < corner.Length - 1; k++)
                     ring.Add((corner[k], Mathf.Lerp(a.Height, b.Height, k / (float)(corner.Length - 1))));
             }
@@ -635,8 +657,8 @@ namespace CityBuilder.Game.Roads
                 var b = arms[(i + 1) % arms.Count];
                 if (!a.HasSidewalk || !b.HasSidewalk) continue;
 
-                var inner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway);
-                var outer = CornerPath(node.Position, a, b, a.Full, b.Full);
+                var inner = CornerPath(node.Position, a, b, a.Carriageway, b.Carriageway, arms.Count == 2);
+                var outer = CornerPath(node.Position, a, b, a.Full, b.Full, arms.Count == 2);
                 int cornerSteps = inner.Length - 1;
 
                 int baseIndex = data.Vertices.Count;
@@ -693,7 +715,7 @@ namespace CityBuilder.Game.Roads
         ///   Gerade Durchfahrt (≈ 180°): gerade Linie.
         ///   Überstumpf (&gt; 180°): Bogen hinter dem Knoten herum, sonst würde sich die Fläche überschlagen.
         /// </summary>
-        static SimVector2[] CornerPath(SimVector2 node, Arm a, Arm b, float wa, float wb)
+        static SimVector2[] CornerPath(SimVector2 node, Arm a, Arm b, float wa, float wb, bool transition = false)
         {
             var p0 = a.Point - a.Right * wa;
             var p2 = b.Point + b.Right * wb;
@@ -713,7 +735,8 @@ namespace CityBuilder.Game.Roads
                 return pts;
             }
 
-            if (span <= 185f)
+            // Übergang zweier Straßen: stumpfe Seite gerade verbinden (sonst Delle hinter dem Knoten)
+            if (span <= 185f || transition)
             {
                 for (int k = 0; k <= CornerSteps; k++) pts[k] = SimVector2.Lerp(p0, p2, k / (float)CornerSteps);
                 return pts;
@@ -741,10 +764,12 @@ namespace CityBuilder.Game.Roads
             public SimVector2 P0, Control, P2;
             public float H0, H2;
             public float Width;
+            /// <summary>Optionales Höhenprofil (geländefolgende Straße).</summary>
+            public float[] Profile;
 
-            public PreviewCurve(SimVector2 p0, SimVector2 c, SimVector2 p2, float width, float h0 = 0f, float h2 = 0f)
+            public PreviewCurve(SimVector2 p0, SimVector2 c, SimVector2 p2, float width, float h0 = 0f, float h2 = 0f, float[] profile = null)
             {
-                P0 = p0; Control = c; P2 = p2; Width = width; H0 = h0; H2 = h2;
+                P0 = p0; Control = c; P2 = p2; Width = width; H0 = h0; H2 = h2; Profile = profile;
             }
         }
 
@@ -754,7 +779,10 @@ namespace CityBuilder.Game.Roads
             var data = new MeshData(1);
             foreach (var pc in curves)
             {
-                var curve = new Curve(pc.P0, pc.Control, pc.P2, pc.H0, pc.H2);
+                var profile = pc.Profile;
+                var curve = profile != null
+                    ? new Curve(pc.P0, pc.Control, pc.P2, t => Profiles.Sample(profile, t))
+                    : new Curve(pc.P0, pc.Control, pc.P2, pc.H0, pc.H2);
                 data.Strip(curve, 0f, curve.Length, -pc.Width * 0.5f, pc.Width * 0.5f, height, 0);
             }
             return data.ToMesh(mesh);

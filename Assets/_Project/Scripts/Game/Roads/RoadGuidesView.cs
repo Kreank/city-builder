@@ -53,7 +53,14 @@ namespace CityBuilder.Game.Roads
 
                 var g = tool.Guide;
                 LineHeight = LineOffset + (g.Active ? Mathf.Max(g.StartHeight, g.EndHeight) : tool.CursorHeight);
-                DrawSnapMarker(tool.CursorAnchor, width);
+                if (tool.CurrentMode == RoadTool.Mode.Zone)
+                {
+                    var c = CityBuilder.Game.Zoning.ZoneView.ZoneColor(tool.SelectedZone);
+                    c.a = 0.95f;
+                    LineHeight = LineOffset + tool.CursorHeight + 0.5f;
+                    Circle(tool.Cursor, tool.BrushRadius, c, width * 1.5f, 40);
+                }
+                else DrawSnapMarker(tool.CursorAnchor, width);
                 if (g.Active)
                 {
                     if (g.LabelOnly) DrawLabels(g);

@@ -29,6 +29,14 @@ namespace CityBuilder.Simulation.Roads
         public float Length { get; }
 
         readonly IGround ground;
+        /// <summary>Höhenprofil (gleichmäßig über t verteilt) für geländefolgende Straßen; null = linear zwischen den Knoten.</summary>
+        readonly float[] profile;
+
+        /// <summary>Folgt dem Gelände (Höhenprofil statt gerader Rampe).</summary>
+        public bool FollowsTerrain => profile != null;
+
+        /// <summary>Kopie des Höhenprofils (oder null).</summary>
+        public float[] Profile => profile == null ? null : (float[])profile.Clone();
 
         public bool IsRoundabout => (Flags & RoadSegmentFlags.Roundabout) != 0;
         public float Slope => Length > 0f ? MathF.Abs(End.Height - Start.Height) / Length : 0f;
@@ -46,9 +54,17 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Ist an Stelle t überdeckt (Tunnel)?</summary>
         public bool IsCoveredAt(float t) => ElevationAt(t) <= -RoadBuilder.TunnelDepth + 0.01f;
 
-        internal RoadSegment(int id, RoadNode start, RoadNode end, Vector2 control, RoadType type, RoadSegmentFlags flags, IGround ground)
+        internal RoadSegment(int id, RoadNode start, RoadNode end, Vector2 control, RoadType type, RoadSegmentFlags flags, IGround ground,
+            float[] profile = null)
         {
             this.ground = ground ?? FlatGround.Instance;
+            if (profile != null && profile.Length >= 2)
+            {
+                this.profile = (float[])profile.Clone();
+                // Enden exakt auf die Knotenhöhen legen
+                this.profile[0] = start.Height;
+                this.profile[this.profile.Length - 1] = end.Height;
+            }
             Id = id;
             Start = start;
             End = end;
@@ -60,7 +76,10 @@ namespace CityBuilder.Simulation.Roads
 
         public Vector2 Evaluate(float t) => Bezier.Evaluate(Start.Position, Control, End.Position, t);
 
-        public float HeightAt(float t) => Start.Height + (End.Height - Start.Height) * t;
+        public float HeightAt(float t) => profile == null ? Start.Height + (End.Height - Start.Height) * t : Profiles.Sample(profile, t);
+
+        /// <summary>Steilster Abschnitt (Anteil).</summary>
+        public float MaxSlope => profile == null ? Slope : Profiles.MaxSlope(profile, Length);
 
         public Vector2 Tangent(float t)
         {

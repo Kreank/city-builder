@@ -13,7 +13,7 @@ namespace CityBuilder.Game.UI
     /// </summary>
     public sealed class RoadToolbar : MonoBehaviour
     {
-        enum Group { City, Highway, Interchanges, Traffic }
+        enum Group { City, Highway, Interchanges, Traffic, Zones }
 
         static readonly Color Selected = new Color(0.45f, 0.75f, 1f);
 
@@ -35,7 +35,8 @@ namespace CityBuilder.Game.UI
             {
                 if (tool.CurrentMode == RoadTool.Mode.Traffic) group = Group.Traffic;
                 else if (tool.CurrentMode == RoadTool.Mode.Template) group = Group.Interchanges;
-                else if (group != Group.Traffic && group != Group.Interchanges) group = GroupOf(tool.SelectedType);
+                else if (tool.CurrentMode == RoadTool.Mode.Zone) group = Group.Zones;
+                else if (group != Group.Traffic && group != Group.Interchanges && group != Group.Zones) group = GroupOf(tool.SelectedType);
                 else if (tool.IsBuildMode) group = GroupOf(tool.SelectedType);
             }
 
@@ -50,6 +51,7 @@ namespace CityBuilder.Game.UI
             if (Button("Autobahn", group == Group.Highway, 120f)) SelectGroup(Group.Highway);
             if (Button("Autobahnknoten", group == Group.Interchanges, 130f)) SelectGroup(Group.Interchanges);
             if (Button("Verkehr (T)", group == Group.Traffic, 110f)) SelectGroup(Group.Traffic);
+            if (Button("Zonen (Z)", group == Group.Zones, 100f)) SelectGroup(Group.Zones);
             GUILayout.FlexibleSpace();
             GUILayout.Label(tool.SnapEnabled ? "Einrasten: an (G)" : "Einrasten: aus (G)", GUILayout.Width(125f));
             GUILayout.EndHorizontal();
@@ -60,6 +62,7 @@ namespace CityBuilder.Game.UI
                 case Group.Highway: RoadsRows(group); break;
                 case Group.Interchanges: InterchangeRows(); break;
                 case Group.Traffic: TrafficRows(); break;
+                case Group.Zones: ZoneRows(); break;
             }
             GUILayout.EndArea();
         }
@@ -70,6 +73,7 @@ namespace CityBuilder.Game.UI
             switch (g)
             {
                 case Group.Interchanges: tool.SelectTemplate(tool.TemplateKind); break;
+                case Group.Zones: tool.SelectZone(tool.SelectedZone); break;
                 case Group.Traffic: tool.SetMode(RoadTool.Mode.Traffic); break;
                 default:
                     var first = TypesOf(g).FirstOrDefault();
@@ -139,6 +143,59 @@ namespace CityBuilder.Game.UI
                 if (Button(label, Mathf.Approximately(traffic.Demand, value), 80f)) traffic.Demand = value;
             GUILayout.EndHorizontal();
             GUILayout.Label($"Verkehrsquellen (Sackgassen/Kartenrand): {traffic.EndpointCount} · Fahrzeuge: {traffic.Stats.Active}", infoStyle);
+        }
+
+        void ZoneRows()
+        {
+            var city = tool.Runner.World.City;
+            GUILayout.BeginHorizontal();
+            foreach (var z in CityBuilder.Simulation.Zoning.Zones.All)
+            {
+                var old = GUI.contentColor;
+                GUI.contentColor = Color.Lerp(CityBuilder.Game.Zoning.ZoneView.ZoneColor(z), Color.white, 0.35f);
+                if (Button(ShortZone(z), tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == z, 0f)) tool.SelectZone(z);
+                GUI.contentColor = old;
+            }
+            if (Button("Entzonen", tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == CityBuilder.Simulation.Zoning.ZoneType.None, 90f))
+                tool.SelectZone(CityBuilder.Simulation.Zoning.ZoneType.None);
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Pinsel {tool.BrushRadius:0} m ( [ / ] )", GUILayout.Width(140f));
+            foreach (var r in new[] { 8f, 16f, 32f })
+                if (Button($"{r:0} m", Mathf.Approximately(tool.BrushRadius, r), 55f)) tool.SetBrush(r);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // Nachfrage wie die RCI-Balken
+            var sb = new System.Text.StringBuilder("Nachfrage: ");
+            foreach (var z in CityBuilder.Simulation.Zoning.Zones.All)
+            {
+                var c = CityBuilder.Game.Zoning.ZoneView.ZoneColor(z);
+                sb.Append($"<color=#{ColorUtility.ToHtmlStringRGB(Color.Lerp(c, Color.white, 0.3f))}>{ShortZone(z)} {Bar(city.Demand[z])}</color>  ");
+            }
+            GUILayout.Label(sb.ToString() + "   ·   LMB malen · RMB löschen", infoStyle);
+        }
+
+        static string Bar(float v)
+        {
+            int n = Mathf.RoundToInt(v / 20f);
+            return new string('▮', n) + new string('▯', 5 - n);
+        }
+
+        static string ShortZone(CityBuilder.Simulation.Zoning.ZoneType z)
+        {
+            switch (z)
+            {
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialLow: return "Wohnen ▫";
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialMedium: return "Wohnen ▪";
+                case CityBuilder.Simulation.Zoning.ZoneType.ResidentialHigh: return "Wohnen ■";
+                case CityBuilder.Simulation.Zoning.ZoneType.Mixed: return "Misch";
+                case CityBuilder.Simulation.Zoning.ZoneType.Retail: return "Handel";
+                case CityBuilder.Simulation.Zoning.ZoneType.Office: return "Büro";
+                case CityBuilder.Simulation.Zoning.ZoneType.Industry: return "Industrie";
+                default: return "–";
+            }
         }
 
         void ModeButton(RoadTool.Mode mode, string label)

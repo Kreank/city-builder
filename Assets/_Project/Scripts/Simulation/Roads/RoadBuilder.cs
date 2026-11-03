@@ -67,8 +67,10 @@ namespace CityBuilder.Simulation.Roads
         public RoadBuildError Error;
         public float Length;
         public float Cost;
+        /// <summary>Höhenprofil, wenn die Straße dem Gelände folgt (sonst null = gerade Rampe).</summary>
+        public float[] Profile;
         public bool IsValid => Error == RoadBuildError.None;
-        public float HeightAt(float t) => StartHeight + (EndHeight - StartHeight) * t;
+        public float HeightAt(float t) => Profile != null ? Profiles.Sample(Profile, t) : StartHeight + (EndHeight - StartHeight) * t;
     }
 
     public sealed class RoundaboutPlan
@@ -76,6 +78,7 @@ namespace CityBuilder.Simulation.Roads
         public Vector2 Center;
         public float Radius;
         public float Height;
+        public bool FollowTerrain;
         public RoadType Type;
         public float StartAngle;
         public readonly List<RoadPlan> Arcs = new List<RoadPlan>();
@@ -89,6 +92,7 @@ namespace CityBuilder.Simulation.Roads
     {
         public RoadPlan Right;  // in Bau-/Zeichenrichtung
         public RoadPlan Left;   // Gegenrichtung
+        public bool FollowTerrain;
         public RoadBuildError Error;
         public float Cost => (Right?.Cost ?? 0f) + (Left?.Cost ?? 0f);
         public bool IsValid => Error == RoadBuildError.None;
@@ -147,9 +151,13 @@ namespace CityBuilder.Simulation.Roads
         /// Plant eine Straße. Freie Enden bekommen die Höhen <paramref name="startHeight"/>/<paramref name="endHeight"/>,
         /// angeschlossene Enden die Höhe des Anschlusses. Eingerastet wird nur auf gleicher Ebene.
         /// </summary>
+        /// <param name="followTerrain">
+        /// Straße folgt dem Gelände (Höhenprofil, geglättet und auf die Maximalsteigung begrenzt); das Gelände
+        /// wird danach unter ihr eingeebnet. Sonst gerade Rampe zwischen den Endhöhen (Brücke/Tunnel).
+        /// </param>
         public static RoadPlan Plan(RoadNetwork network, Vector2 start, float startSnap, Vector2? control,
             Vector2 end, float endSnap, RoadType type, float startHeight = 0f, float endHeight = 0f,
-            RoadSegmentFlags flags = RoadSegmentFlags.None)
+            RoadSegmentFlags flags = RoadSegmentFlags.None, bool followTerrain = false)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
             var plan = new RoadPlan
@@ -165,6 +173,12 @@ namespace CityBuilder.Simulation.Roads
             plan.EndHeight = plan.EndAnchor.Kind == AnchorKind.Free ? endHeight : plan.EndAnchor.Height;
             plan.Control = control ?? (plan.Start + plan.End) * 0.5f;
             plan.Length = Bezier.ApproximateLength(plan.Start, plan.Control, plan.End);
+            if (followTerrain && plan.Length >= RoadNetwork.MinSegmentLength)
+            {
+                plan.Profile = Profiles.FollowTerrain(network.Ground, plan.Start, plan.Control, plan.End, plan.Length,
+                    plan.StartHeight, plan.EndHeight, type.MaxSlope);
+                if (plan.Profile == null) { plan.Error = RoadBuildError.TooSteep; return plan; }
+            }
             ElevationRange(network.Ground, plan, out float minElev, out float maxElev);
             plan.Cost = plan.Length * type.CostPerMeter * CostFactor(minElev, maxElev);
             plan.Error = Validate(network, plan);
@@ -195,7 +209,8 @@ namespace CityBuilder.Simulation.Roads
             var ground = network.Ground;
             float e0 = plan.StartHeight - ground.HeightAt(plan.Start), e1 = plan.EndHeight - ground.HeightAt(plan.End);
             if (e0 < MinHeight - 0.01f || e1 < MinHeight - 0.01f || e0 > MaxHeight || e1 > MaxHeight) return RoadBuildError.InvalidHeight;
-            if (MathF.Abs(plan.EndHeight - plan.StartHeight) / plan.Length > type.MaxSlope + 1e-4f) return RoadBuildError.TooSteep;
+            float slope = plan.Profile != null ? Profiles.MaxSlope(plan.Profile, plan.Length) : MathF.Abs(plan.EndHeight - plan.StartHeight) / plan.Length;
+            if (slope > type.MaxSlope + 1e-3f) return RoadBuildError.TooSteep;
 
             // Wasser nur auf einer Brücke queren
             for (int i = 0; i <= 16; i++)
@@ -392,7 +407,8 @@ namespace CityBuilder.Simulation.Roads
                 var (ta, a) = points[i];
                 var (tb, b) = points[i + 1];
                 var control = Bezier.Blossom(plan.Start, plan.Control, plan.End, ta, tb);
-                var seg = network.AddSegment(a, b, control, plan.Type, plan.Flags);
+                var profile = plan.Profile != null ? Profiles.Resample(plan.HeightAt, ta, tb, plan.Length) : null;
+                var seg = network.AddSegment(a, b, control, plan.Type, plan.Flags, profile);
                 if (seg != null) built.Add(seg);
             }
 
@@ -436,7 +452,7 @@ namespace CityBuilder.Simulation.Roads
         {
             if (type == null || segment == null) return RoadBuildError.InvalidType;
             if (segment.Type == type) return RoadBuildError.Duplicate;
-            if (segment.Slope > type.MaxSlope + 1e-4f) return RoadBuildError.TooSteep;
+            if (segment.MaxSlope > type.MaxSlope + 1e-3f) return RoadBuildError.TooSteep;
             if (segment.IsRoundabout && (!type.IsOneWay || type.Category != RoadCategory.City)) return RoadBuildError.InvalidType;
             foreach (var node in new[] { segment.Start, segment.End })
             foreach (int id in node.SegmentIds)
@@ -460,7 +476,7 @@ namespace CityBuilder.Simulation.Roads
         /// <paramref name="median"/> = lichter Abstand zwischen den Fahrbahnen.
         /// </summary>
         public static DualCarriagewayPlan PlanDualCarriageway(RoadNetwork network, Vector2 start, Vector2? control, Vector2 end,
-            RoadType type, float snap, float startHeight = 0f, float endHeight = 0f, float median = 3f)
+            RoadType type, float snap, float startHeight = 0f, float endHeight = 0f, float median = 3f, bool followTerrain = false)
         {
             var plan = new DualCarriagewayPlan();
             if (type == null || !type.IsOneWay) { plan.Error = RoadBuildError.InvalidType; return plan; }
@@ -471,8 +487,13 @@ namespace CityBuilder.Simulation.Roads
             OffsetCurve(start, c, end, offset, out var r0, out var rc, out var r2);
             OffsetCurve(start, c, end, -offset, out var l0, out var lc, out var l2);
 
-            plan.Right = Plan(network, r0, snap, rc, r2, snap, type, startHeight, endHeight);
-            plan.Left = Plan(network, l2, snap, lc, l0, snap, type, endHeight, startHeight);
+            // Geländefolgend: jede Fahrbahn nimmt die Geländehöhe an ihren eigenen Enden
+            var g = network.Ground;
+            float rs = followTerrain ? g.HeightAt(r0) : startHeight, re = followTerrain ? g.HeightAt(r2) : endHeight;
+            float ls = followTerrain ? g.HeightAt(l2) : endHeight, le = followTerrain ? g.HeightAt(l0) : startHeight;
+            plan.Right = Plan(network, r0, snap, rc, r2, snap, type, rs, re, followTerrain: followTerrain);
+            plan.Left = Plan(network, l2, snap, lc, l0, snap, type, ls, le, followTerrain: followTerrain);
+            plan.FollowTerrain = followTerrain;
             plan.Error = plan.Right.IsValid ? plan.Left.Error : plan.Right.Error;
             return plan;
         }
@@ -484,7 +505,7 @@ namespace CityBuilder.Simulation.Roads
             built.AddRange(Build(network, plan.Right));
             // Neu planen, falls die erste Fahrbahn das Netz verändert hat
             var left = Plan(network, plan.Left.Start, snap, plan.Left.Control, plan.Left.End, snap, plan.Left.Type,
-                plan.Left.StartHeight, plan.Left.EndHeight);
+                plan.Left.StartHeight, plan.Left.EndHeight, followTerrain: plan.FollowTerrain);
             built.AddRange(Build(network, left));
             return built;
         }
@@ -517,9 +538,10 @@ namespace CityBuilder.Simulation.Roads
         /// Plant einen Kreisverkehr aus Einbahn-Bögen gegen den Uhrzeigersinn (Rechtsverkehr).
         /// Vorhandene Straßen, die den Ring kreuzen, werden angeschlossen; was innen liegt, wird entfernt.
         /// </summary>
-        public static RoundaboutPlan PlanRoundabout(RoadNetwork network, Vector2 center, float radius, RoadType type, float height = 0f)
+        public static RoundaboutPlan PlanRoundabout(RoadNetwork network, Vector2 center, float radius, RoadType type, float height = 0f,
+            bool followTerrain = false)
         {
-            var plan = new RoundaboutPlan { Center = center, Radius = radius, Type = type, Height = height };
+            var plan = new RoundaboutPlan { Center = center, Radius = radius, Type = type, Height = height, FollowTerrain = followTerrain };
             if (radius < MinRoundaboutRadius || radius > MaxRoundaboutRadius) { plan.Error = RoadBuildError.InvalidRadius; return plan; }
             if (type == null || !type.IsOneWay || type.Category != RoadCategory.City) { plan.Error = RoadBuildError.InvalidType; return plan; }
 
@@ -537,7 +559,7 @@ namespace CityBuilder.Simulation.Roads
                 for (int i = 0; i < arcs && error == RoadBuildError.None; i++)
                 {
                     GetArc(center, radius, offset + step * i, step, out var p0, out var c, out var p2);
-                    var arc = Plan(network, p0, 0f, c, p2, 0f, type, height, height, RoadSegmentFlags.Roundabout);
+                    var arc = PlanArc(network, plan, p0, c, p2, 0f);
                     // Die Ringbögen kennen sich im Plan noch nicht – nur Fehler gegenüber dem Bestand zählen.
                     if (!arc.IsValid && arc.Error != RoadBuildError.Duplicate) error = arc.Error;
                     plan.Arcs.Add(arc);
@@ -553,6 +575,13 @@ namespace CityBuilder.Simulation.Roads
             }
             plan.Error = firstError;
             return plan;
+        }
+
+        static RoadPlan PlanArc(RoadNetwork network, RoundaboutPlan plan, Vector2 p0, Vector2 c, Vector2 p2, float snap)
+        {
+            float h0 = plan.FollowTerrain ? network.Ground.HeightAt(p0) : plan.Height;
+            float h2 = plan.FollowTerrain ? network.Ground.HeightAt(p2) : plan.Height;
+            return Plan(network, p0, snap, c, p2, snap, plan.Type, h0, h2, RoadSegmentFlags.Roundabout, plan.FollowTerrain);
         }
 
         public static int RoundaboutArcCount(float radius) =>
@@ -578,7 +607,7 @@ namespace CityBuilder.Simulation.Roads
             {
                 GetArc(plan.Center, plan.Radius, plan.StartAngle + step * i, step, out var p0, out var c, out var p2);
                 // Neu planen, damit der Bogen an den gerade gebauten Ringknoten anschließt.
-                var arc = Plan(network, p0, 0.5f, c, p2, 0.5f, plan.Type, plan.Height, plan.Height, RoadSegmentFlags.Roundabout);
+                var arc = PlanArc(network, plan, p0, c, p2, 0.5f);
                 built.AddRange(Build(network, arc));
             }
 
@@ -587,7 +616,8 @@ namespace CityBuilder.Simulation.Roads
             foreach (var s in network.Segments)
             {
                 if (s.IsRoundabout) continue;
-                if (MathF.Abs(s.HeightAt(0.5f) - plan.Height) > RoadNetwork.SameLevelTolerance) continue;
+                float level = plan.FollowTerrain ? network.Ground.HeightAt(s.Evaluate(0.5f)) : plan.Height;
+                if (MathF.Abs(s.HeightAt(0.5f) - level) > RoadNetwork.SameLevelTolerance * 2f) continue;
                 if (Vector2.Distance(s.Evaluate(0.5f), plan.Center) < plan.Radius - 1f &&
                     Vector2.Distance(s.Start.Position, plan.Center) < plan.Radius + 0.5f &&
                     Vector2.Distance(s.End.Position, plan.Center) < plan.Radius + 0.5f)
