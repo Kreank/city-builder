@@ -105,6 +105,7 @@ namespace CityBuilder.Editor
         const string SimpleCars = "Simple Vehicle Pack/Prefabs";
         const string Modern = "ThirdParty/Buildings";
         const string Awb = "Mobile Optimize-Free Low Poly Cars/Prefabs";
+        const string FreeCars = "Pack_FREE_Cars/Prefabs";
         const string UnityCars = "CarsAssetPack/Prefabs/FBX";
         const string StreetPack = "LowpolyStreetPack/Prefabs";
         const string ParkPack = "ThirdParty/Park/Prefabs";
@@ -126,6 +127,8 @@ namespace CityBuilder.Editor
             V(Awb, "Sport Car_39", 4.5f), V(Awb, "N Van_10", 4.9f, 2.2f), V(Awb, "Pick Up_11", 5.3f), V(Awb, "Police Car N_4", 4.8f),
             V(UnityCars, "Car1", 4.4f), V(UnityCars, "Car2", 4.2f), V(UnityCars, "Car3", 4.2f), V(UnityCars, "Car4", 4.3f),
             V(UnityCars, "Car5", 4.3f), V(UnityCars, "Car6", 4.4f), V(UnityCars, "Car7", 4.0f), V(UnityCars, "Car8", 4.6f),
+            V(FreeCars, "Hatchback", 4.0f), V(FreeCars, "Pickup", 5.1f), V(FreeCars, "Police", 4.8f), V(FreeCars, "Taxi", 4.5f),
+            V(FreeCars, "Van", 4.9f, 2.2f),
         };
         // SimplePoly-Lkw sind sehr gedrungen → werden auf Spurbreite begrenzt und damit kürzer (Lieferwagen-Größe)
         static readonly Spec[] Trucks =
@@ -133,10 +136,11 @@ namespace CityBuilder.Editor
             V(Nebula, "LorryCargo", 10f, 2.6f), V(Nebula, "LorryCargo", 10f, 2.6f),
             V(SimplePoly, "Vehicle_Truck_color01", 9f, 2.6f), V(SimplePoly, "Vehicle_Truck_color02", 9f, 2.6f),
             V(Toon, "civil-truck-A", 9f, 2.6f), V(Toon, "civil-truck-B", 10f, 2.6f),
+            V(FreeCars, "Truck", 8.5f, 2.6f), V(FreeCars, "VanBig", 7.5f, 2.5f),
         };
         static readonly Spec[] Buses =
         {
-            V(Vlad, "Autobus_Mesh", 12f, 2.6f), V(Toon, "city-bus", 12f, 2.6f),
+            V(Vlad, "Autobus_Mesh", 12f, 2.6f), V(Vlad, "SmallAutobus_Mesh", 9f, 2.5f), V(Toon, "city-bus", 12f, 2.6f),
             V(SimpleCars, "Bus_1", 12f, 2.6f), V(SimpleCars, "Bus_2", 12f, 2.6f),
         };
         static readonly Spec[] Trams = { V(Vlad, "Tram_Mesh", 29f, 2.65f) };
