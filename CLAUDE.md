@@ -196,7 +196,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kinder/Schüler bleiben vorerst zu Hause (ab 12 Jahren Freizeit im Viertel, s. Bedürfnismodell).
 - Fahrten: Anteil `CarShare` (35 %, Einpendler 60 %) × `TrafficSystem.Demand` fährt als echtes Auto
   (`TrafficSystem.RequestTrip` von Zufahrt/Außenanschluss zu Zufahrt/Außenanschluss), höchstens 70 % von `MaxVehicles`.
-  Rest = Platzhalter (zu Fuß/ÖPNV, Fahrzeit aus Luftlinie, 15 km/h). Ankunft meldet `TrafficSystem.TripEnded`
+  Rest = Platzhalter (zu Fuß/Rad, Fahrzeit aus Luftlinie, 15 km/h) bzw. seit ÖPNV Stufe 1 Bus (s. „ÖPNV“). Ankunft meldet `TrafficSystem.TripEnded`
   (auch bei Abbruch → Bürger kommt trotzdem an; Sicherheitsnetz 3 Tage). Handler dürfen dort keine Fahrten starten.
   **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
   oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
@@ -267,8 +267,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **HUD:** `Game/Citizens/CitizenAlerts` (Begleiter am RoadTool) meldet einmal je Spieltag Geburten/Hochzeiten des
   Vortags mit einem Beispielsatz (`HudMessages.Info`, Schlüssel „citizens-daily“).
 - Später: Kinder gehen wirklich zur Schule (Tagesablauf), Freundschaften/Nachbarn, Tagesabläufe je Archetyp, Bodenwert/Ausbaustufen
-  aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter (Stau → „eher ÖPNV“ wirkt bisher
-  auf den Platzhalter „zu Fuß/ÖPNV“). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
+  aus der Zufriedenheit (G6), Einkommen in Wohnwahl/Konsum (G5), ÖPNV statt Platzhalter ✅ (s. „ÖPNV“: Stau → eher Bus). Gleitkomma (`MathF.Tanh`, `Math.Exp`) ist nicht bitgenau über Laufzeiten garantiert –
   für Lockstep-Multiplayer ggf. später Festkomma/Tabellen.
 
 ## Spiel-UI (UI Toolkit, Phase 1)
@@ -770,6 +769,60 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   `DeadEndsAreExternal` (Testszenarien). Ziele mitten auf Segmenten (`FindPathToSegment`) wandern beim Zerteilen mit.
   Hängende Fahrzeuge verschwinden nach 90 s.
 
+## ÖPNV (Stufe 1: Buslinien)
+- `Simulation/Transit`: `TransitTypes.cs` (`TransitRules` alle Zahlen, `TransitCatalog.BusDepot`, `BusStop`, `TransitLine`, `Bus`,
+  `Passenger`, `TransitOption`, Pläne/Fehler), `TransitSystem` (+ `.Operations` Route/Depot/Busbetrieb, `.Riders` Fahrgäste),
+  `world.Transit` (jeden Tick, nach den Diensten). Verkehr: `TrafficSystem.Scheduled.cs` (Linienfahrzeuge), `Pathfinder.FindPathToEdge`.
+- **Haltestelle** (`PlanStop`/`BuildStop`, 600 €, 15 €/Woche): rastet an der nächsten ebenerdigen Stadtstraße ein (Rand ≤ 12 m),
+  Seite des Klicks (rechts in Segmentrichtung = `StopSide.Along`) oder Paar (`Both`); Einbahn nur die befahrene Seite; ≥ 15 m
+  von Kreuzungen, ≥ 30 m zur nächsten Haltestelle derselben Seite. Bus hält auf der Fahrspur am Rand (keine Bucht → blockiert
+  die Spur, wie im echten Leben). **Straßenumbau:** Haltestellen wandern beim Zerteilen/Umbau mit (Seite tauscht bei
+  „Richtung umdrehen“), fällt die Straße weg, entfällt die Haltestelle (sie liegt auf der Straße, blockiert sie also nicht).
+- **Linie** (`CreateLine(stops, loop, busse)`, `PreviewLine` für die Werkzeug-Vorschau): Rundlinie A→B→C→A oder Pendel A→B→C→B→A
+  (`VisitStops`). Je Abschnitt A* (Bus) ab der Kante, auf der der Bus am vorigen Halt steht; Ziel auf einer Seite →
+  `FindPathToEdge` (liegt es zurück auf derselben Kante: Runde bis zur Einbiegekante). Fahrplan je Abschnitt = Σ Länge /
+  (Tempolimit × 0,75) + 4 s je Kreuzung + 8 s Halt; Umlaufzeit/Busse = Takt. Neu berechnet bei Straßen-/Linienänderung.
+- **Busdepot** (Bauwerk wie G4: 40 × 30 m, 45 000 €, 1 500 €/Woche, 16 Busse; `PlanDepot`/`BuildDepot`/`DemolishDepot` 25 %
+  zurück; Sperren für Grundstücke/Terraforming/Versorger/Dienste über verkettete Hooks, neu `ServiceSystem.OtherStructureOverlaps`).
+  `SnapDepot` richtet die Vorderseite zur nächsten Stadtstraße aus und rastet am Rand ein (Spielerregel). **Straßenbau reißt
+  Depots nicht ab** – für den Straßenblocker gibt es `BlocksRoad(segment)` / `BlocksPoint(p)` (noch nicht angehängt).
+- **Busbetrieb:** fehlen einer Linie Busse, setzt das nächste Depot mit freiem Fahrzeug alle 4 s einen ein, der i-te beginnt am
+  Halt i·n/Ziel (Takt durch Verteilung). Busse sind echte Fahrzeuge (`VehicleClass.Bus`, `Vehicle.IsScheduled`/`TransitId`):
+  bremsen bis zur Haltestelle, stehen (`HoldAtStopFor`, Haltezeit 4 s + 1,2 s je Einsteiger + 0,8 s je Aussteiger, zählt nicht als
+  „hängend“), bekommen das nächste Ziel (`Redirect`, unerreichbare Halte werden übersprungen), ordnen sich vor dem Halt rechts ein.
+  Stau, Ampeln, 90-s-Abbruch wie alle; abgebrochener Bus → Fahrgäste stranden, Depot setzt neu ein. Weniger Busse gewünscht →
+  leer werdende Busse fahren ins Depot. Pünktlich = Abschnitt ≤ 1,35 × Plan + 20 s.
+- **Fahrgäste** (`CitizenSystem.Transit.cs`): `StartTrip` → `PlanRide(von, nach)` (Halte ≤ 600 m, je Ende 4 nächste, höchstens
+  1 Umstieg, nur Linien mit Bussen) → Wahl in zwei Stufen: Auto (`CarProbability` + 0,4 × Erinnerung Bus voll/verspätet,
+  − 0,3 × Vorteil einer schnelleren Busverbindung) sonst Bus gegen Fuß/Rad: `BusProbability` = logistisch(((t_Fuß/Rad − t_Bus,gefühlt)/600 s
+  + 0,2 gesellig − 0,15 sparsam − 0,3 naturverbunden (je Abweichung von 0,5) + 0,5 Stau − 0,7 Bus voll − 0,5 verspätet + 0,3 gute
+  Fahrt) / (Temperatur + 0,15)); t_Fuß/Rad = 1,25 × Luftlinie / 2,2 m/s; t_Bus,gefühlt = 1,3 × Fußwege/1,3 m/s + 1,5 × halber Takt
+  + Fahrzeit + 120 s je Umstieg. Ohne Linien/Erinnerungen ist alles exakt wie vorher. **Skalierung wie beim Auto:**
+  `TransitRealShare` 35 % × Demand fahren als einzelne Fahrgäste (warten an der Haltestelle, steigen ein – Kapazität 60 –, fahren,
+  steigen aus, Rest zu Fuß), der Rest statistisch (Fahrplanzeit auf der Spieluhr, zählt als Fahrgast und zahlt, belegt keinen
+  Platz). Grund ist die Zeitverzerrung (ein Spieltag = 60 s Verkehrszeit), nicht die Rechenzeit. Volle Busse lassen stehen
+  (nach 2 vollen gibt man auf), Geduld max(150 s, 2,5 × Takt); Ergebnis → Erinnerungen `BusFull`/`BusLate`/`BusRide` →
+  Mobilitäts-Bedürfnis (−0,15/−0,1/+0,1) und nächste Wahl. Sicherheitsnetz 5 Tage.
+- **Kasse:** `BudgetCategory.TransitFares` („Fahrgeld ÖPNV“, 1,50 € je Einstieg, über `EconomySystem.Earn` alle 5 Ticks),
+  `TransitConstruction` („Bau ÖPNV“); Unterhalt als `IUpkeepSource` „ÖPNV“ (Depots + 420 € je Bus im Einsatz + Haltestellen).
+- **Abfrage-API:** Linie `Stops/VisitStops/Legs`, `BusesOf`, `PassengersToday/Yesterday/Total`, `AverageLoad`, `Punctuality`,
+  `HeadwaySeconds`, `LeftBehindToday`; Haltestelle `WaitingCount`/`WaitingFor(line)`, `BoardedToday`, `LinesAt(stop)`; Bus `BusOf(vehicle)`,
+  `LineId`, `Passengers`, `TargetStopId`, `LastLegOnTime`; Bürger `RideOf(c)`, `BusOf(c)`.
+- **Unity** (`Game/Transit`): `TransitTool` (**Taste 5**, Modus `RoadTool.Mode.Transit`: Haltestelle ⇧ = beide Seiten, Linie zeichnen
+  mit Routen-Vorschau, Klick auf freie Straße setzt gleich einen Halt, Klick auf den ersten Halt = Rundlinie, Enter fertig, RMB
+  letzter Halt zurück, Esc verwerfen; Depot rastet ein, Strg frei; Abriss), `TransitView` (Haltestellen-Modell „bus_stop“ =
+  `Models/Props/BusStop.fbx`, Depot „bus_depot“ = `Models/Transport/BusDepot.fbx` über `OwnModelCatalog.Transport`, sonst
+  Platzhalter; Linienverläufe in 10 Linienfarben; Farbplatte auf dem Dach der Linienbusse – Busmodelle selbst aus „Buses“ über
+  die `VehicleView`). HUD: Kategorie „ÖPNV“ (`GameHud.Transit.cs`), Icon `HudIconKind.Bus`, `TransitWindow` (rechts, **F6** bzw.
+  im Werkzeug: Linien, Busse ±, Rund/Pendel, Halte mit Wartenden, Löschen). Inspektor: Haltestellen/Depots anklickbar
+  (`SelectionKind.TransitStop/-Depot`), Bus zeigt Linie/Fahrgäste, Bürger „wartet auf Linie …/im Bus“. IMGUI-Rückfallleiste hat
+  keinen ÖPNV-Eintrag. Im Editor noch nicht visuell abgenommen.
+- **Medien:** Schlagzeilen-Themen `NewBusLine`, `BusOverloaded` (≥ 20 stehen gelassen am Tag), `BusLate` (Pünktlichkeit < 60 %),
+  erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
+- Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
+- Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
+  (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie, sichtbare Wartende.
+
 ## Roadmap
 1. ✅ Fundament: Tick-Simulation, Kamera, freie Straßen (gerade/Kurve), Lärm-Raster + Overlay, Bauhilfen
 2. ✅ Straßen
@@ -814,6 +867,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
+     - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
+       und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
+       Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
    - Energie erweitern: ✅ Atomkraftwerk; weitere reale Kraftwerkstypen
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel

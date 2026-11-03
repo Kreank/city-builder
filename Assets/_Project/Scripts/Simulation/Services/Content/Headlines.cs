@@ -22,6 +22,10 @@ namespace CityBuilder.Simulation.Services.Content
         SatisfactionRise,
         PopulationMilestone,
         Unemployment,
+        // --- ÖPNV
+        NewBusLine,
+        BusOverloaded,
+        BusLate,
     }
 
     /// <summary>
@@ -130,6 +134,23 @@ namespace CityBuilder.Simulation.Services.Content
                 ("Arbeitslosigkeit bei {Prozent} %", "Viele suchen Arbeit. Die Stadt braucht mehr Gewerbe."),
                 ("Kein Job in Sicht", "{Prozent} % der Erwerbsfähigen sind ohne Arbeit."),
             },
+            // --- ÖPNV
+            /* NewBusLine */ new[]
+            {
+                ("Neue Buslinie: {Name}", "{Name} fährt ab heute {Anzahl} Haltestellen an. Weniger Autos, hofft die Stadt."),
+                ("Mit dem Bus durch die Stadt", "Die Stadt eröffnet {Name} – {Anzahl} Halte, erster Halt {Straße}."),
+            },
+            /* BusOverloaded */ new[]
+            {
+                ("Busse voll: {Name} am Limit", "{Anzahl} Fahrgäste blieben heute an den Haltestellen stehen. Die Linie braucht mehr Busse."),
+                ("Gedränge im Bus", "Auf {Name} geht nichts mehr rein – {Anzahl} Fahrgäste mussten den nächsten Bus abwarten."),
+            },
+            /* BusLate */ new[]
+            {
+                ("{Name} chronisch verspätet", "Nur {Prozent} % der Busse kommen pünktlich. Der Stau trifft auch den Nahverkehr."),
+                ("Warten auf den Bus", "Pünktlichkeit auf {Name}: {Prozent} %. {Medium} fragt: Wann kommen Busspuren?"),
+            },
+            // --- Ende ÖPNV
         };
 
         public static int TopicCount => ByTopic.Length;
@@ -159,6 +180,8 @@ namespace CityBuilder.Simulation.Services.Content
                 case HeadlineTopic.SatisfactionRise: return 0.5f;
                 case HeadlineTopic.Unemployment: return -0.5f;
                 case HeadlineTopic.PopulationMilestone: return 0.6f;
+                case HeadlineTopic.BusOverloaded: return -0.4f; // ÖPNV
+                case HeadlineTopic.BusLate: return -0.35f;      // ÖPNV
                 default: return 0.5f; // Eröffnungen
             }
         }

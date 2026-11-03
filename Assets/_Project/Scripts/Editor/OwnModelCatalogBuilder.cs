@@ -42,6 +42,13 @@ namespace CityBuilder.Editor
             { "media_newspaper", new[] { "Newspaper" } }, { "media_radio", new[] { "RadioStation" } }, { "media_tv", new[] { "TVTower" } },
         };
 
+        /// <summary>ÖPNV: Id → Datei unter Models (mit Unterordner, ohne .fbx; erster vorhandener gilt).</summary>
+        static readonly Dictionary<string, string[]> TransportFiles = new Dictionary<string, string[]>
+        {
+            { "bus_depot", new[] { "Transport/BusDepot" } },
+            { "bus_stop", new[] { "Props/BusStop" } },
+        };
+
         static bool scheduled;
 
         void OnPreprocessTexture()
@@ -105,9 +112,23 @@ namespace CityBuilder.Editor
             catalog.Services = services.ToArray();
             // --- Ende G4
 
+            // --- ÖPNV (Depot, Haltestelle); fehlt das Modell, zeichnet TransitView Platzhalter
+            var transport = new List<OwnModelCatalog.Entry>();
+            foreach (var kv in TransportFiles)
+                foreach (var candidate in kv.Value)
+                {
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{candidate}.fbx");
+                    if (model == null) continue;
+                    transport.Add(new OwnModelCatalog.Entry { Id = kv.Key, Model = model });
+                    Debug.Log($"[OwnModels] {kv.Key} ← {candidate}.fbx, Größe {Bounds(model).size}");
+                    break;
+                }
+            catalog.Transport = transport.ToArray();
+            // --- Ende ÖPNV
+
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste → {CatalogPath}");
+            Debug.Log($"[OwnModels] Katalog: {entries.Count} Versorgungsbauwerke, {services.Count} Dienste, {transport.Count} ÖPNV → {CatalogPath}");
         }
 
         static Material EnsurePaletteMaterial()

@@ -287,7 +287,41 @@ namespace CityBuilder.Simulation.Services
             DetectTraffic(into);
             DetectPopulation(into);
             DetectUnemployment(into);
+            DetectTransit(into); // ÖPNV
         }
+
+        // --- ÖPNV: neue Linie, volle Busse, Verspätungen (liest world.Transit; Transit entsteht nach den Medien)
+        /// <summary>Ab so vielen stehen gelassenen Fahrgästen am Tag ist die Linie eine Meldung wert.</summary>
+        public int BusOverloadNews = 20;
+        readonly HashSet<int> knownLines = new HashSet<int>();
+        bool linesKnown;
+
+        void DetectTransit(List<Candidate> into)
+        {
+            var t = world.Transit;
+            if (t == null) return;
+            bool media = HasMedia;
+            foreach (var l in t.Lines)
+            {
+                if (knownLines.Add(l.Id) && linesKnown && media)
+                {
+                    var first = l.Stops.Count > 0 ? t.GetStop(l.Stops[0]) : null;
+                    into.Add(new Candidate
+                    {
+                        Topic = HeadlineTopic.NewBusLine, Key = "line" + l.Id,
+                        Values = Values(("Name", l.Name), ("Anzahl", l.Stops.Count.ToString()), ("Straße", first?.Name ?? "")),
+                        Street = first?.SegmentId ?? 0,
+                    });
+                }
+                if (l.LeftBehindToday >= BusOverloadNews)
+                    into.Add(new Candidate { Topic = HeadlineTopic.BusOverloaded, Key = "full" + l.Id, Values = Values(("Name", l.Name), ("Anzahl", l.LeftBehindToday.ToString())) });
+                if (l.ActiveVehicles > 0 && l.Punctuality < 0.6f)
+                    into.Add(new Candidate { Topic = HeadlineTopic.BusLate, Key = "late" + l.Id, Values = Values(("Name", l.Name), ("Prozent", ((int)(l.Punctuality * 100f)).ToString())) });
+            }
+            // Ohne Medien gebaute Linien sind später keine Neuigkeit mehr
+            if (media) linesKnown = true;
+        }
+        // --- Ende ÖPNV
 
         void DetectTaxes(List<Candidate> into)
         {

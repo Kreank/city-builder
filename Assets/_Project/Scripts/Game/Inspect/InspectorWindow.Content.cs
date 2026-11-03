@@ -406,9 +406,10 @@ namespace CityBuilder.Game.Inspect
                             ui.FieldLink("Verkehrsmittel", $"Auto – {VehicleClasses.DisplayName(v.Class)} #{v.Id}", () => Go(SelectionKind.Vehicle, v.Id));
                         else ui.Field("Verkehrsmittel", "Auto (gleich am Ziel)");
                     }
+                    else if (c.Mode == TravelMode.Transit) CitizenTransitFields(ui, world, c); // ÖPNV
                     else
                     {
-                        ui.Field("Verkehrsmittel", "zu Fuß/Rad/ÖPNV (Platzhalter, Luftlinie 15 km/h)");
+                        ui.Field("Verkehrsmittel", "zu Fuß/Rad (Platzhalter, Luftlinie 15 km/h)");
                         long eta = c.PlannedArrivalTick - world.Clock.Tick;
                         ui.Field("Ankunft", eta > 0 ? $"≈ {Clock(c.PlannedArrivalTick)} Uhr (in {Duration(eta)})" : "gleich");
                     }
@@ -480,6 +481,7 @@ namespace CityBuilder.Game.Inspect
                 ui.Stat("Geschwindigkeit", $"{v.Speed * 3.6f:0}", "km/h");
                 ui.Stat("Fahrtdauer", FormatSeconds(traffic.Time - v.StartTime), "Verkehrszeit");
             }
+            if (BusFields(ui, world, v)) return; // ÖPNV: Linienbus
             string target = c != null && c.Destination.IsBuilding && world.City.GetBuilding(c.Destination.BuildingId) is Building tb
                 ? BuildingName(tb) : "Ziel";
             using (ui.Card())

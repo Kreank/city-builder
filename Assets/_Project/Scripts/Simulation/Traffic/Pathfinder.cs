@@ -76,6 +76,49 @@ namespace CityBuilder.Simulation.Traffic
             return Search(start, e => e.SegmentId == segmentId && !e.Equals(start) && HasLaneFor(e, cls), goal, cls, fromLane);
         }
 
+        // --- ÖPNV: Haltestelle auf einer bestimmten Straßenseite
+        /// <summary>
+        /// Wie <see cref="FindPathToSegment"/>, aber nur in einer Fahrtrichtung (<paramref name="goal"/>), z. B. zu einer
+        /// Haltestelle auf einer Straßenseite. Liegt das Ziel auf der Startkante zurück, wird eine Runde gesucht (bis zu
+        /// einer Kante, die in die Zielkante abbiegt, die dann angehängt wird – im A* kommt jede Kante nur einmal vor).
+        /// </summary>
+        public List<EdgeKey> FindPathToEdge(EdgeKey start, float startS, EdgeKey goal, float t, VehicleClass cls, Lane fromLane = null)
+        {
+            var seg = network.GetSegment(goal.SegmentId);
+            if (seg == null) return null;
+            if (start.Equals(goal))
+            {
+                float targetS = goal.Along ? t * seg.Length : (1f - t) * seg.Length;
+                if (targetS > startS + 1f)
+                {
+                    LastCost = (targetS - startS) / MathF.Max(1f, rules.SpeedLimit(seg));
+                    return new List<EdgeKey> { start };
+                }
+                // Ziel liegt zurück: Runde fahren – Suche bis zu einer Kante, von der es in die Zielkante geht, dann anhängen
+                var entry = lanes.EdgeFrom(goal);
+                if (entry == null) return null;
+                var loop = Search(start, e => !e.Equals(start) && lanes.EdgeTo(e) == entry && CanTurnInto(e, entry, goal, cls),
+                    entry.Position, cls, fromLane);
+                if (loop == null) return null;
+                LastCost += EdgeCost(seg, goal);
+                loop.Add(goal);
+                return loop;
+            }
+            return Search(start, e => e.Equals(goal) && HasLaneFor(e, cls), seg.Evaluate(t), cls, fromLane);
+        }
+
+        bool CanTurnInto(EdgeKey from, RoadNode node, EdgeKey to, VehicleClass cls)
+        {
+            foreach (var c in lanes.GetConnections(node.Id))
+            {
+                if (c.From.Segment.Id != from.SegmentId || c.From.Along != from.Along || !c.To.Edge.Equals(to)) continue;
+                if ((c.From.Allowed & cls) == 0 || (c.To.Allowed & cls) == 0) continue;
+                if (rules.IsTurnAllowed(node.Id, from.SegmentId, to.SegmentId, cls)) return true;
+            }
+            return false;
+        }
+        // --- Ende ÖPNV
+
         bool HasLaneFor(EdgeKey edge, VehicleClass cls)
         {
             foreach (var l in lanes.LanesOf(edge)) if ((l.Allowed & cls) != 0) return true;

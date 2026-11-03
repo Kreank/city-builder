@@ -260,7 +260,10 @@ namespace CityBuilder.Simulation.Citizens
             float jam = MathF.Min(1f, c.Memories.Strength(MemoryKind.TrafficJam));
             if (commuteMeters <= 0f) return 0.75f - 0.1f * jam;
             float t = 1f - Math.Clamp((commuteMeters - 500f) / 3500f, 0f, 0.7f);
-            return Math.Clamp(t - 0.25f * jam - 0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.LongCommute)), 0f, 1f);
+            // ÖPNV: volle/verspätete Busse senken, gute Fahrten heben die Mobilität
+            float bus = -0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusFull)) - 0.1f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusLate))
+                        + 0.1f * MathF.Min(1f, c.Memories.Strength(MemoryKind.BusRide));
+            return Math.Clamp(t - 0.25f * jam - 0.15f * MathF.Min(1f, c.Memories.Strength(MemoryKind.LongCommute)) + bus, 0f, 1f);
         }
 
         /// <summary>Zufriedenheit: gewichteter Mittelwert (Lebensphase × Persönlichkeit).</summary>

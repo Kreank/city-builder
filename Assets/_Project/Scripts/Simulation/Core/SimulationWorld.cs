@@ -160,6 +160,13 @@ namespace CityBuilder.Simulation.Core
             CitizenUtilityBinding.Connect(world.Citizens, world.Utilities, world.WaterQuality, world.Services, world.Media);
             // --- Ende G4
 
+            // --- ÖPNV (nach den Diensten: hängt sich an deren Bau-/Grundstückssperren an; Busse fahren im Verkehr)
+            world.Transit = new Transit.TransitSystem(world.Roads, world.Terrain, world.City, world.Traffic, world.Clock,
+                world.Utilities, world.Services, world.Min, world.Max);
+            world.AddSystem(world.Transit);
+            world.Citizens.ConnectTransit(world.Transit);
+            // --- Ende ÖPNV
+
             // --- G6 Bodenwert & Ausbaustufen (nach Diensten: liest Abdeckung, Müll, Zufriedenheit; vor der Kasse: Grundsteuer)
             world.LandValue = new LandValue.LandValueSystem(world);
             world.AddSystem(world.LandValue);
@@ -187,6 +194,10 @@ namespace CityBuilder.Simulation.Core
             world.Services.Budget = world.Economy;          // G4: Baukosten Dienste
             world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
             world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
+            world.Transit.Budget = world.Economy;            // ÖPNV: Baukosten
+            world.Economy.RegisterUpkeep(world.Transit);     // ÖPNV: Unterhalt Depots/Busse/Haltestellen
+            var economy = world.Economy;
+            world.Transit.FareSink = amount => economy.Earn(CityBuilder.Simulation.Economy.BudgetCategory.TransitFares, amount); // ÖPNV: Fahrgeld
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
@@ -216,6 +227,8 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public GoodsSystem Goods { get; private set; }
+        /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Transit.TransitSystem Transit { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }

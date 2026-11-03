@@ -48,6 +48,7 @@ namespace CityBuilder.Game.UI.Hud
         UtilityTool utilityTool;
         ServiceTool serviceTool;          // G4
         ServiceOverlayView serviceOverlay; // G4
+        CityBuilder.Game.Transit.TransitTool transitTool; // ÖPNV
 
         PanelSettings panelSettings;
         UIDocument document;
@@ -96,6 +97,7 @@ namespace CityBuilder.Game.UI.Hud
             utilityTool = GetComponent<UtilityTool>();
             serviceTool = GetComponent<ServiceTool>();
             serviceOverlay = GetComponent<ServiceOverlayView>();
+            transitTool = GetComponent<CityBuilder.Game.Transit.TransitTool>(); // ÖPNV
 
             var theme = Resources.Load<ThemeStyleSheet>(ThemeResource);
             var style = Resources.Load<StyleSheet>(StyleResource);
@@ -204,6 +206,7 @@ namespace CityBuilder.Game.UI.Hud
             Windows.Add(new TrafficWindow());
             Windows.Add(new UtilityWindow());
             Windows.Add(new ServiceWindow());
+            Windows.Add(new TransitWindow()); // ÖPNV: Linienübersicht (F6, offen im ÖPNV-Werkzeug)
             var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
             if (budget != null) Windows.Add(new BudgetWindow(budget));
             help = Windows.Add(new HelpWindow());

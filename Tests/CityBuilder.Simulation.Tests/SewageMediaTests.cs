@@ -350,6 +350,28 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(count, w.Media.PublishedCount);
         }
 
+        // --- ÖPNV: Schlagzeile zur neuen Buslinie (Agent transit)
+        [Fact]
+        public void Headline_NewBusLine()
+        {
+            var w = Town();
+            Assert.NotNull(w.Services.TryBuild(ServiceCatalog.Newspaper, new Vector2(-250, -18)));
+            w.Services.ForceTick();
+            w.Media.Tick(w); // Eröffnung + vorhandene Linien als bekannt merken
+            var a = w.Transit.TryBuildStop(new Vector2(-200, 4), true);
+            var b = w.Transit.TryBuildStop(new Vector2(0, 4), true);
+            Assert.NotNull(a);
+            Assert.NotNull(b);
+            var line = w.Transit.CreateLine(new[] { a.Id, b.Id }, loop: false, vehicles: 1);
+            Assert.NotNull(line);
+            Headline published = null;
+            w.Media.Published += h => { if (h.Topic == HeadlineTopic.NewBusLine) published = h; };
+            w.Media.Tick(w);
+            Assert.NotNull(published);
+            Assert.Contains(line.Name, published.Title + published.Text);
+            Assert.DoesNotContain("{", published.Title + published.Text);
+        }
+
         [Fact]
         public void NoMedia_NoHeadlines()
         {

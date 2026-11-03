@@ -38,6 +38,13 @@ namespace CityBuilder.Simulation.Citizens
         /// <summary>Sorge: Atomkraftwerk nebenan (je nach Ängstlichkeit).</summary>
         NuclearFear,
         // --- Ende
+        // --- ÖPNV
+        /// <summary>Bus war voll, stehen gelassen.</summary>
+        BusFull,
+        /// <summary>Bus kam spät/zu lange gewartet.</summary>
+        BusLate,
+        /// <summary>Angenehme, pünktliche Busfahrt.</summary>
+        BusRide,
     }
 
     /// <summary>
@@ -107,6 +114,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.SewageBackup: return -0.5f;
                 case MemoryKind.BadTapWater: return -0.5f;
                 case MemoryKind.NuclearFear: return -0.45f;
+                case MemoryKind.BusFull: return -0.4f;
+                case MemoryKind.BusLate: return -0.3f;
+                case MemoryKind.BusRide: return 0.25f;
                 default: return 0.3f; // QuietEvening
             }
         }
@@ -117,6 +127,9 @@ namespace CityBuilder.Simulation.Citizens
             switch (k)
             {
                 case MemoryKind.TrafficJam: return 0.72f;
+                case MemoryKind.BusFull:
+                case MemoryKind.BusLate: return 0.75f;
+                case MemoryKind.BusRide: return 0.7f;
                 case MemoryKind.LongCommute: return 0.8f;
                 case MemoryKind.NoShop: return 0.7f;
                 case MemoryKind.NiceShopping: return 0.7f;
@@ -169,6 +182,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.SewageBackup: return "Abwasser staut sich";
                 case MemoryKind.BadTapWater: return "schlechtes Trinkwasser";
                 case MemoryKind.NuclearFear: return "Atomkraftwerk nebenan";
+                case MemoryKind.BusFull: return "Bus voll";
+                case MemoryKind.BusLate: return "Bus verspätet";
+                case MemoryKind.BusRide: return "gute Busfahrt";
                 default: return "ruhiger Abend";
             }
         }
