@@ -30,6 +30,14 @@ namespace CityBuilder.Simulation.Citizens
         FeelsUnsafe,
         Demolished,
         QuietEvening,
+        // --- Abwasser/Wasserqualität/Atom/Medien (G3/G4 erweitert)
+        /// <summary>Abwasser wird nicht abgenommen (Kanal staut, Toilette gluckert).</summary>
+        SewageBackup,
+        /// <summary>Trinkwasser schmeckt komisch (verschmutzter Fluss an der Pumpe).</summary>
+        BadTapWater,
+        /// <summary>Sorge: Atomkraftwerk nebenan (je nach Ängstlichkeit).</summary>
+        NuclearFear,
+        // --- Ende
         // --- ÖPNV
         /// <summary>Bus war voll, stehen gelassen.</summary>
         BusFull,
@@ -103,6 +111,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.ChildMovedOut: return -0.1f;
                 case MemoryKind.FeelsUnsafe: return -0.5f;
                 case MemoryKind.Demolished: return -0.7f;
+                case MemoryKind.SewageBackup: return -0.5f;
+                case MemoryKind.BadTapWater: return -0.5f;
+                case MemoryKind.NuclearFear: return -0.45f;
                 case MemoryKind.BusFull: return -0.4f;
                 case MemoryKind.BusLate: return -0.3f;
                 case MemoryKind.BusRide: return 0.25f;
@@ -123,6 +134,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.NoShop: return 0.7f;
                 case MemoryKind.NiceShopping: return 0.7f;
                 case MemoryKind.QuietEvening: return 0.65f;
+                case MemoryKind.SewageBackup:
+                case MemoryKind.BadTapWater: return 0.85f;
+                case MemoryKind.NuclearFear: return 0.9f;
                 case MemoryKind.PowerOutage:
                 case MemoryKind.WaterOutage: return 0.85f;
                 case MemoryKind.Noise:
@@ -165,6 +179,9 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.ChildMovedOut: return "Kind ausgezogen";
                 case MemoryKind.FeelsUnsafe: return "fühlt sich unsicher";
                 case MemoryKind.Demolished: return "Wohnung abgerissen";
+                case MemoryKind.SewageBackup: return "Abwasser staut sich";
+                case MemoryKind.BadTapWater: return "schlechtes Trinkwasser";
+                case MemoryKind.NuclearFear: return "Atomkraftwerk nebenan";
                 case MemoryKind.BusFull: return "Bus voll";
                 case MemoryKind.BusLate: return "Bus verspätet";
                 case MemoryKind.BusRide: return "gute Busfahrt";

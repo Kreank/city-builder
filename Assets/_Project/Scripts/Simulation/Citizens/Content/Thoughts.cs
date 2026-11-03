@@ -188,6 +188,29 @@ namespace CityBuilder.Simulation.Citizens.Content
                 "Heute einfach mal nichts gemacht. Das tat gut.",
                 "Ein gemütlicher Abend mit {Partner} auf dem Sofa.",
             },
+            // --- Abwasser/Wasserqualität/Atom (G3 erweitert)
+            /* SewageBackup */ new[]
+            {
+                "Aus dem Abfluss gluckert es – und es riecht furchtbar.",
+                "Der Kanal in der {Straße} läuft über. Wer kümmert sich darum?",
+                "Seit Tagen staut sich das Abwasser im Keller.",
+                "Ohne Kanalanschluss kann man hier nicht wohnen.",
+            },
+            /* BadTapWater */ new[]
+            {
+                "Das Leitungswasser schmeckt komisch. Ich koche es lieber ab.",
+                "Im Fluss treibt das Abwasser – und daraus machen sie unser Trinkwasser?",
+                "Seit einer Woche Bauchweh. Ob das am Wasser liegt?",
+                "Ich kaufe nur noch Wasser in Flaschen.",
+            },
+            /* NuclearFear */ new[]
+            {
+                "Das Atomkraftwerk ist viel zu nah an der {Straße}.",
+                "Nachts frage ich mich, was passiert, wenn dort etwas schiefgeht.",
+                "Billiger Strom ist schön – aber muss das Kraftwerk vor unserer Tür stehen?",
+                "{Partner} sagt, ich mache mir zu viele Sorgen wegen des Kraftwerks.",
+            },
+            // --- Ende
             /* BusFull */ new[]
             {
                 "Der Bus war so voll, dass er einfach weitergefahren ist.",

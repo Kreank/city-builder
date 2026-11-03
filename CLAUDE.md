@@ -57,6 +57,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   NPC-Länder = Spiel-KI (Utility AI wie bei Bürgern, keine Sprach-KI zur Laufzeit).
 - Alles deterministisch (geseedeter RNG), Commands für Spieleraktionen (Multiplayer/Replays).
 
+## Entscheidung: Netze werden selbst verlegt (2026-11-03, Spieler)
+- **Straßen führen keine Leitungen/Rohre mehr automatisch mit** (löst die bisherige G3-Regel „Stadtstraßen tragen mit“
+  ab – Umbau steht an). Der Spieler verlegt **Wasserrohre, Abwasserkanäle** (unterirdisch, Einrasten entlang von Straßen)
+  und **Strom** (Hochspannung vom Kraftwerk → Umspannwerk → Ortsnetz entlang der Straßen) selbst.
+- Ein Gebäude ist angeschlossen, wenn eine passende Leitung/ein Rohr in Reichweite seiner Vorderseite liegt; es
+  bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein für alle Netzarten.
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
@@ -69,7 +76,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -106,6 +113,26 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abtastung `SampledCurve` (Endpunkte nach Bogenlänge, nicht nach t). `SampledCurve.OffsetAt` hält Innenkanten
   enger Kurven frei von Selbstschnitt (enge Zone → Fächerpunkt). Grenze: Haarnadeln mit Schenkeln kürzer als die
   Straßenbreite überdecken sich physisch.
+- **Bauhilfe Parallelabstand** (`Simulation/Roads/ParallelGuides`, getestet in `ParallelGuideTests`; Anzeige
+  `RoadGuidesView`, Einrasten `RoadTool`): Das Zonenraster beginnt an der **Gehweg-Außenkante** (`RoadType.HalfWidth`),
+  Reihen à 8 m. Bei nahen Straßen gewinnt die **ältere** (kleinere Segment-Id, volle Reihen), die neuere bekommt nur
+  Reihen, deren Zellmitten ≥ `ZoneGrid.CellSpacing` (6,8 m) von fremden Zellen und > `ZoneGrid.RoadClearance` (3,6 m) vom
+  Straßenrand liegen (bis 1,2 m Überlappung wird geduldet, darüber fällt die Reihe weg – Rest bleibt ungenutzt).
+  **Optimaler Achsabstand** = halbe Breite A + halbe Breite B + (4 + n) × 8 m, n = Reihen der neuen Straße (F9: 4 → 3 →
+  2 → 1 → aus; Standard 4 = „Rücken an Rücken“ 64 m). Jedes Vielfache von 8 m ist lückenlos, Stufen unter 4 + 1 sind
+  sinnlos, weil die ältere Straße immer zuerst 4 Reihen nimmt (eine „1 Reihe je Seite“-Bebauung gibt das Raster nicht her).
+  Beispiele (4 + 4): city_2↔city_2 77 m, city_4↔city_4 84 m, city_4↔city_2 80,5 m, Einbahn 1-spurig↔selbst 74 m,
+  Tram↔selbst 83,4 m. `Evaluate` bildet die Raster-Regeln nach (Reihen je Straße, ungenutzt, Überlappung), `Describe`
+  liefert „Abstand 77,0 m · optimal (4 + 4 Reihen)“ bzw. „zu eng: X m Überlappung“/„X m Lücke“.
+  Werkzeug (gerade/Kurve, Stadtstraßen): gestrichelte Parallelen beidseits der bis zu 3 nächsten ebenerdigen Stadtstraßen
+  (gerade auch 80 m über die Enden hinaus), deren Zonentiefe als zarte Fläche mit Reihenlinien, die Vorschau zeigt ihre
+  eigene Zonentiefe beidseitig (grün). Mit Einrasten (G, Strg hebt auf) rasten Start, Kontrollpunkt und Ende im Umkreis
+  6 m auf die Linien ein; gerade Straßen von einer geraden Hilfslinie aus werden bis 8° Abweichung exakt parallel
+  (Länge 8-m-Raster), Kurven zwischen zwei Punkten derselben gekrümmten Hilfslinie bekommen einen ausgeglichenen
+  Kontrollpunkt (`FitParallelControl`, 90°-Bogen mit 77 m Abstand < 1 m Abweichung). Abstand + Bewertung stehen in
+  `RoadTool.Guide.Info` (Hinweiszeile + Beschriftung). **Blockraster (F10):** Länge gerader Straßen rastet auf
+  `BlockLength` = Zellen × 8 m + 2 × (halbe Breite + 1 m) ein (Kreuzungsfläche wird vom Raster ausgespart), Querlinien
+  zeigen die Stellen; gilt, wenn der Start eine Kreuzung ist/wird. An Blockecken nimmt die ältere Straße die Eckzellen.
 
 ## Gelände
 - `TerrainMap` (Simulation, 4-m-Raster): erzeugt (Hügel bis ~90 m, Fluss, Wasserspiegel 0) oder flach (Tests).
@@ -251,7 +278,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname-Platzhalter `GameHud.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Modus), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste (Kategorien → Werkzeugzeile + Kacheln + Infozeile),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten), Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
@@ -262,7 +289,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
 - Noch IMGUI: nur die Rückfall-`RoadToolbar` und die Rückfall-Fenster (s. Phase 2); neue IMGUI-Fenster anderer Agenten
-  (Wirtschaft, Weltkarte) sollen auf den Baukasten umziehen.
+  (Wirtschaft F5, Weltkarte F4) sind auf den Baukasten umgezogen, ihr IMGUI bleibt Rückfall.
 
 ## Spiel-UI Phase 2 (Fenster)
 - **Baukasten** `Game/UI/Panels`: `Ui` (Sofort-Modus: Fenster beschreiben ihren Inhalt bei jeder Aktualisierung neu,
@@ -288,6 +315,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - G6 im HUD: Inspektor zeigt Bodenwert, Stufe + Fortschritt + „was fehlt“, Zustand (Übersicht) und alle Bodenwert-Faktoren mit
   Anforderungen der nächsten Stufe (Umfeld); linke Leiste Knopf „Bodenwert“ (F2); `UI/Hud/LandValueAlerts` meldet Aufstiege
   und Verfall gesammelt höchstens 1× je Spieltag.
+- Welt im HUD: `UI/Windows/WorldMapUiWindow` (mittig, breit, F4 oder Globus-Knopf oben; Textur über
+  `WorldMapWindow.TextureFor(mode)`, Umschalter Biome/Relief/Länder/Temperatur/Niederschlag/Rohstoffe (+ 7 Vorkommen),
+  Hover = Zelleninfo, Klick wählt ein Land: Hauptstadt, Primär-/Sekundärstärke, Bevölkerung, BIP, Saldo je Güterkategorie;
+  das IMGUI-Fenster bleibt Rückfall). Linke Leiste „Rohstoffe“ (F3) mit Untermenü der 7 Raster (`ShowResource`), Name in der
+  Ansicht-Anzeige. Obere Leiste: Jahreszeit, Tagestemperatur (+ Niederschlag) aus `world.Climate.Today` hinter dem Datum.
+  Inspektor: „Vorkommen“ (`DepositAt`) im Gebäude-Reiter Umfeld, beim Versorger und in der Stadtübersicht unter dem Mauszeiger.
+  Baukasten: `Ui.Image(texture, w, h, onClick, onHover)`, `GameWindow.FrameClass` (z. B. `cb-window--wide`).
 - Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
 ## Inspektor (Info-Modus, Taste C)
@@ -355,13 +389,60 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Leitungsende, Rohre 2,5 m unter Gelände nur unterirdisch sichtbar; Vorschau im Werkzeug zeigt die Masten, ungültige rot),
   `UtilityOverlayView` (O: Strom → Wasser → aus; Marker grün/rot über Gebäuden, wachsen mit der Ausfalldauer),
   `UtilityPanel` (Erzeugung/Bedarf je Netz).
-- Später: Abwasser/Kläranlage, Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
+- Später (Abwasser/Atom: s. „G3 erweitert“): Pumpe braucht Strom, Wind/Sonne schwankend (Tageszeit/Wetter), Brennstoff aus Warenketten,
   Versorgung in Nachfrage/Zufriedenheit (G2/G6), Masten/Rohre folgen späteren
   Geländeänderungen (Terraforming zu Wasser unter einem Mast wird noch nicht geprüft), Hochspannung vs. Ortsnetz,
-  Wasserqualität/Verschmutzung flussabwärts. **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
+  (Wasserqualität: erledigt, s. „G3 erweitert“). **Mittelinsel:** `RoadCatalog` hat noch keinen Typ mit Mittelstreifen
   (`LaneKind.Median` existiert im Builder, wird aber nicht benutzt) → Straßen mit Mittelstreifen und Masten darauf
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
   Leitungen am selben Punkt zusammenlegen.
+
+## Abwasser, Wasserqualität & Atomkraftwerk (G3 erweitert)
+- **Abwasser** = dritte Netzart `UtilityKind.Sewage` im `UtilitySystem` (Status `HasSewage`/`TicksWithoutSewage`). Gebäude
+  erzeugen 0,9 × Wasserbedarf (`UtilityCatalog.SewageShareOfWater`); Abnahme durch **Kläranlage** (500 m³/h, klärt voll) und
+  **Abwasser-Auslass** (1500 m³/h, billig, `Untreated`, muss ans Ufer). Startphase wie Strom/Wasser: erst verlangt, wenn es eine
+  Kläranlage/einen Auslass gibt; dann fließt es in `IsSatisfied` (Versorgung, Zustand, Stufen) ein; verlassen nach 4 Tagen
+  (`SewageAbandonAfterTicks`). **Kanäle werden selbst verlegt** (Entscheidung des Spielers): Straßen führen sie nicht mit.
+- **`ConnectionRules`** (wiederverwendbarer Baustein, bisher nur Abwasser – Wasser/Strom folgen): `CarriedByRoads(kind)`,
+  Gebäude angeschlossen, wenn ein Kanal ≤ `BuildingReach` 12 m von der Zufahrt (`Building.Entrance`) verläuft (auch mittendrin);
+  Leitungen/Bauwerke verbinden sich weiter über Enden (3 m). `UtilitySystem.ConnectedLine(b, kind)`, `HouseConnection(...)` für
+  den sichtbaren Hausanschluss (`UtilityView`, unterirdisch, braun, 1,5 m unter den Wasserrohren).
+- **`WaterQualitySystem`** (`world.WaterQuality`, nach dem `UtilitySystem`): je Kanalnetz geklärt (Kläranlagen zuerst, anteilig)
+  bzw. ungeklärt über Auslässe. `Pollution` (`GridLayer`, Umwelt-Gitter, 0 = sauber): Auslass gibt `PollutionPerCubicMeter`
+  (0,015) × m³/h auf Wasserzellen ≤ 40 m; Transport **nur flussabwärts** (`TerrainMap.FlowDirection`, Festlegung −y bzw. zum Meer,
+  weil der Fluss kein Gefälle hat): 60 % zur nächsten Wasserzelle stromab (sonst schräg), 4 % je Seite quer, 1 % Selbstreinigung.
+  `PumpQuality(f)` = 1 − Verschmutzung im Ansaugbereich, je Wassernetz nach Leistung gemischt (Brunnen = 1) →
+  `DrinkingWaterQuality(b)`. Bodenwert: Wasserlage × (1 − 1,5 × Verschmutzung) (`LandValueSystem.WaterPollutionNear`).
+- **Atomkraftwerk** (`UtilityCatalog.NuclearPlant`): 200 MW, 400 000 € / 4 500 €/Tag, Kühlwasser (am Ufer, aber trockene ebene
+  Grundfläche: `DryFootprint`), kein Abgas, `ConcernRadius` 1200 m → `UtilitySystem.ConcernAt(p)` (voll bis 30 %).
+  **Störfall** (Entscheidung: an, aber harmlos): `IncidentChancePerDay` 0,2 % je Tag (stabiler Hash aus Id + Tag, kein
+  gemeinsamer Zufall), 3 Tage Abschaltung (Leistung 0), Event `NuclearIncident`, Medienmeldung; keine Sperrzone.
+  `IncidentsEnabled` schaltet ab, `ForceIncident` für Tests.
+- **Bürger** (Hooks in `CitizenSystem.Needs`, verbunden in `CitizenUtilityBinding.Connect`, alle null = neutral):
+  `DrinkingWaterQuality` → Gesundheit −0,4 × (1 − Qualität), Erinnerung `BadTapWater` unter 0,8; `NuclearConcern` → Ruhe −0,3 ×
+  Sorge × ängstlich, Erinnerung `NuclearFear` ab Ängstlichkeit 0,4; fehlendes Abwasser → `SewageBackup`. Ohne Zufall (RNG unverändert).
+- Darstellung: Werkzeug „Abwasserkanal“ (`UtilityTool.UtilityAction.SewagePipe`, unterirdisch), Kacheln Atom/Kläranlage/Auslass,
+  O schaltet Strom → Wasser → **Abwasser** → aus, linke Leiste Knöpfe „Abwasser“ und „Wasserqualität“ (`EnvironmentOverlayView.
+  Overlay.WaterQuality`, nur Verschmutzung sichtbar), Kanal-Chip oben, Inspektor: Abwasser/Trinkwasser/Atom-Sorge am Gebäude,
+  geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
+- Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
+  Fischsterben/Tourismus, Grundwasser-Verschmutzung, Wasser/Strom auf `ConnectionRules` umstellen (Hochspannung → Umspannwerk → Ortsnetz).
+
+## Medien (G4 erweitert)
+- Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
+  3 min, braucht Zufahrt), **Radiosender** (Funkradius 900 m) und **TV-Sender (Turm)** (1600 m) – `ServiceType.Broadcast` (technisch
+  `Walking` = Luftlinie, keine Zufahrt). Kapazität = Leser/Hörer/Zuschauer, Bedarf = Einwohner, Kosten wie alle Dienste (Kasse).
+- Bürger: `MediaReach` (ohne Medienhaus 0, nicht 0,5) → Freizeit +0,004 je Bewertung, Bildung Erwachsene +0,08;
+  `NewsTone` → Gemüt ± 0,05 × Reichweite × Stimmung (vorsichtig dosiert).
+- **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
+  Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
+  Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
+  Arbeitslosigkeit ≥ 12 %. Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
+  `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
+  `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
+- Später: Nachrichtenfenster/Ticker in der HUD, Kampagnen/Werbung, Medien beeinflussen Wahlen/Politik, Klatsch aus Lebensereignissen.
 
 ## Dienste (G4)
 - `Simulation/Services`: `ServiceCatalog` (Polizeiwache, Feuerwache, Klinik, Krankenhaus, Grundschule, Gymnasium/Oberschule,
@@ -408,7 +489,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`OwnModelCatalogBuilder.ServiceFiles` → `OwnModelCatalog.Services`): PoliceStation, FireStation, Clinic, Hospital,
   PrimarySchool, HighSchool, Library, ParkSmall, ParkLarge, Landfill, Incinerator (Konvention wie bei den Versorgern).
 - Später: Brände/Kriminalität als Ereignisse, Dienstfahrzeuge im Verkehr (statt Dijkstra-Schätzung), Sperrungen/
-  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
+  Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, (Medien: s. „Medien (G4 erweitert)“),
   Budgetregler je Dienst, Ausbaustufen.
 
 ## Bodenwert & Ausbaustufen (G6)
@@ -496,9 +577,94 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verfügbar/Überzogen/Baustopp, Tagesprognose, letzte und laufende Woche je Kategorie, Dienste je Name, Steuersätze ±
   mit Nachfragefaktor, Saldo-Balken der letzten 12 Wochen. Fehlertexte „Zu wenig Geld in der Stadtkasse (M)“ in
   Straßen-/Versorgungswerkzeug, Terraforming zeigt Kosten je Strich.
+- **Seit G5:** Gewerbesteuer aus dem **Gewinn** der Firma (Hook `EconomySystem.TaxableProfit`, s. „Warenketten (G5)“) statt
+  besetzte Jobs × Basis; die Job-Pauschale bleibt der Rückfall für Gebäude ohne Firma bzw. ohne Bindung.
 - Später: Gebühren (ÖPNV, Maut), Einnahmen aus Handel/Export (G5), Steuern nach Einkommen/Bildung/Bodenwert (G6),
   Steuersatz wirkt auf Zuzug/Zufriedenheit, Kredite mit Laufzeit/Tilgung, Budgetregler je Dienst, Bauwerks-Abriss
   anteilig nach Alter, Speicherstand.
+
+## Warenketten (G5)
+- `Simulation/Goods`: `GoodsCatalog` (19 Güter – Rohstoffe Getreide, Vieh, Holz, Erz, Kohle, Erdöl, Sand/Kies →
+  Zwischenprodukte Mehl, Bretter, Stahl, Kunststoff, Glas, Zement → Endprodukte Lebensmittel, Kleidung, Möbel, Elektronik,
+  Fahrzeuge, Baustoffe; je Gut Weltmarkt-Grundpreis €/Einheit, m³/t (Lkw-Ladung 25 m³/20 t), Verderb/Tag, Bedarfsstufe,
+  Verbrauch je Haushalt, Absatz je Verkäufer), `RecipeCatalog` (18 Industrie-Rezepte + Einzelhandel + Büro: Eingänge →
+  Ausgänge **je Arbeitsplatz und Tag**, `Workforce` = Anteil Jobs einfach/mittlerer Abschluss/Studium, Strom kW/Wasser je Job
+  (Industriebedarf im Netz, s. u.), Vorkommen + Mindestgüte; Faustregel Wertschöpfung ≈ 175 €/Job zu Grundpreisen),
+  `GoodsRules` (alle Zahlen), `Firm`, `GoodMarket`, `Shipment`, `GoodsSystem` (partial: Kern, `.Trade`, `.Households`,
+  `.Siting`), `GoodsBinding.Connect` (in `CreateDefault`). Läuft nach den Diensten, vor der Stadtkasse.
+- **Takt:** jeden Tick Lkw-Abfahrten, jede Spielstunde (10 Ticks) Lieferungen → Produktivität → Produktion → Bestellungen →
+  Export; zum Tageswechsel Löhne, Büro-Erlös, Verderb, Gewinnrechnung, Märkte, Pleiten. Firmen in Gebäude-Id-Reihenfolge,
+  Zufall nur über `SimRandom` → deterministisch.
+- **Firmen** in Industrie, Einzelhandel, Mischgebiet (Rolle Einzelhandel) und Büro – angelegt bei `BuildingAdded`. Lager:
+  Eingang 3 Tage Verbrauch, Ausgang 3 Tage Produktion (bei voller Belegschaft), Erstausstattung 50 % Eingang aus dem
+  Startkapital (400 €/Job). Produktivität = Belegschaft × (1 − 0,5 × fehlende Fachkräfte) × (0,2 ohne Strom/Wasser) ×
+  Vorkommen (0,5 + Güte) × Ernte (nur Landwirtschaft); Produktion je Stunde begrenzt durch Eingänge und freien Ausgang (Status `MissingInput`/`OutputFull`).
+  Gewinn = Erlös − Wareneinsatz (verbrauchte/verkaufte Eingänge zum Ø-Einkaufspreis) − Löhne (echte Löhne der Beschäftigten,
+  `CitizenSystem.WageBillOf`) − Transport. Büro: Erlös 185 €/Beschäftigtem × Dienstleistungsnachfrage (0,75–1,3).
+- **Standortwahl der Industrie** (eine Unterart je Grundstück, beim Entstehen): Score = Bedarf × (0,6 + Güte) + 0,2 × Güte +
+  stabile Streuung (Hash). Bedarf je Gut = 0,25 + 1,5 × Lücke (geplanter Bedarf aller Firmen + geschätzter Haushaltskonsum
+  gegen geplante Kapazität) + 0,5 × (Preisindex − 1) + 0,3 × Weltmarkt; Überkapazität kostet bis −0,3. So entstehen Ketten
+  rückwärts (Lebensmittelfabrik → Mühle → Bauernhof). Gewinnung nur ab Mindestgüte des Vorkommens.
+- **Markt je Gut:** Bestand = Ausgangs- + Eingangslager aller Firmen; Zielbestand = 3 Tage Bedarf (Eingänge der Belegschaft +
+  Haushaltswünsche, geglättet 0,3). Zielpreis = Grund × clamp(1 + 0,6 × (1 − (Bestand+1)/(Ziel+1)), 0,5, 1,8); lokaler Preis
+  läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
+  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage).
+- **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
+  Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
+  Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
+  ab 50 % Ausgangslager, wenn Welt − Fracht ≥ 90 % des lokalen Preises, ab 90 % Füllung immer (bis 30 % herunter). Firmen
+  dürfen bis 10 Tage Lohn überziehen, darüber kaufen sie nichts.
+- **Lieferverkehr:** eine Lieferung = eine Ladung. Anteil 0,35 × `TrafficSystem.Demand` als echter Lkw (`VehicleClass.Truck`,
+  **negative Fahrt-Ids** → keine Kollision mit Bürgerfahrten), höchstens 15 % von `MaxVehicles`; Abfahrten über die Stunde
+  verteilt, bei fehlendem Platz an der Einfahrt bis 2 h erneut versucht, sonst Platzhalter (3 km/Tick, +3 Ticks außerhalb).
+  Ankunft über `TripEnded` bucht ins Ziellager (auch bei Abbruch; Sicherheitsnetz 3 Tage). Transport = 12 € + 0,12 €/Verkehrs-
+  sekunde (geschätzt beim Abschicken, beim Lkw mit echter Fahrzeit nachberechnet → **Stau kostet Geld**). `VehicleView` zeigt
+  Lkw mit den Katalogmodellen `AssetCatalog.Trucks`. Wegen der Zeitverzerrung (1 Stunde = 2,5 s Verkehr) scheitern in dichten
+  Städten viele Lkw-Starts am Platz → Platzhalter (Statistik `TruckFailedYesterday`).
+- **Haushalte** (Hook `CitizenSystem.Purchase`, markiert in `Arrive`): Einkauf deckt 3 Tage × (0,5 + 0,5 × Personen);
+  Grundbedarf (Lebensmittel) immer, Komfort (Kleidung, Möbel) ab 110 €/Tag Einkommen + Zufriedenheit 0,45, Luxus
+  (Elektronik, Fahrzeuge) ab 200 € + 0,55; Budget Grundbedarf 90 %, Rest 50 % des Einkommens; Ladenpreis = lokal × 1,45.
+  Erfüllung 0..1 (Gewichte 0,6/0,25/0,15, nur Leistbares zählt) → `ShoppingNeed = min(0,99; Bedarf) × (1 − Erfüllung)`:
+  leerer Laden lässt das Bedürfnis „Einkauf“ niedrig, neuer Versuch am nächsten Tag, Erinnerung „kein Laden“.
+  `CitizenSystem.ShopHasStock`: Bürger meiden Läden ohne Grundbedarf.
+- **Nachfrage der Zonen** (Hook `CitySystem.BusinessDemand`, additiv vor dem Steuerfaktor): ±25 × tanh(Ø Marge/0,15) der
+  etablierten Firmen (ab 3 Tagen) je Zonenart; Industrie + bis 12 bei hohem Importanteil, Einzelhandel + bis 20 bei
+  unerfüllten Einkäufen; Mischgebiet = halber Handel. **Verfall:** 21 Tage geglätteter Verlust und Konto unter dem Kreditrahmen
+  → Pleite, Gebäude wird verlassen (`AbandonBankruptBuildings`).
+- **Stadtkasse:** Gewerbesteuer = max(0, Tagesgewinn) × 2,5 × Satz (`EconomyRules.ProfitTaxMultiplier`; deckt vorerst auch
+  den Lohnsteueranteil der alten Pauschale). Firmen haben eigene Kassen; Handel läuft nicht über die Stadtkasse.
+- **Vorkommen & Ernte aus der Welt** (`GoodsBinding.ConnectWorld` in `CreateDefault`): `DepositAt` = `world.Resources.DepositAt`,
+  Güte einer Firma = Mittel über das 3×3-Entnahmefenster (`DepositSampleSpacing` = Zellgröße, `DepositQualityAt`), täglich neu
+  → erschöpfte Vorkommen senken die Produktivität, unter der Mindestgüte `NoDeposit`. `Extract` rechnet Wareneinheiten in
+  Karteneinheiten um (`GoodsBinding.MapUnitsPerGood`): Erz/Kohle t = Gewicht der Ware (1,0/0,9), Erdöl/Sand m³ = Volumen
+  (1,1/0,6); Holz 0,01 m³ und Boden 0,001 Punkte je Einheit **im Spielmaßstab** (die Karte entnimmt nur im ~48×48-m-Fenster,
+  ein Forst/Hof bewirtschaftet viel mehr Fläche – physisch wäre der Wald in Stunden weg). Erneuerung macht `WorldSystem`.
+  **Ernte** (`HarvestFactor`, Landwirtschaft): (0,6 Grundertrag + 0,4 × `Climate.HarvestFactor(Tag)`/Jahresmittel) ×
+  clamp(Jahresmittel/0,5, 0,4, 1,2) – Jahreszeit schwankt um 1 (Winter ≈ 0,6, Sommer ≈ 1,4), das Klima der Region hebt/senkt
+  das Mittel; ohne Grundertrag stünden Höfe im Winter still und gingen pleite. Ohne Bindung (Tests): Standard „fertility“ 0,6,
+  „wood“ 0,4, sonst 0, Entnahme unbegrenzt. `ResourceIds` = Verweis auf `World.ResourceIds`.
+- **Strom/Wasser der Industrie** (Hook `UtilitySystem.DemandProvider` + `DemandOf(b, kind)`, markiert): Industriefirmen
+  verbrauchen Rezept × Arbeitsplätze (`GoodsSystem.UtilityDemand`), alle anderen Gebäude weiter `UtilityCatalog.Demand`;
+  der Inspektor zeigt denselben Wert.
+- **Verkehrsstatistik:** `TrafficStats.CitizenVehicles`/`CitizenTrips*` zählen nur positive Fahrt-Ids, Lkw stehen in
+  `DeliveryVehicles`.
+- **Abfrage-API:** `FirmAt(buildingId)` (Rolle, `Recipe`, `Form`, `Status` + `Firm.StatusText`, `InputOf/OutputOf/…CapacityOf/
+  IncomingOf`, `Cash`, `Yesterday`/`Today` (Erlös, Wareneinsatz, Löhne, Transport, Gewinn), `ProfitEma`, `Margin`, `Workers/Jobs`,
+  `Productivity`, `SkillCoverage`, `DepositQuality`), `Firms`, `Market(good)`/`Markets` (lokal/Welt, Bestand/Ziel, Bedarf,
+  `Yesterday` Produktion/Verbrauch/Haushalte/Import/Export), `TradeYesterday`/`TradeTotal`, `Shipments`, `ShipmentsOf(id, list)`,
+  `ShipmentForTrip(tripId)` (Lkw im Inspektor), `Stats`, `DemandOffset(zone)`, `RetailPrice`, `HighestTier`, `Restructure`.
+- **Darstellung:** Fenster „Wirtschaft“ (**Taste F5** – F3 ist die Rohstoff-Ansicht; Koffer-Knopf in der oberen Leiste):
+  `UI/Windows/GoodsWindow` (mittig, Baukasten) mit Reitern Güter (lokal/Welt, Import/Export, Bestand/Ziel,
+  erzeugt/verbraucht, Haushalte), Firmen (Übersicht, Nachfrage-Zuschläge, Erntefaktor, Liste mit Gewinn/Kasse, blätterbar),
+  Lieferungen (Lkw/Platzhalter/fehlgeschlagen/verloren, Liste). Zustand (offen, Reiter, Taste) im `Game/Goods/GoodsPanel`
+  (Begleiter am `RoadTool`), das nur noch als IMGUI-Rückfall zeichnet. **Inspektor:** Gebäude mit Firma haben den Reiter
+  „Firma“ (`InspectorWindow.Goods.cs`: Gewinn gestern/heute, Marge, Produktivität + Zustand, Betrieb/Rolle, Vorkommen,
+  Strom/Wasser, Kasse, Gewinnrechnung, Eingangslager/Regale und Ausgangslager als Balken, laufende Lieferungen mit
+  anklickbarem Lkw); Lkw zeigen „Ladung“ (Gut, Menge, Art, Von/Nach anklickbar, Wert, Transport).
+- **Leistung** (Testprojekt, Info): ~190 Firmen, ~15 000 Bürger ≈ 4 ms/Tick für alle Systeme; Warensystem allein ≈ 2 ms je Spieltag.
+- Später: Baustoffe für den Bau, Brennstoffe
+  für Kraftwerke, Lagerhallen/Güterbahnhof/Hafen, Verträge statt Spotmarkt, Zölle/Subventionen, Löhne nach Gewinn, Ladenwahl
+  nach Preis/Sortiment, Abfahrt-Puffer für Lkw, Spieler-Spezialisierung über `Restructure`.
 
 ## Welt (Etappe 5)
 - `Simulation/World` (Namespace `CityBuilder.Simulation.World`): `PlanetGenerator` (+ `.Political`), `Planet` (+ `Region`,
@@ -555,7 +721,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Darstellung:** Ressourcen-Ansicht im `EnvironmentOverlayView` (`Overlay.Resource`, **F3** schaltet Boden → … →
   Grundwasser → aus, Legende oben mit Gesamtmenge; `ShowResource(id)` für die HUD). `ScenicPropsView`: Bäume = Waldraster
   × 0,85 (gerodete Zellen lichten aus, Nachwuchs kommt zurück; Rückfall ohne Raster: alte Perlin-Verteilung).
-  `Game/WorldMap/WorldMapWindow` (IMGUI, **F4**, Begleiter am `RoadTool`): Textur 360 × 180 (×2), Modi Biome/Relief/Länder/
+  `Game/WorldMap/WorldMapWindow` (IMGUI nur noch Rückfall – neue UI: `WorldMapUiWindow`; **F4**, Begleiter am `RoadTool`): Textur 360 × 180 (×2), Modi Biome/Relief/Länder/
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
@@ -572,8 +738,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
   (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
   `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
-  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
-  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
+  Versorger zusätzlich NuclearPlant (Utilities) und SewagePlant (aus Models/Services, Schlüssel „Services/SewagePlant“), Dienste
+  zusätzlich Newspaper, RadioStation, TVTower (Medien). Noch ohne Verwendung:
+  Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -650,6 +817,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   im Werkzeug: Linien, Busse ±, Rund/Pendel, Halte mit Wartenden, Löschen). Inspektor: Haltestellen/Depots anklickbar
   (`SelectionKind.TransitStop/-Depot`), Bus zeigt Linie/Fahrgäste, Bürger „wartet auf Linie …/im Bus“. IMGUI-Rückfallleiste hat
   keinen ÖPNV-Eintrag. Im Editor noch nicht visuell abgenommen.
+- **Medien:** Schlagzeilen-Themen `NewBusLine`, `BusOverloaded` (≥ 20 stehen gelassen am Tag), `BusLate` (Pünktlichkeit < 60 %),
+  erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
 - Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
   (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie, sichtbare Wartende.
@@ -680,13 +849,20 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Später: Schulen (Bildung über G4), ÖPNV statt Platzhalter-Fahrten,
      Zuzug nur über Außenanschlüsse, sichtbare Fußgänger, Lieferverkehr (G5), Zufriedenheit (G6)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (Straßen tragen mit + freie Leitungen/Rohre), Bilanz je Netz,
-     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse. Später: Abwasser, schwankende Erzeugung
+     Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
+     ✅ Abwasser (selbst verlegte Kanäle, Kläranlage, Auslass), Wasserqualität flussabwärts → Trinkwasser/Gesundheit/Ufer,
+     Atomkraftwerk mit Akzeptanz und Störfall. Später: schwankende Erzeugung, Wasser/Strom auf ConnectionRules
    - ✅ G4 Dienste (einzeln baubar, Einflussradius übers Straßennetz): Polizei, Feuerwehr, Gesundheit, Schulen,
      Bibliothek, Parks, Müll (Müllhalde, Verbrennungsanlage); Abdeckungs-API, Müllstau, Brandrisiko, Werkzeug/Ansicht
-     (im Editor noch nicht visuell abgenommen). Später: Medien (Zeitung, Radio, TV), Abwasser/Kläranlage, Brände/Kriminalität
+     (im Editor noch nicht visuell abgenommen). ✅ Medien (Zeitung, Radio, TV) mit Schlagzeilen aus echten Daten. Später: Brände/Kriminalität
      als Ereignisse, Dienstfahrzeuge
-   - G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
+   - ✅ G5 Warenketten: Rohstoffe → Industrie → Handel → Haushalte, Lieferverkehr, Preise, Import/Export, Haushalt/Steuern
      (Stadtkasse: Einnahmen/Ausgaben, Bilanz halten = Kern der Herausforderung); Industrie-/Wohnformen erweitern
+     - ✅ Güterkatalog + Rezepte, Firmen mit Lager/Kasse/Gewinn, Industrie-Unterarten nach Vorkommen/Nachfrage, Märkte mit
+       Preisen und Weltmarkt, Import/Export, Lkw-Lieferverkehr, Konsum nach Bedarfsstufen, Gewinn → Nachfrage/Pleite,
+       Gewerbesteuer aus Gewinn, Vorkommen/Ernte aus der Welt, Industrie-Strom/Wasser nach Rezept, Fenster „Wirtschaft“
+       (F5, Baukasten) und Inspektor-Reiter „Firma“/Lkw-Ladung (im Editor noch nicht visuell abgenommen).
+       Offen: Baustoffe/Brennstoffe nutzen, Verträge
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit
@@ -694,7 +870,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
        Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
-   - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
+   - Energie erweitern: ✅ Atomkraftwerk; weitere reale Kraftwerkstypen
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,

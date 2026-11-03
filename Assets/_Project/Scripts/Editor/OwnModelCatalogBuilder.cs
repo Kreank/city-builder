@@ -25,6 +25,8 @@ namespace CityBuilder.Editor
         {
             { "CoalPlant", "power_coal" }, { "GasPlant", "power_gas" }, { "WindTurbine", "power_wind" },
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
+            // G3 erweitert: Atomkraftwerk; die Kläranlage liegt als Modell unter Models/Services (Schlüssel mit Ordner)
+            { "NuclearPlant", "power_nuclear" }, { "Services/SewagePlant", "sewage_plant" },
         };
 
         /// <summary>G4: Id des Dienstgebäudes (<c>ServiceCatalog</c>) → Dateinamen unter Models/Services (erster vorhandener gilt).</summary>
@@ -36,6 +38,8 @@ namespace CityBuilder.Editor
             { "library", new[] { "Library" } },
             { "park_small", new[] { "ParkSmall", "Park" } }, { "park_large", new[] { "ParkLarge", "Park" } },
             { "landfill", new[] { "Landfill" } }, { "incinerator", new[] { "Incinerator" } },
+            // G4 erweitert: Medien
+            { "media_newspaper", new[] { "Newspaper" } }, { "media_radio", new[] { "RadioStation" } }, { "media_tv", new[] { "TVTower" } },
         };
 
         /// <summary>ÖPNV: Id → Datei unter Models (mit Unterordner, ohne .fbx; erster vorhandener gilt).</summary>
@@ -82,7 +86,8 @@ namespace CityBuilder.Editor
             var entries = new List<OwnModelCatalog.Entry>();
             foreach (var kv in FacilityFiles)
             {
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Utilities/{kv.Key}.fbx");
+                string file = kv.Key.Contains("/") ? kv.Key : "Utilities/" + kv.Key; // Schlüssel mit Ordner = anderer Unterordner
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/{file}.fbx");
                 if (model == null) continue;
                 entries.Add(new OwnModelCatalog.Entry { Id = kv.Value, Model = model });
                 Debug.Log($"[OwnModels] {kv.Value} ← {kv.Key}.fbx, Größe {Bounds(model).size}");

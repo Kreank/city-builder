@@ -13,6 +13,8 @@ namespace CityBuilder.Game.UI.Hud
         Close, Follow, Back, Help,
         /// <summary>G6 Bodenwert: Haus mit Pfeil nach oben.</summary>
         LandValue,
+        /// <summary>Welt: Globus (Weltkarte), Edelstein (Rohstoffe).</summary>
+        Globe, Resource,
         /// <summary>ÖPNV: Bus von der Seite.</summary>
         Bus,
     }
@@ -175,6 +177,15 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.LandValue:
                     Poly(true, 3, 11, 12, 4, 21, 11, 21, 20, 3, 20); Line(12, 17.5f, 12, 11.5f); Poly(false, 9.5f, 14, 12, 11.5f, 14.5f, 14);
+                    break;
+                case HudIconKind.Globe:
+                    Circle(12, 12, 9);
+                    p.BeginPath(); p.MoveTo(P(12, 3)); p.BezierCurveTo(P(7.5f, 7), P(7.5f, 17), P(12, 21)); p.Stroke();
+                    p.BeginPath(); p.MoveTo(P(12, 3)); p.BezierCurveTo(P(16.5f, 7), P(16.5f, 17), P(12, 21)); p.Stroke();
+                    Line(3, 12, 21, 12);
+                    break;
+                case HudIconKind.Resource:
+                    Poly(true, 7, 4, 17, 4, 21, 9, 12, 20, 3, 9); Line(3, 9, 21, 9); Poly(false, 9.5f, 4, 8, 9, 12, 20, 16, 9, 14.5f, 4);
                     break;
                 case HudIconKind.Help:
                     Circle(12, 12, 9);

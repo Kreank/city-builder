@@ -683,6 +683,7 @@ namespace CityBuilder.Simulation.Citizens
                 foreach (var b in shops)
                 {
                     if (city.GetBuilding(b.Id) == null || ComponentOf(b) != comp) continue;
+                    if (ShopHasStock != null && !ShopHasStock(b.Id)) continue; // --- G5 (Hook): leere Läden meiden
                     float d = Vector2.Distance(from.Value, b.Entrance);
                     if (d < bestD) { bestD = d; best = b; }
                 }
@@ -797,8 +798,12 @@ namespace CityBuilder.Simulation.Citizens
                     c.Activity = Activity.Shopping;
                     c.BusyUntil = now + ShopTicks;
                     // Einkauf für den ganzen Haushalt
-                    if (c.Household != null) foreach (var m in c.Household.MemberList) m.ShoppingNeed = 0f;
-                    c.ShoppingNeed = 0f;
+                    // --- G5 Warenketten (Hook): Einkauf gelingt nur so weit, wie der Laden die Güter vorrätig hat
+                    float bought = Purchase != null && c.Household != null ?Purchase(c.Household, dest.BuildingId) : 1f;
+                    if (bought < 0.5f && rng.Chance(0.3f)) Remember(c, MemoryKind.NoShop, 0.35f, building: dest.BuildingId);
+                    if (c.Household != null) foreach (var m in c.Household.MemberList) m.ShoppingNeed = ShoppingNeedAfter(m.ShoppingNeed, bought);
+                    c.ShoppingNeed = ShoppingNeedAfter(c.ShoppingNeed, bought);
+                    // --- Ende G5
                     if (c.LeisureTrip)
                     {
                         // Freizeitbummel: dauert länger, füllt die Freizeit

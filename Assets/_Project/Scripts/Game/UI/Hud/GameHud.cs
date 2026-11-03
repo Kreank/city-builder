@@ -77,6 +77,9 @@ namespace CityBuilder.Game.UI.Hud
         public WindowHost Windows { get; private set; }
         WorldLabelLayer worldLabels;
         HelpWindow help;
+        WorldMapUiWindow worldMap;
+        GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
+        VisualElement resourceFlyout;
 
         /// <summary>Wahr, solange die neue UI läuft (sonst greift das RoadTool auf die alte IMGUI-Leiste zurück).</summary>
         public bool Ready { get; private set; }
@@ -136,6 +139,7 @@ namespace CityBuilder.Game.UI.Hud
             root.Add(BuildTopBar());
             root.Add(BuildRail());
             root.Add(BuildOverlayName());
+            root.Add(BuildResourceFlyout());
             root.Add(BuildBuildBar());
             toastStack = Container("cb-toasts");
             root.Add(toastStack);
@@ -206,6 +210,12 @@ namespace CityBuilder.Game.UI.Hud
             var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
             if (budget != null) Windows.Add(new BudgetWindow(budget));
             help = Windows.Add(new HelpWindow());
+            var mapComp = tool.GetComponent<CityBuilder.Game.WorldMap.WorldMapWindow>();
+            if (mapComp != null) worldMap = Windows.Add(new WorldMapUiWindow(mapComp));
+            // --- G5 Warenketten: Fenster „Wirtschaft“ (F5); Zustand im GoodsPanel
+            var goodsComp = tool.GetComponent<CityBuilder.Game.Goods.GoodsPanel>();
+            if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
+            // --- Ende G5
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
         }
@@ -373,7 +383,7 @@ namespace CityBuilder.Game.UI.Hud
             names.Add(date);
             brand.Add(names);
             topBar.Add(brand);
-            slowRefresh.Add(() => date.text = DateText());
+            slowRefresh.Add(() => date.text = DateText() + ClimateText());
 
             // Spieltempo (Leertaste/1/2/3 bleiben im SimulationRunner)
             var speed = Container("cb-segment");
@@ -443,6 +453,7 @@ namespace CityBuilder.Game.UI.Hud
             // Versorgungswarnung – nur sichtbar, wenn ein Netz unterdeckt ist
             topBar.Add(SupplyChip(UtilityKind.Power, HudIconKind.Power, UtilityOverlayView.Overlay.Power));
             topBar.Add(SupplyChip(UtilityKind.Water, HudIconKind.Water, UtilityOverlayView.Overlay.Water));
+            topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
 
             // Info-Modus (C)
             var info = Btn(null, () => tool.SetMode(tool.CurrentMode == RoadTool.Mode.Inspect ? RoadTool.Mode.Straight : RoadTool.Mode.Inspect),
@@ -452,6 +463,18 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(info);
 
             // Hilfe & Tasten (F1) – nur mit den neuen Fenstern
+            // Weltkarte (F4) – nur mit den neuen Fenstern
+            var mapBtn = Btn(null, () => worldMap?.Toggle(), () => worldMap != null && worldMap.IsOpen, "Weltkarte (F4): Länder, Klima, Rohstoffe", null, "cb-icon-btn");
+            mapBtn.Add(Icon(HudIconKind.Globe));
+            topBar.Add(mapBtn);
+
+            // --- G5 Wirtschaft (F5) – nur mit den neuen Fenstern
+            var goodsBtn = Btn(null, () => goodsWindow?.Toggle(), () => goodsWindow != null && goodsWindow.IsOpen,
+                "Wirtschaft (F5): Güter, Preise, Import/Export, Firmen, Lieferungen", null, "cb-icon-btn");
+            goodsBtn.Add(Icon(HudIconKind.Briefcase));
+            topBar.Add(goodsBtn);
+            // --- Ende G5
+
             var helpBtn = Btn(null, () => help?.Toggle(), () => help != null && help.IsOpen, "Hilfe & Tasten (F1)", null, "cb-icon-btn");
             helpBtn.Add(Icon(HudIconKind.Help));
             topBar.Add(helpBtn);
@@ -498,6 +521,66 @@ namespace CityBuilder.Game.UI.Hud
             return chip;
         }
 
+        static readonly string[] SeasonNames = { "Frühling", "Sommer", "Herbst", "Winter" };
+
+        /// <summary>„ · Frühling, 12 °C“ aus <c>world.Climate</c> (Tageswerte).</summary>
+        string ClimateText()
+        {
+            var climate = runner.World.Climate;
+            if (climate == null) return "";
+            var d = climate.Today;
+            return $" · {SeasonNames[Mathf.Clamp((int)d.Season, 0, 3)]}, {d.Temperature:0} °C" + (d.Precipitation > 0.5f ? $", {d.Precipitation:0} mm" : "");
+        }
+
+        string ResourceName(string id)
+        {
+            var kind = runner.World.Resources?.Kind(id);
+            return kind != null ? kind.DisplayName : id;
+        }
+
+        /// <summary>Untermenü der Rohstoff-Ansicht: alle 7 Raster direkt wählbar, sichtbar solange die Ansicht an ist.</summary>
+        VisualElement BuildResourceFlyout()
+        {
+            resourceFlyout = El("cb-panel", "cb-flyout", "cb-hidden");
+            resourceFlyout.Add(Text("Rohstoffe", "cb-overlay-name__label"));
+            var seg = Container("cb-segment");
+            foreach (var id in CityBuilder.Simulation.World.ResourceIds.All)
+            {
+                string rid = id;
+                var b = Btn(ResourceShort(rid), () => envOverlay?.ShowResource(rid), () => envOverlay != null && envOverlay.CurrentResourceId == rid,
+                    null, null, "cb-seg-btn");
+                Tip(b, () => ResourceTip(rid));
+                seg.Add(b);
+            }
+            resourceFlyout.Add(seg);
+            resourceFlyout.Add(Btn("aus", () => envOverlay?.ShowResource(null), null, "Rohstoff-Ansicht aus", null, "cb-btn"));
+            fastRefresh.Add(() => resourceFlyout.EnableInClassList("cb-hidden", envOverlay == null || envOverlay.Current != EnvironmentOverlayView.Overlay.Resource));
+            return resourceFlyout;
+        }
+
+        static string ResourceShort(string id)
+        {
+            switch (id)
+            {
+                case "fertility": return "Boden";
+                case "wood": return "Wald";
+                case "ore": return "Erz";
+                case "coal": return "Kohle";
+                case "oil": return "Öl";
+                case "sand": return "Sand";
+                case "groundwater": return "Wasser";
+                default: return id;
+            }
+        }
+
+        string ResourceTip(string id)
+        {
+            var r = runner.World.Resources;
+            var kind = r?.Kind(id);
+            if (kind == null) return id;
+            return $"{kind.DisplayName} · gesamt {BuildLabels.Number((float)r.TotalAmount(id))} {kind.Unit}" + (kind.Renewable ? " · erneuert sich" : " · endlich");
+        }
+
         string DateText()
         {
             var c = runner.World.Clock;
@@ -518,12 +601,24 @@ namespace CityBuilder.Game.UI.Hud
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution);
             RailButton(HudIconKind.LandValue, "Bodenwert (F2) – rot niedrig, gelb mittel, grün hoch", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.LandValue),
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue); // G6
+            RailButton(HudIconKind.Resource, "Rohstoffe (F3 schaltet Boden → Wald → Erz → Kohle → Öl → Sand → Grundwasser → aus)",
+                () => envOverlay?.CycleResource(), () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Resource); // Welt
             RailButton(HudIconKind.Power, "Strom (O schaltet Strom, Wasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Power),
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power);
             RailButton(HudIconKind.Water, "Wasser (O schaltet Strom, Wasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Water),
                 () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water);
             RailButton(HudIconKind.Service, "Dienste-Abdeckung (⇧4 schaltet Polizei → Feuerwehr → … → Müll → aus)", () => serviceOverlay?.Cycle(),
                 () => serviceOverlay != null && serviceOverlay.Selected != null); // G4
+            // --- G3/G4 erweitert: Abwasser (auch per O), Wasserqualität, Medien (auch per ⇧4) – bewusst ohne neue Tasten
+            RailButton(HudIconKind.Pipe, "Abwasser (O schaltet Strom, Wasser, Abwasser, aus)", () => utilityOverlay?.Toggle(UtilityOverlayView.Overlay.Sewage),
+                () => utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage);
+            RailButton(HudIconKind.Water, "Wasserqualität – braun = durch Abwasser verschmutzt (fließt flussabwärts)",
+                () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.WaterQuality),
+                () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.WaterQuality);
+            RailButton(HudIconKind.Info, "Medien-Reichweite (Zeitung, Radio, TV)",
+                () => serviceOverlay?.Toggle(CityBuilder.Simulation.Services.ServiceKinds.Media),
+                () => serviceOverlay != null && serviceOverlay.Selected == CityBuilder.Simulation.Services.ServiceKinds.Media);
+            // --- Ende
             rail.Add(Container("cb-rail-sep"));
             RailButton(HudIconKind.Underground, "Unterirdisch (X) – Boden durchsichtig, Tunnel und Rohre sichtbar",
                 () => tool.ToggleUndergroundView(), () => tool.UndergroundView);
@@ -551,8 +646,11 @@ namespace CityBuilder.Game.UI.Hud
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Noise, "Lärm");
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution, "Abgas");
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue, "Bodenwert");
+                if (envOverlay != null && envOverlay.CurrentResourceId != null) Add(true, ResourceName(envOverlay.CurrentResourceId));
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Strom");
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Wasser");
+                Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Abwasser"); // G3 erw.
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.WaterQuality, "Wasserqualität"); // G3 erw.
                 Add(serviceOverlay != null && serviceOverlay.Current != null,
                     serviceOverlay != null && serviceOverlay.Current != null ? "Abdeckung " + CityBuilder.Simulation.Services.ServiceKinds.DisplayName(serviceOverlay.Current) : null); // G4
                 Add(tool.UndergroundView, "Unterirdisch");

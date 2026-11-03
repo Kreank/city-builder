@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Environment;
+using CityBuilder.Simulation.Goods;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
@@ -143,6 +144,9 @@ namespace CityBuilder.Simulation.Core
             // --- G3 Strom & Wasser (nach Lärm und Stadt: stempelt nach dem Neuzeichnen des Lärms, liest fertige Gebäude)
             world.Utilities = new UtilitySystem(world.Roads, world.Terrain, world.City, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Utilities);
+            // Abwasser/Wasserqualität (G3 erweitert): direkt nach der Versorgung (liest die Kanalnetz-Bilanz desselben Durchlaufs)
+            world.WaterQuality = new WaterQualitySystem(world.Utilities, world.Terrain, world.Min, world.Settings.SizeMeters, world.Settings.EnvironmentCellSize);
+            world.AddSystem(world.WaterQuality);
             // --- Ende G3
 
             // --- G4 Dienste (nach der Versorgung: hängt sich an deren Grundstücks-/Bau-Sperren an, stempelt Lärm nach dem NoiseSystem)
@@ -150,6 +154,10 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Services);
             // Bedürfnismodell ↔ Dienste: Abdeckung, Müll, Parks als Freizeitziel, Schülerzahlen
             CitizenServiceBinding.Connect(world.Citizens, world.Services);
+            // Medien (G4 erweitert): Schlagzeilen aus echten Stadtdaten; Bürger ↔ Wasserqualität/Atom/Medien
+            world.Media = new MediaSystem(world);
+            world.AddSystem(world.Media);
+            CitizenUtilityBinding.Connect(world.Citizens, world.Utilities, world.WaterQuality, world.Services, world.Media);
             // --- Ende G4
 
             // --- ÖPNV (nach den Diensten: hängt sich an deren Bau-/Grundstückssperren an; Busse fahren im Verkehr)
@@ -163,11 +171,19 @@ namespace CityBuilder.Simulation.Core
             world.LandValue = new LandValue.LandValueSystem(world);
             world.AddSystem(world.LandValue);
             world.City.LotPreference = world.LandValue.GrowthPreference;
+            world.LandValue.WaterPollutionNear = p => world.WaterQuality.PollutionNear(p, CityBuilder.Simulation.LandValue.LandValueRules.ShoreZeroDistance); // G3 erw.: Ufer
             // --- Ende G6
 
             // --- Welt (Etappe 5): täglich Erneuerung der Vorkommen und Länder-Volkswirtschaften
             world.AddSystem(new WorldSystem());
             // --- Ende Welt
+
+            // --- G5 Warenketten (nach Diensten, vor der Stadtkasse: Tagesgewinne stehen fest, wenn die Kasse abrechnet)
+            world.Goods = new GoodsSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
+            world.AddSystem(world.Goods);
+            GoodsBinding.Connect(world.Goods, world.City, world.Citizens, world.Utilities);
+            GoodsBinding.ConnectWorld(world.Goods, world.Resources, world.Climate); // Vorkommen + Ernte aus der Welt
+            // --- Ende G5
 
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
@@ -184,6 +200,7 @@ namespace CityBuilder.Simulation.Core
             world.Transit.FareSink = amount => economy.Earn(CityBuilder.Simulation.Economy.BudgetCategory.TransitFares, amount); // ÖPNV: Fahrgeld
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
+            world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
             return world;
         }
 
@@ -199,9 +216,17 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Dienste (G4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceSystem Services { get; private set; }
 
+        /// <summary>Abwasser-Bilanz und Wasserqualität (G3 erweitert). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public WaterQualitySystem WaterQuality { get; private set; }
+
+        /// <summary>Medien-Schlagzeilen (G4 erweitert). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public MediaSystem Media { get; private set; }
+
         /// <summary>G6 Bodenwert, Ausbaustufen, Gebäudezustand. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public LandValue.LandValueSystem LandValue { get; private set; }
 
+        /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public GoodsSystem Goods { get; private set; }
         /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Transit.TransitSystem Transit { get; private set; }
 

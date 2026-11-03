@@ -58,6 +58,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");
                 ui.Field("M", "Stadtkasse");
+                ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen)");
                 ui.Field("F1", "diese Hilfe");
             }
             ui.Section("Zeit & Kamera");

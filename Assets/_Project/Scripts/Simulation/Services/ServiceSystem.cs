@@ -56,6 +56,7 @@ namespace CityBuilder.Simulation.Services
         {
             ServiceKinds.Police, ServiceKinds.Fire, ServiceKinds.Health, ServiceKinds.EducationPrimary, ServiceKinds.EducationSecondary,
             ServiceKinds.Library, ServiceKinds.Park, ServiceKinds.Garbage,
+            ServiceKinds.Media, // G4 erweitert: Zeitung/Radio/TV
         };
         static readonly int GarbageChannel = Array.IndexOf(Channels, ServiceKinds.Garbage);
         static readonly int FireChannel = Array.IndexOf(Channels, ServiceKinds.Fire);
@@ -292,7 +293,8 @@ namespace CityBuilder.Simulation.Services
                 case ServiceKinds.EducationPrimary: return residents * 0.08f;
                 case ServiceKinds.EducationSecondary: return residents * 0.07f;
                 case ServiceKinds.Library:
-                case ServiceKinds.Park: return residents;
+                case ServiceKinds.Park:
+                case ServiceKinds.Media: return residents; // Medien: Leser/Hörer/Zuschauer = Einwohner
                 case ServiceKinds.Garbage: return residents * 0.01f + workers * (b.Zone == ZoneType.Industry ? 0.02f : 0.005f);
                 default: return 0f;
             }

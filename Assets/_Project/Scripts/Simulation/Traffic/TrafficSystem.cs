@@ -18,6 +18,8 @@ namespace CityBuilder.Simulation.Traffic
         public int Waiting;
         /// <summary>Davon Fahrten von Bürgern (aus Gebäuden bzw. Pendler).</summary>
         public int CitizenVehicles;
+        /// <summary>G5: Lieferwagen des Warensystems (negative Fahrt-Ids) – zählen nicht als Bürgerfahrten.</summary>
+        public int DeliveryVehicles;
         public int CitizenTripsStarted;
         public int CitizenTripsArrived;
         /// <summary>Bürgerfahrten, die abgebrochen wurden (Stau, Straße weg) – der Bürger gilt trotzdem als angekommen.</summary>
@@ -696,7 +698,7 @@ namespace CityBuilder.Simulation.Traffic
             if (v.IsScheduled) ScheduledVehicleRemoved?.Invoke(v, despawned); // ÖPNV
             if (v.TripId != 0)
             {
-                if (arrived) Stats.CitizenTripsArrived++; else Stats.CitizenTripsFailed++;
+                if (v.TripId > 0) { if (arrived) Stats.CitizenTripsArrived++; else Stats.CitizenTripsFailed++; } // G5: Lkw < 0
                 TripEnded?.Invoke(v, arrived);
             }
         }
@@ -792,7 +794,7 @@ namespace CityBuilder.Simulation.Traffic
             v.PrevDirection = v.Direction;
             Vehicles.Add(v);
             Stats.Spawned++;
-            Stats.CitizenTripsStarted++;
+            if (tripId > 0) Stats.CitizenTripsStarted++; // G5: Lieferfahrten (negative Ids) zählen nicht als Bürgerfahrt
             return v;
         }
 
@@ -812,11 +814,12 @@ namespace CityBuilder.Simulation.Traffic
         void UpdatePositionsAndStats()
         {
             float speedSum = 0f;
-            int active = 0, waiting = 0, citizens = 0;
+            int active = 0, waiting = 0, citizens = 0, deliveries = 0;
             foreach (var v in Vehicles)
             {
                 if (removed.Contains(v)) continue;
-                if (v.TripId != 0) citizens++;
+                if (v.TripId > 0) citizens++;
+                else if (v.TripId < 0) deliveries++; // G5: Lkw des Warensystems
                 v.PrevPosition = v.Position;
                 v.PrevHeight = v.Height;
                 v.PrevDirection = v.Direction;
@@ -831,6 +834,7 @@ namespace CityBuilder.Simulation.Traffic
             Stats.Active = active;
             Stats.Waiting = waiting;
             Stats.CitizenVehicles = citizens;
+            Stats.DeliveryVehicles = deliveries;
             Stats.AverageSpeedKmh = active > 0 ? speedSum / active * 3.6f : 0f;
 
             // Stauindex je Spur (gleitender Mittelwert)

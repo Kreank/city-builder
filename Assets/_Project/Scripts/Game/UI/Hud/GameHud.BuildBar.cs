@@ -32,6 +32,7 @@ namespace CityBuilder.Game.UI.Hud
         static readonly Color TrafficSwatch = BuildLabels.Hex(0x2BB3A3);
         static readonly Color DangerSwatch = BuildLabels.Hex(0xF08A4B);
         static readonly Color ServiceSwatch = BuildLabels.Hex(0x7A6FD6); // G4
+        static readonly Color SewageSwatch = BuildLabels.Hex(0x8A6A3E); // G3 erweitert: Abwasser
 
         VisualElement buildBar, hint, buildPanel, panelBody;
         Label hintText, panelTitle, panelHint;
@@ -428,7 +429,12 @@ namespace CityBuilder.Game.UI.Hud
                     () => utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Info-Ansicht Strom (O)"));
                 tools.Add(PBtn("Wasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Water),
                     () => utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Info-Ansicht Wasser (O)"));
+                tools.Add(PBtn("Abwasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Sewage),
+                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Info-Ansicht Abwasser (O)")); // G3 erweitert
             }
+            if (envOverlay != null) // G3 erweitert: Wasserverschmutzung
+                tools.Add(PBtn("Wasserqualität", () => envOverlay.Toggle(CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality),
+                    () => envOverlay.Current == CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality, "Verschmutzung der Gewässer (braun = verschmutzt)"));
             tools.Add(PBtn("Unterirdisch", tool.ToggleUndergroundView, () => tool.UndergroundView, "Unterirdisch-Ansicht (X) – Rohre liegen unter dem Gelände"));
             panelBody.Add(tools);
 
@@ -438,13 +444,17 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 string unit = UtilityCatalog.Unit(t.Kind);
                 tiles.Add(Tile(BuildLabels.FacilityName(t), $"{BuildLabels.Number(t.Capacity)} {unit}",
-                    t.Kind == UtilityKind.Power ? PowerSwatch : WaterSwatch,
-                    t.Kind == UtilityKind.Power ? HudIconKind.Power : HudIconKind.Water,
+                    t.Kind == UtilityKind.Power ? PowerSwatch : t.Kind == UtilityKind.Sewage ? SewageSwatch : WaterSwatch,
+                    t.Kind == UtilityKind.Power ? HudIconKind.Power : t.Kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water,
                     () => utilityTool.SelectFacility(t),
                     () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Facility && utilityTool.SelectedType == t,
                     $"{t.DisplayName} · Leistung {BuildLabels.Number(t.Capacity)} {unit} · Fläche {t.Width:0}×{t.Depth:0} m · " +
-                    $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (nur Anzeige, noch keine Stadtkasse)" +
-                    (t.NeedsWater ? " · muss am Wasser stehen" : "")));
+                    $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (Stadtkasse)" +
+                    (t.NeedsWater ? " · muss am Wasser stehen" : "") +
+                    // --- G3 erweitert: Atom/Abwasser
+                    (t.ConcernRadius > 0f ? $" · kein Abgas, aber Anwohner im Umkreis {t.ConcernRadius:0} m sorgen sich · seltener Störfall" : "") +
+                    (t.Untreated ? " · billig, leitet ungeklärt ins Gewässer → verschmutzt flussabwärts (Pumpen, Ufer)" : "") +
+                    (t.Kind == UtilityKind.Sewage && !t.Untreated ? " · klärt Abwasser vollständig" : "")));
             }
             tiles.Add(Container("cb-tile-sep"));
             tiles.Add(Tile("Stromleitung", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Power):0} €/m", PowerSwatch, HudIconKind.Power,
@@ -455,11 +465,18 @@ namespace CityBuilder.Game.UI.Hud
                 () => utilityTool.Select(UtilityTool.UtilityAction.WaterPipe),
                 () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.WaterPipe,
                 "Wasserrohr (liegt unterirdisch, schaltet die Unterirdisch-Ansicht ein)"));
+            // --- G3 erweitert: Abwasserkanal
+            tiles.Add(Tile("Abwasserkanal", $"{UtilityCatalog.LineCostPerMeter(UtilityKind.Sewage):0} €/m", SewageSwatch, HudIconKind.Pipe,
+                () => utilityTool.Select(UtilityTool.UtilityAction.SewagePipe),
+                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.SewagePipe,
+                $"Abwasserkanal (unterirdisch, selbst verlegen – Straßen führen ihn nicht mit) · Gebäude mit Zufahrt ≤ {ConnectionRules.BuildingReach:0} m vom Kanal sind angeschlossen · am besten entlang der Straßen, Kette bis zur Kläranlage/zum Auslass"));
+            // --- Ende
             panelBody.Add(tiles);
 
             var info = Container("cb-info-row");
             info.Add(BalanceLabel(u, UtilityKind.Power));
             info.Add(BalanceLabel(u, UtilityKind.Water));
+            info.Add(BalanceLabel(u, UtilityKind.Sewage)); // G3 erweitert
             var upkeep = Text("", "cb-muted");
             panelSlowRefresh.Add(() => upkeep.text = $"Unterhalt {BuildLabels.Money(u.TotalUpkeepPerDay)}/Tag (nur Anzeige)");
             info.Add(upkeep);
@@ -510,7 +527,7 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 if (lastKind != null && t.Kind != lastKind) tiles.Add(Container("cb-tile-sep"));
                 lastKind = t.Kind;
-                string range = t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit";
+                string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
                 tiles.Add(Tile(ServiceTool.ShortName(t), $"{BuildLabels.Number(t.Capacity)} {t.CapacityUnit}", ServiceSwatch, HudIconKind.Service,
                     () => serviceTool.SelectType(t),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t,
