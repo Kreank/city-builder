@@ -59,7 +59,7 @@ namespace CityBuilder.Simulation.Tests
             var w = TwoStreets(out var west, out var east);
             var u = w.Utilities;
             // Kraftwerk am Westende der ersten Straße (Rand der Fahrbahn < 8 m entfernt)
-            var plant = u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-35, 0));
+            var plant = u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f); // Vorderseite zur Straße
             Assert.NotNull(plant);
             u.ForceTick();
 
@@ -76,7 +76,7 @@ namespace CityBuilder.Simulation.Tests
         {
             var w = TwoStreets(out _, out var east);
             var u = w.Utilities;
-            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-35, 0));
+            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
 
             // Zwei Leitungsstücke: Straßenende West → Zwischenpunkt → Straßenanfang Ost
             Assert.NotNull(u.TryBuildLine(UtilityKind.Power, new Vector2(200, 0), new Vector2(350, 40)));
@@ -89,7 +89,7 @@ namespace CityBuilder.Simulation.Tests
 
             // Wasserrohr verbindet kein Stromnetz
             var w2 = TwoStreets(out _, out var east2);
-            w2.Utilities.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-35, 0));
+            w2.Utilities.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
             w2.Utilities.TryBuildLine(UtilityKind.Water, new Vector2(200, 0), new Vector2(500, 0));
             w2.Utilities.ForceTick();
             Assert.All(east2, b => Assert.False(w2.Utilities.IsSupplied(b, UtilityKind.Power)));
@@ -164,8 +164,8 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(u.IsSatisfied(west[0]));
 
             // Westen bekommt Strom + Wasser, der Osten nichts
-            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-35, 0));
-            u.TryBuildFacility(UtilityCatalog.WaterTower, new Vector2(215, 0));
+            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
+            u.TryBuildFacility(UtilityCatalog.WaterTower, new Vector2(214, 0), 270f); // Vorderseite nach Westen zum Straßenende
             u.ForceTick();
             Assert.All(west, b => Assert.True(u.IsSupplied(b), $"{b}: {u.GetStatus(b).HasPower}/{u.GetStatus(b).HasWater}"));
             Assert.False(u.IsSatisfied(east[0]));
@@ -197,9 +197,11 @@ namespace CityBuilder.Simulation.Tests
             for (int i = 0; i < 400; i++) w.Step();
             Assert.DoesNotContain(w.City.Buildings, b => gas.Contains(b.Position, 2f));
 
-            // Straße durchs Kraftwerk reißt es ab
-            Road(w, new Vector2(100, -60), new Vector2(100, 120));
-            Assert.Null(u.GetFacility(gas.Id));
+            // Neu (UX-Runde): Straße durchs Kraftwerk ist gesperrt, das Kraftwerk bleibt
+            var through = RoadBuilder.Plan(w.Roads, new Vector2(100, -60), 8f, null, new Vector2(100, 120), 8f, RoadCatalog.CityTwoLane);
+            Assert.Equal(RoadBuildError.OverlapsStructure, through.Error);
+            Assert.Equal(gas.Id, through.BlockedBy.Id);
+            Assert.NotNull(u.GetFacility(gas.Id));
         }
 
         [Fact]

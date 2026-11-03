@@ -31,10 +31,18 @@ namespace CityBuilder.Simulation.Utilities
         public float PollutionRadius { get; }
         /// <summary>Muss am Wasser stehen (Pumpe am Fluss).</summary>
         public bool NeedsWater { get; }
+        /// <summary>
+        /// Braucht eine Straßenzufahrt an der Vorderseite (Brennstoff, Personal, Wartung) und wird beim Platzieren zur Straße
+        /// ausgerichtet. Windrad, Solarpark und Pumpe am Ufer nicht: dort fährt im Alltag niemand hin, die Pumpe richtet sich
+        /// nach dem Wasser. Der Netzanschluss (Leitung/Rohr ≤ <see cref="UtilitySystem.RoadReach"/>) ist davon unabhängig.
+        /// </summary>
+        public bool NeedsRoadFront { get; }
 
         public UtilityFacilityType(string id, string name, UtilityKind kind, float capacity, float width, float depth, float cost,
-            float upkeep, float noise = 0f, float noiseRadius = 0f, float pollution = 0f, float pollutionRadius = 0f, bool needsWater = false)
+            float upkeep, float noise = 0f, float noiseRadius = 0f, float pollution = 0f, float pollutionRadius = 0f, bool needsWater = false,
+            bool roadFront = false)
         {
+            NeedsRoadFront = roadFront;
             Id = id;
             DisplayName = name;
             Kind = kind;
@@ -58,11 +66,11 @@ namespace CityBuilder.Simulation.Utilities
     {
         public static readonly UtilityFacilityType CoalPlant = new UtilityFacilityType(
             "power_coal", "Kohlekraftwerk", UtilityKind.Power, 40000f, 48f, 36f, 60000f, 900f,
-            noise: 0.6f, noiseRadius: 140f, pollution: 0.06f, pollutionRadius: 220f);
+            noise: 0.6f, noiseRadius: 140f, pollution: 0.06f, pollutionRadius: 220f, roadFront: true);
 
         public static readonly UtilityFacilityType GasPlant = new UtilityFacilityType(
             "power_gas", "Gaskraftwerk", UtilityKind.Power, 25000f, 36f, 28f, 45000f, 800f,
-            noise: 0.45f, noiseRadius: 100f, pollution: 0.025f, pollutionRadius: 160f);
+            noise: 0.45f, noiseRadius: 100f, pollution: 0.025f, pollutionRadius: 160f, roadFront: true);
 
         public static readonly UtilityFacilityType WindTurbine = new UtilityFacilityType(
             "power_wind", "Windrad", UtilityKind.Power, 3000f, 12f, 12f, 12000f, 120f,
@@ -76,7 +84,7 @@ namespace CityBuilder.Simulation.Utilities
             noise: 0.2f, noiseRadius: 40f, needsWater: true);
 
         public static readonly UtilityFacilityType WaterTower = new UtilityFacilityType(
-            "water_tower", "Brunnen + Wasserturm", UtilityKind.Water, 80f, 12f, 12f, 6000f, 80f);
+            "water_tower", "Brunnen + Wasserturm", UtilityKind.Water, 80f, 12f, 12f, 6000f, 80f, roadFront: true);
 
         public static readonly UtilityFacilityType[] All =
         {

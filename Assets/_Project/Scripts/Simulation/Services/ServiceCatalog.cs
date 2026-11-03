@@ -62,6 +62,11 @@ namespace CityBuilder.Simulation.Services
         public float Range { get; }
         /// <summary>Wirkt über Fußweg-Radius (Luftlinie) statt über das Straßennetz (Parks).</summary>
         public bool Walking { get; }
+        /// <summary>
+        /// Braucht eine Zufahrt an der Vorderseite (Einsatzfahrzeuge, Müllwagen, Schüler) und wird beim Platzieren zur
+        /// Straße ausgerichtet. Parks nicht: Spaziergänger kommen von allen Seiten (<see cref="Walking"/>).
+        /// </summary>
+        public bool NeedsRoadFront => !Walking;
         /// <summary>Baukosten in € (die Stadtkasse bucht ab – nicht dieses System).</summary>
         public float Cost { get; }
         /// <summary>Unterhalt in € pro Spielwoche (7 Spieltage).</summary>
