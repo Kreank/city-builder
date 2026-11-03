@@ -17,7 +17,8 @@ namespace CityBuilder.Simulation.Citizens
     public sealed partial class CitizenSystem : ISaveable, IAfterLoad
     {
         public string SaveId => "citizens";
-        public int SaveVersion => 1;
+        /// <summary>v2 (Eigene Assets): Umfeld-Cache mit Freizeit-/Sport-Abdeckung und Wahrzeichen-Stolz.</summary>
+        public int SaveVersion => 2;
 
         public void AfterLoad(SimulationWorld w)
         {
@@ -98,6 +99,7 @@ namespace CityBuilder.Simulation.Citizens
                 w.Float(x.EducationSecondary); w.Float(x.Library); w.Float(x.Park); w.Float(x.Garbage); w.Float(x.GarbageLevel);
                 w.Bool(x.Supplied); w.Bool(x.PowerOut); w.Bool(x.WaterOut);
                 w.Float(x.DrinkingWater); w.Float(x.Nuclear); w.Float(x.Media); w.Bool(x.SewageOut);
+                w.Float(x.Leisure); w.Float(x.Sport); w.Float(x.Pride); // v2 Eigene Assets: Freizeit, Sport, Wahrzeichen
             }
             w.IntDictionary(residentSatisfaction, w.Float);
             w.IntDictionary(workerSatisfaction, w.Float);
@@ -301,6 +303,7 @@ namespace CityBuilder.Simulation.Citizens
                 x.EducationSecondary = r.Float(); x.Library = r.Float(); x.Park = r.Float(); x.Garbage = r.Float(); x.GarbageLevel = r.Float();
                 x.Supplied = r.Bool(); x.PowerOut = r.Bool(); x.WaterOut = r.Bool();
                 x.DrinkingWater = r.Float(); x.Nuclear = r.Float(); x.Media = r.Float(); x.SewageOut = r.Bool();
+                if (version >= 2) { x.Leisure = r.Float(); x.Sport = r.Float(); x.Pride = r.Float(); } // v1: keine solchen Bauwerke → 0
                 contexts[id] = x;
             }
             r.IntDictionaryInto(residentSatisfaction, r.Float, 4);

@@ -296,6 +296,7 @@ namespace CityBuilder.Game.Services
                 case ServiceBuildError.OverlapsPole: return "Strommast im Weg";
                 case ServiceBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {ServiceSystem.RoadReach:0} m";
                 case ServiceBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                case ServiceBuildError.AlreadyBuilt: return "Gibt es nur einmal je Stadt – steht schon";
                 default: return null;
             }
         }
@@ -371,6 +372,15 @@ namespace CityBuilder.Game.Services
                 case "media_newspaper": return "Zeitung";
                 case "media_radio": return "Radio";
                 case "media_tv": return "TV-Turm";
+                // Eigene Assets: Freizeit/Wahrzeichen
+                case "leisure_playground": return "Spielplatz";
+                case "leisure_sports_field": return "Sportplatz";
+                case "leisure_tennis": return "Tennis";
+                case "leisure_pool": return "Freibad";
+                case "leisure_stadium": return "Stadion";
+                case "leisure_ferris_wheel": return "Riesenrad";
+                case "landmark_town_hall": return "Rathaus";
+                case "landmark_bandstand": return "Pavillon";
                 default: return t.DisplayName;
             }
         }

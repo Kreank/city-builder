@@ -24,6 +24,8 @@ namespace CityBuilder.Simulation.Services
         NoRoadAccess,
         /// <summary>Zu wenig Geld in der Stadtkasse (Kontostand + Kreditrahmen) oder Baustopp.</summary>
         InsufficientFunds,
+        /// <summary>Einmaliges Bauwerk (Rathaus) steht schon in der Stadt.</summary>
+        AlreadyBuilt,
     }
 
     /// <summary>Ein gebautes Dienstgebäude (frei platziert und gedreht wie die Versorger).</summary>
