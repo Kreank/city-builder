@@ -590,7 +590,7 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 if (lastKind != null && t.Kind != lastKind) tiles.Add(Container("cb-tile-sep"));
                 lastKind = t.Kind;
-                string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit"; // G4 erw.: Funk
+                string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielmin.)"; // G4 erw.: Funk
                 tiles.Add(Tile(ServiceTool.ShortName(t), $"{BuildLabels.Number(t.Capacity)} {t.CapacityUnit}", ServiceSwatch, HudIconKind.Service,
                     () => serviceTool.SelectType(t),
                     () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t,

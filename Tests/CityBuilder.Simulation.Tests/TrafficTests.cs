@@ -114,9 +114,10 @@ namespace CityBuilder.Simulation.Tests
             Assert.All(world.Roads.Segments, s => Assert.False(world.Traffic.Rules.IsSegmentAllowed(s.Id, VehicleClass.Truck)));
         }
 
-        static void Run(SimulationWorld world, int ticks)
+        /// <summary>Zeitmodell: Fahrverhalten in Verkehrsschritten (<see cref="TrafficSystem.Dt"/> = 0,25 s), nicht in Kalender-Ticks.</summary>
+        static void Run(SimulationWorld world, int trafficSteps)
         {
-            for (int i = 0; i < ticks; i++) world.Step();
+            for (int i = 0; i < trafficSteps; i++) world.Substep();
         }
 
         [Fact]

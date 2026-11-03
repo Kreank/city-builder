@@ -118,8 +118,8 @@ namespace CityBuilder.Game.UI.Windows
             using (ui.Actions())
                 ui.ActionButton(TransitView.ShowLines ? "Linien ausblenden" : "Linien auf der Karte zeigen",
                     () => TransitView.ShowLines = !TransitView.ShowLines, ActionStyle.Secondary, TransitView.ShowLines);
-            ui.Note("Busse fahren im normalen Verkehr (Stau trifft sie wie alle). Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min – " +
-                    "ein Umlauf dauert daher in Spielzeit Stunden bis Tage.");
+            ui.Note("Busse fahren im normalen Verkehr (Stau trifft sie wie alle). Zeitmodell: 1 s Fahrzeit = " +
+                    $"{Simulation.Core.TimeModel.Dilation:0} s Spielzeit – ein Umlauf von 15 min Fahrzeit dauert {Simulation.Core.TimeModel.GameMinutes(900) / 60:0} Spielstunden.");
         }
 
         void LineBody(Ui ui, TransitSystem t, TransitLine l)
@@ -139,7 +139,7 @@ namespace CityBuilder.Game.UI.Windows
                 $"Takt {Headway(l)}", Tone.Info);
             using (ui.Fields())
             {
-                ui.Field("Umlauf", $"{l.CycleSeconds:0} s Verkehrszeit (Fahrplan)");
+                ui.Field("Umlauf", $"{l.CycleSeconds:0} s Verkehrszeit = {Simulation.Core.TimeModel.GameMinutes(l.CycleSeconds):0} Spielminuten (Fahrplan)");
                 ui.Field("Länge", $"{l.LengthMeters / 1000f:0.00} km");
                 ui.Field("Stehen gelassen heute", l.LeftBehindToday.ToString(), l.LeftBehindToday > 0 ? Tone.Warn : Tone.None);
                 ui.Field("Fahrgäste gesamt", BuildLabels.Number(l.PassengersTotal));
@@ -183,6 +183,6 @@ namespace CityBuilder.Game.UI.Windows
             ui.Note(l.IsLoop ? "Rundlinie: nach dem letzten Halt zurück zum ersten." : "Pendel: am Ende wenden und zurück.");
         }
 
-        static string Headway(TransitLine l) => float.IsInfinity(l.HeadwaySeconds) ? "–" : $"{l.HeadwaySeconds:0} s";
+        static string Headway(TransitLine l) => float.IsInfinity(l.HeadwaySeconds) ? "–" : $"{Simulation.Core.TimeModel.GameMinutes(l.HeadwaySeconds):0} Spielmin."; // Zeitmodell
     }
 }

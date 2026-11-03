@@ -36,7 +36,7 @@ namespace CityBuilder.Simulation.Transit
         public const float LateSlackSeconds = 20f;
 
         /// <summary>Fußweg zur/von der Haltestelle: Tempo und größte Entfernung (Luftlinie).</summary>
-        public const float WalkSpeed = 1.3f;
+        public const float WalkSpeed = Core.TimeModel.WalkSpeed;
         public const float MaxWalkMeters = 600f;
         /// <summary>Bewertung: Fußweg und Warten zählen gefühlt mehr als Fahren (Faktor).</summary>
         public const float WalkWeight = 1.3f;
@@ -200,7 +200,7 @@ namespace CityBuilder.Simulation.Transit
         public int ActiveVehicles { get; internal set; }
         /// <summary>Takt in Sekunden (∞ ohne Busse).</summary>
         public float HeadwaySeconds => ActiveVehicles > 0 ? CycleSeconds / ActiveVehicles : float.PositiveInfinity;
-        internal float NextSpawnTime;
+        internal double NextSpawnTime;
 
         // --- Statistik
         public int PassengersToday { get; internal set; }
@@ -267,7 +267,7 @@ namespace CityBuilder.Simulation.Transit
         internal readonly List<Passenger> Riders = new List<Passenger>();
         public int Passengers => Riders.Count;
         public float Load => Capacity > 0 ? Riders.Count / (float)Capacity : 0f;
-        internal float LegStartTime;
+        internal double LegStartTime;
         internal bool MeasureLeg;
         /// <summary>Letzter Abschnitt pünktlich? Verspätung in s (≥ 0).</summary>
         public bool LastLegOnTime { get; internal set; } = true;
@@ -327,7 +327,15 @@ namespace CityBuilder.Simulation.Transit
         /// <summary>Wo die Fahrt endete (Haltestelle bzw. Bus) – der Rest ist Fußweg.</summary>
         public Vector2 EndPosition { get; internal set; }
         public RideOutcome Outcome { get; internal set; }
-        internal float WaitSince, StartTime, BoardTime, PlannedRide;
+        internal double WaitSince, StartTime, BoardTime;
+        /// <summary>
+        /// Zeitmodell: Verkehrszeit, ab der der Fahrgast nach dem Fußweg an der Haltestelle steht (vorher geht er hin – steigt
+        /// noch nicht ein, zählt aber schon zu <see cref="BusStop.Waiting"/>).
+        /// </summary>
+        internal double ReadyTime;
+        /// <summary>Steht der Fahrgast schon an der Haltestelle (Fußweg dorthin beendet)?</summary>
+        public bool IsAtStop(double trafficTime) => WaitingAtStop != 0 && trafficTime >= ReadyTime;
+        internal float PlannedRide;
         public float WaitedSeconds { get; internal set; }
         public int FullBusesSeen { get; internal set; }
         /// <summary>Fahrt deutlich langsamer als geplant (Stau, Verspätung).</summary>

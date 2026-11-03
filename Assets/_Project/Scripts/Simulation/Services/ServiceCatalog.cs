@@ -93,8 +93,10 @@ namespace CityBuilder.Simulation.Services
         public bool Broadcast { get; }
 
         public float UpkeepPerDay => UpkeepPerWeek / 7f;
-        /// <summary>Reichweite in Sekunden Fahrzeit (nur Straßendienste).</summary>
+        /// <summary>Reichweite in Sekunden Fahrzeit (Verkehrszeit, nur Straßendienste).</summary>
         public float RangeSeconds => Range * 60f;
+        /// <summary>Zeitmodell: Reichweite in Spielminuten (Verkehrszeit × Zeitdehnung, z. B. 3 min Fahrzeit = 24 Spielminuten).</summary>
+        public float RangeGameMinutes => (float)Core.TimeModel.GameMinutes(RangeSeconds);
 
         public ServiceType(string id, string name, string kind, float width, float depth, float capacity, string unit, float range,
             float cost, float upkeepPerWeek, float noise = 0f, float noiseRadius = 0f, bool walking = false, string channel = null,

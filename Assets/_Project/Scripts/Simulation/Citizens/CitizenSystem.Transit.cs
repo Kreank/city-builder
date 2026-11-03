@@ -16,8 +16,8 @@ namespace CityBuilder.Simulation.Citizens
     {
         /// <summary>ÖPNV (null = kein ÖPNV, alles wie vor Stufe 1). Gesetzt über <see cref="ConnectTransit"/>.</summary>
         public TransitSystem Transit { get; private set; }
-        /// <summary>Sicherheitsnetz: Busfahrt ohne Rückmeldung gilt nach 5 Tagen als beendet (Verkehrszeit ist gedehnt).</summary>
-        const long TransitTripTimeout = 5L * Core.SimulationClock.TicksPerDay;
+        /// <summary>Sicherheitsnetz: Busfahrt ohne Rückmeldung gilt nach 1 Tag als beendet (2 h Verkehrszeit).</summary>
+        const long TransitTripTimeout = 1L * Core.SimulationClock.TicksPerDay;
         /// <summary>Tempo der Alternative Fuß/Rad für die Bewertung (m/s, Mittel aus Gehen und Radfahren).</summary>
         public const float OtherSpeedForChoice = 2.2f;
 
@@ -26,11 +26,10 @@ namespace CityBuilder.Simulation.Citizens
         /// <summary>
         /// Skalierung wie bei Autofahrten: dieser Anteil (× <see cref="Traffic.TrafficSystem.Demand"/>) der Busfahrten fährt als
         /// einzelner Fahrgast im echten Bus, der Rest statistisch (Fahrzeit laut Fahrplan auf der Spieluhr, zählt als
-        /// Fahrgast und zahlt, belegt keinen Platz). Grund ist nicht die Rechenzeit, sondern die Zeitverzerrung: 1 Tick =
-        /// 6 Spielminuten, aber nur 0,25 s Verkehrszeit – ein Bus schafft in einem Spieltag nur ~60 s Fahrt. Würden alle
-        /// Bürger einzeln mitfahren, wäre jede Linie vielfach überlastet (wie Autos ohne <see cref="CarShare"/>).
+        /// Fahrgast und zahlt, belegt keinen Platz). Seit dem Zeitmodell (30 s Verkehrszeit je Tick, 2 h je Spieltag) ist das
+        /// nur noch eine Last-/Balancing-Stellschraube wie <see cref="CarShare"/>, keine Notlösung gegen die Zeitverzerrung.
         /// </summary>
-        public float TransitRealShare = 0.35f;
+        public float TransitRealShare = 1f; // Zeitmodell: alle Busfahrten sind echte Fahrgäste (vorher 0,35)
 
         public void ConnectTransit(TransitSystem transit)
         {
@@ -86,9 +85,9 @@ namespace CityBuilder.Simulation.Citizens
                 // Statistischer Fahrgast: Reisezeit laut Fahrplan (physikalische Sekunden) auf der Spieluhr
                 Transit.RecordStatisticalRide(o);
                 c.Mode = TravelMode.Transit;
-                int ticks = Math.Max(1, (int)MathF.Ceiling(o.TotalSeconds / 360f));
-                if (c.Location.IsOutside || c.Destination.IsOutside) ticks += OutsideTicks;
-                c.ArriveTick = now + ticks;
+                float seconds = o.TotalSeconds;
+                if (c.Location.IsOutside || c.Destination.IsOutside) seconds += OutsideSeconds;
+                c.ArriveTick = now + Core.TimeModel.TicksFor(seconds); // Zeitmodell: Verkehrszeit → Ticks
                 Stats.TransitTrips++;
                 Stats.TransitStatistical++;
                 return true;
@@ -109,11 +108,8 @@ namespace CityBuilder.Simulation.Citizens
             rides.Remove(p.CitizenId);
             var c = Get(p.CitizenId);
             if (c == null || c.Activity != Activity.Travelling) return;
-            // Rest zu Fuß (vom Ziel-Halt bzw. dort, wo die Fahrt endete)
-            float rest = Vector2.Distance(p.EndPosition, p.Destination);
-            int ticks = Math.Max(1, (int)MathF.Ceiling(rest / OtherMetersPerTick));
-            if (c.Destination.IsOutside) ticks += OutsideTicks;
-            c.ArriveTick = clock.Tick + ticks;
+            // Rest zu Fuß (vom Ziel-Halt bzw. dort, wo die Fahrt endete) – Gehtempo in Verkehrszeit (Zeitmodell)
+            c.ArriveTick = clock.Tick + EgressTicks(p.EndPosition, p.Destination, c.Destination.IsOutside);
 
             switch (outcome)
             {
@@ -136,6 +132,10 @@ namespace CityBuilder.Simulation.Citizens
                     break;
             }
         }
+
+        /// <summary>Fußweg vom Ziel-Halt zum Ziel in Ticks (gleiche Formel in der Fußgänger-Darstellung).</summary>
+        public static int EgressTicks(Vector2 from, Vector2 to, bool outside) =>
+            Core.TimeModel.TicksFor(Core.TimeModel.WalkSeconds(Vector2.Distance(from, to)) + (outside ? OutsideSeconds : 0f));
 
         int StopStreet(int stopId) => Transit?.GetStop(stopId)?.SegmentId ?? 0;
 

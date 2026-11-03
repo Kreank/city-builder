@@ -13,7 +13,7 @@ namespace CityBuilder.Simulation.Goods
     public sealed partial class GoodsSystem : ISaveable
     {
         public string SaveId => "goods";
-        public int SaveVersion => 1;
+        public int SaveVersion => 2; // v2: Zeitmodell – Lkw-Startzeit (Verkehrszeit) double
 
         public void Write(SaveWriter w)
         {
@@ -149,7 +149,7 @@ namespace CityBuilder.Simulation.Goods
             int sc = r.Count(60);
             for (int i = 0; i < sc; i++)
             {
-                var s = ReadShipment(r, savedIndex);
+                var s = ReadShipment(r, savedIndex, version);
                 shipments.Add(s);
                 byId[s.Id] = s; // Id 0 kommt nicht vor (vergeben beim Abschicken)
             }
@@ -228,7 +228,7 @@ namespace CityBuilder.Simulation.Goods
             w.Double(s.Value); w.Double(s.TransportCost);
             w.Int(s.PayerBuildingId);
             w.Long(s.DispatchTick); w.Long(s.ArriveTick);
-            w.Bool(s.IsTruck); w.Int(s.TripId); w.Float(s.StartTrafficTime);
+            w.Bool(s.IsTruck); w.Int(s.TripId); w.Double(s.StartTrafficTime);
             w.Long(s.LaunchTick); w.Int(s.FallbackTicks);
             WriteNode(w, s.FromNode); WriteNode(w, s.ToNode);
             w.Double(s.TruckEstimate);
@@ -251,7 +251,7 @@ namespace CityBuilder.Simulation.Goods
             return network.GetNode(id) ?? new Roads.RoadNode(id, p, h);
         }
 
-        Shipment ReadShipment(SaveReader r, int[] savedIndex)
+        Shipment ReadShipment(SaveReader r, int[] savedIndex, int version)
         {
             var s = new Shipment { Id = r.Int(), Kind = r.Name<ShipmentKind>(), IsContract = r.Bool() };
             string gid = r.String();
@@ -262,7 +262,7 @@ namespace CityBuilder.Simulation.Goods
             s.Value = r.Double(); s.TransportCost = r.Double();
             s.PayerBuildingId = r.Int();
             s.DispatchTick = r.Long(); s.ArriveTick = r.Long();
-            s.IsTruck = r.Bool(); s.TripId = r.Int(); s.StartTrafficTime = r.Float();
+            s.IsTruck = r.Bool(); s.TripId = r.Int(); s.StartTrafficTime = version >= 2 ? r.Double() : r.Float();
             s.LaunchTick = r.Long(); s.FallbackTicks = r.Int();
             s.FromNode = ReadNode(r);
             s.ToNode = ReadNode(r);
