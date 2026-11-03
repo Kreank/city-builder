@@ -28,13 +28,14 @@ Was keine Funktion hat, steht danach in `Assets/_Project/Models/_Unused.txt` (mi
 | `Leisure/<Name>` (Playground, SportsField, TennisCourts, OutdoorPool, Stadium, FerrisWheel) | service | Freizeitanlage (baubar) |
 | `Landmarks/<Name>` (TownHall, Church, Museum, Castle, Ruin, Statue, Fountain, Obelisk, Bandstand) | service | Wahrzeichen (baubar) |
 | `Transport/BusDepot`, `Props/BusStop` | transport | Busdepot, Haltestelle |
+| `Transport/TrainStation`, `Rail/Locomotive`, `PassengerCoach`, `ContainerWagon`, `TankWagon`, `LevelCrossing` (Kinder `BarrierA`/`BarrierB` = Schranken, Drehpunkt am Bock), `Track_Straight` | transport | Personenbahnhof, Lok/Wagen der Züge (Front +Z, Räder auf 0,62 m = Schienenoberkante), Bahnübergang (Gleis entlang Z) |
 | `Nature/Tree_*` · `Bush_*` · `Rock_*` | tree · bush · rock | Bäume · Büsche (Waldrand, Parks) · Felsen (Hänge, Gebirge) |
 | `Props/StreetLamp*` | streetlamp | Straßenlaternen |
 | `Props/<Name>` (sonst) | prop | Gehweg-/Parkausstattung (Kiosk, PicnicTable nur Park; Bench, TrashBin, Planter beides; Rest Gehweg) |
 | `People/*.fbx` | person | Fußgänger (Präfix `Toddler`, `Child`/`Kid`, `Teen`, `Senior`, sonst Erwachsene) |
 | `Agriculture/Farm`, `Field_<Frucht>[_Harvested]`, `Pasture`, `Orchard`, `Vineyard`, `Greenhouse`, `Cow`, `Tractor`, `HayBales`, `Windmill` | agriculture | Bauernhöfe (Industrie mit Landwirtschafts-Firma), Felder je Jahreszeit |
 | `Infrastructure/BridgePillar`, `TunnelPortal`, `PowerPylon`, `SignGantry`, `Roadworks`, `NoiseBarrier` | infrastructure | Brückenpfeiler, Tunnelportal, Hochspannungsmast, Schilderbrücke vor Abfahrten, Baustelle, Lärmschutzwand |
-| `Airport/*`, `Coast/*`, `Transport/TaxiDepot`, `MetroEntrance`, `TrainStation`, `Infrastructure/Drawbridge` | waiting | noch ohne Funktion (Flughafen, Hafen, Taxi, U-Bahn, Bahn, Schifffahrt) |
+| `Airport/*`, `Coast/*`, `Transport/TaxiDepot`, `MetroEntrance`, `Rail/Tram`, `Infrastructure/Drawbridge` | waiting | noch ohne Funktion (Flughafen, Hafen, Taxi, U-Bahn, Tram, Schifffahrt) |
 
 Feldfrüchte, die die Höfe kennen: `Wheat` (mit `Wheat_Harvested`), `Corn`, `Rapeseed`, `Potato`, `Vegetables`, `Plowed`, `Meadow`.
 
@@ -51,7 +52,7 @@ Neben `Name.fbx` liegt `Name.json` – damit passt jedes Modell in jedem Ordner.
 | `biome` | z. B. `temperate`, `boreal`, `tropical` | bei `tree` (gespeichert, noch ohne Wirkung) |
 | `service` | Dienst-Id (`park_small`, `leisure_stadium`, `landmark_church` …) **oder** Dienstart (`park`, `leisure`, `landmark`) | bei `service`; Dienstart = alle Dienste dieser Art, die noch kein JSON-Modell haben (JSON geht vor den Ordnerregeln) |
 | `facility` | Versorger-Id (`power_coal`, `water_tower`, `power_substation` …) | bei `facility` |
-| `transport` | `bus_depot`, `bus_stop` | bei `transport` |
+| `transport` | `bus_depot`, `bus_stop`, `train_station`, `rail_locomotive`, `rail_coach`, `rail_container_wagon`, `rail_tank_wagon`, `rail_level_crossing`, `rail_track` | bei `transport` |
 | `use` | Landwirtschaft: `farmstead`, `field`, `pasture`, `orchard`, `vineyard`, `greenhouse`, `animal`, `vehicle`, `deco`, `windmill` · Infrastruktur: `bridge_pillar`, `tunnel_portal`, `power_pylon`, `sign_gantry`, `roadworks`, `noise_barrier` | Verwendung innerhalb der Rolle (leer = aus dem Namen) |
 | `tags` | Liste, z. B. `["wheat","harvested"]` | Feldfrucht/Zustand bei `field` |
 | `waitsFor` | Text | bei `waiting`: worauf das Modell wartet (steht im Bericht) |
