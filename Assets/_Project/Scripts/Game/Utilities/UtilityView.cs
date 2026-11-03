@@ -93,8 +93,8 @@ namespace CityBuilder.Game.Utilities
             }
             if (connectionRoot != null) connectionRoot.gameObject.SetActive(ground != null && ground.Underground);
             // --- Ende
-            // Nur Darstellung: Rotoren drehen sich mit Echtzeit (die Simulation kennt keine Rotorstellung)
-            float spin = Time.deltaTime * 60f * (runner.IsPaused ? 0f : 1f);
+            // Nur Darstellung: Rotoren drehen sich in Verkehrszeit (begrenzt, Zeitmodell) – die Simulation kennt keine Rotorstellung
+            float spin = Time.deltaTime * 60f * runner.AnimationTimeScale;
             foreach (var r in rotors) if (r != null) r.Rotate(0f, 0f, spin, Space.Self);
         }
 

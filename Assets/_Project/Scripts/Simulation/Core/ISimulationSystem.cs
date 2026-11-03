@@ -11,4 +11,14 @@ namespace CityBuilder.Simulation.Core
 
         void Tick(SimulationWorld world);
     }
+
+    /// <summary>
+    /// Teilsystem, das zusätzlich in jedem <b>Verkehrsschritt</b> läuft (<see cref="TimeModel.TrafficStepsPerTick"/> je Tick,
+    /// <see cref="TimeModel.TrafficStepSeconds"/> Verkehrszeit): Verkehr, Busbetrieb, Abfahrten. Die Verkehrsschritte eines
+    /// Ticks laufen <b>vor</b> dem Kalender-Tick (Uhr noch beim alten Tick); Reihenfolge = Registrierung.
+    /// </summary>
+    public interface ISubstepSystem
+    {
+        void Substep(SimulationWorld world);
+    }
 }

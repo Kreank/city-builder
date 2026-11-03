@@ -27,8 +27,10 @@ namespace CityBuilder.Simulation.People
         public float Height;
         /// <summary>Blick-/Laufrichtung (normalisiert).</summary>
         public Vector2 Direction;
-        /// <summary>Darstellungsgeschwindigkeit in m je Tick (Weglänge / Fahrzeit der Simulation).</summary>
+        /// <summary>Darstellungsgeschwindigkeit in m je Tick (Weglänge / Gehzeit; 1 Tick = 30 s Verkehrszeit).</summary>
         public float MetersPerTick;
+        /// <summary>Gehtempo in m/s Verkehrszeit (Zeitmodell: ≈ <see cref="Core.TimeModel.WalkSpeed"/>).</summary>
+        public float MetersPerSecond => MetersPerTick / Core.TimeModel.TrafficSecondsPerTick;
         /// <summary>Anteil des Wegs (0..1) bei <see cref="PedestrianActivity.Walking"/>.</summary>
         public float Progress;
         /// <summary>Steht gerade auf einer Fahrbahn (Zebrastreifen).</summary>

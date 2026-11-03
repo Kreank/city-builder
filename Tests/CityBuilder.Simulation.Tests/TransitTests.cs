@@ -111,7 +111,7 @@ namespace CityBuilder.Simulation.Tests
             Bus first = null;
             for (int i = 0; i < 6000; i++)
             {
-                w.Step();
+                w.Substep(); // Zeitmodell: Busbetrieb in Verkehrsschritten (0,25 s)
                 first ??= w.Transit.Buses.FirstOrDefault();
                 if (first?.Vehicle != null && first.Vehicle.IsAtStop) sawAtStop = true;
                 if (first != null && first.StopsServed >= 6) break;
@@ -128,7 +128,7 @@ namespace CityBuilder.Simulation.Tests
 
             // Weniger Busse: einer fährt zurück ins Depot
             w.Transit.SetLineVehicles(line.Id, 1);
-            for (int i = 0; i < 4000 && w.Transit.Buses.Count > 1; i++) w.Step();
+            for (int i = 0; i < 4000 && w.Transit.Buses.Count > 1; i++) w.Substep();
             Assert.Single(w.Transit.Buses);
         }
 
@@ -145,7 +145,7 @@ namespace CityBuilder.Simulation.Tests
             int maxLoad = 0;
             for (int i = 0; i < 3000; i++)
             {
-                w.Step();
+                w.Substep();
                 foreach (var b in w.Transit.Buses) maxLoad = System.Math.Max(maxLoad, b.Passengers);
                 if (riders.Count(r => r.Outcome == RideOutcome.Arrived && !r.IsActive) >= 3) break;
             }
@@ -320,7 +320,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(line.RouteValid);
             Assert.Equal(3, line.Stops.Count);
             Assert.True(w.Transit.RemoveLine(line.Id));
-            for (int i = 0; i < 3000 && w.Transit.Buses.Count > 0; i++) w.Step();
+            for (int i = 0; i < 3000 && w.Transit.Buses.Count > 0; i++) w.Substep();
             Assert.Empty(w.Transit.Buses);
             Assert.DoesNotContain(w.Traffic.Vehicles, v => v.IsScheduled);
         }

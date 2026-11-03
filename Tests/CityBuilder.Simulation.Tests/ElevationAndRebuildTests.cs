@@ -68,7 +68,7 @@ namespace CityBuilder.Simulation.Tests
 
             // Verkehr fährt durch den Tunnel (Sackgassen als Außenanschluss, seit G2 nötig – s. TrafficTests.CrossroadWorld)
             world.Traffic.DeadEndsAreExternal = true;
-            for (int i = 0; i < 3000; i++) world.Step();
+            for (int i = 0; i < 3000; i++) world.Substep(); // Zeitmodell: 3000 Verkehrsschritte (750 s)
             var st = world.Traffic.Stats;
             Assert.True(st.Arrived > st.Spawned * 0.6f, $"{st.Arrived}/{st.Spawned}");
             Assert.Equal(0, st.Despawned);

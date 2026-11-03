@@ -13,7 +13,7 @@ namespace CityBuilder.Simulation.Transit
     public sealed partial class TransitSystem : ISaveable
     {
         public string SaveId => "transit";
-        public int SaveVersion => 1;
+        public int SaveVersion => 2; // v2: Zeitmodell – Verkehrszeiten double, Fußweg zur Haltestelle (ReadyTime)
 
         // Während des Lesens/bis zum Zuordnen der Bürger: Fahrgast-Id → Objekt
         readonly Dictionary<int, Passenger> passengersById = new Dictionary<int, Passenger>();
@@ -54,7 +54,7 @@ namespace CityBuilder.Simulation.Transit
                 WritePlan(w, p.Plan);
                 w.Int(p.Leg); w.Int(p.WaitingAtStop); w.Int(p.Bus?.Id ?? 0); w.Bool(p.IsActive);
                 w.Vector2(p.Destination); w.Vector2(p.EndPosition); w.Name(p.Outcome);
-                w.Float(p.WaitSince); w.Float(p.StartTime); w.Float(p.BoardTime); w.Float(p.PlannedRide);
+                w.Double(p.WaitSince); w.Double(p.StartTime); w.Double(p.BoardTime); w.Float(p.PlannedRide); w.Double(p.ReadyTime);
                 w.Float(p.WaitedSeconds); w.Int(p.FullBusesSeen); w.Bool(p.WasLate);
             }
 
@@ -79,7 +79,7 @@ namespace CityBuilder.Simulation.Transit
                     if (route != null) foreach (var e in route) { w.Int(e.SegmentId); w.Bool(e.Along); }
                 }
                 w.Float(l.CycleSeconds); w.Float(l.LengthMeters); w.Bool(l.RouteValid); w.Int(l.BrokenLeg);
-                w.Int(l.ActiveVehicles); w.Float(l.NextSpawnTime);
+                w.Int(l.ActiveVehicles); w.Double(l.NextSpawnTime);
                 w.Int(l.PassengersToday); w.Int(l.PassengersYesterday); w.Int(l.PassengersTotal);
                 w.Float(l.Punctuality); w.Float(l.AverageLoad); w.Int(l.LeftBehindToday);
                 w.Int(l.ArrivalsToday); w.Int(l.OnTimeToday); w.Int(l.LoadSamples); w.Float(l.LoadSum);
@@ -99,7 +99,7 @@ namespace CityBuilder.Simulation.Transit
                 w.Int(b.Capacity); w.Int(b.VisitIndex); w.Int(b.TargetStopId);
                 w.Int(b.Riders.Count);
                 foreach (var p in b.Riders) w.Int(p.Id);
-                w.Float(b.LegStartTime); w.Bool(b.MeasureLeg); w.Bool(b.LastLegOnTime); w.Float(b.LastDelaySeconds); w.Int(b.StopsServed);
+                w.Double(b.LegStartTime); w.Bool(b.MeasureLeg); w.Bool(b.LastLegOnTime); w.Float(b.LastDelaySeconds); w.Int(b.StopsServed);
             }
         }
 
@@ -137,7 +137,15 @@ namespace CityBuilder.Simulation.Transit
                 int bus = r.Int();
                 p.IsActive = r.Bool();
                 p.Destination = r.Vector2(); p.EndPosition = r.Vector2(); p.Outcome = r.Name<RideOutcome>();
-                p.WaitSince = r.Float(); p.StartTime = r.Float(); p.BoardTime = r.Float(); p.PlannedRide = r.Float();
+                if (version >= 2)
+                {
+                    p.WaitSince = r.Double(); p.StartTime = r.Double(); p.BoardTime = r.Double(); p.PlannedRide = r.Float(); p.ReadyTime = r.Double();
+                }
+                else
+                {
+                    // v1: Fahrgast wartete sofort an der Haltestelle (kein Fußweg) → schon angekommen
+                    p.WaitSince = r.Float(); p.StartTime = r.Float(); p.BoardTime = r.Float(); p.PlannedRide = r.Float(); p.ReadyTime = p.StartTime;
+                }
                 p.WaitedSeconds = r.Float(); p.FullBusesSeen = r.Int(); p.WasLate = r.Bool();
                 if (passengersById.ContainsKey(p.Id)) throw new SaveFormatException($"Fahrgast {p.Id} doppelt.");
                 passengersById[p.Id] = p;
@@ -176,7 +184,7 @@ namespace CityBuilder.Simulation.Transit
                     l.LegRoutes[k] = route;
                 }
                 l.CycleSeconds = r.Float(); l.LengthMeters = r.Float(); l.RouteValid = r.Bool(); l.BrokenLeg = r.Int();
-                l.ActiveVehicles = r.Int(); l.NextSpawnTime = r.Float();
+                l.ActiveVehicles = r.Int(); l.NextSpawnTime = version >= 2 ? r.Double() : r.Float();
                 l.PassengersToday = r.Int(); l.PassengersYesterday = r.Int(); l.PassengersTotal = r.Int();
                 l.Punctuality = r.Float(); l.AverageLoad = r.Float(); l.LeftBehindToday = r.Int();
                 l.ArrivalsToday = r.Int(); l.OnTimeToday = r.Int(); l.LoadSamples = r.Int(); l.LoadSum = r.Float();
@@ -209,7 +217,7 @@ namespace CityBuilder.Simulation.Transit
                 b.Capacity = r.Int(); b.VisitIndex = r.Int(); b.TargetStopId = r.Int();
                 int rc = r.Count(4);
                 for (int k = 0; k < rc; k++) b.Riders.Add(FindP(r.Int()));
-                b.LegStartTime = r.Float(); b.MeasureLeg = r.Bool(); b.LastLegOnTime = r.Bool(); b.LastDelaySeconds = r.Float(); b.StopsServed = r.Int();
+                b.LegStartTime = version >= 2 ? r.Double() : r.Float(); b.MeasureLeg = r.Bool(); b.LastLegOnTime = r.Bool(); b.LastDelaySeconds = r.Float(); b.StopsServed = r.Int();
                 buses.Add(b);
                 busById[b.Id] = b;
             }

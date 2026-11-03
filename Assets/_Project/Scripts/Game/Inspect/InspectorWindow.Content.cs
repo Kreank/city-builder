@@ -479,7 +479,7 @@ namespace CityBuilder.Game.Inspect
             using (ui.Grid(2))
             {
                 ui.Stat("Geschwindigkeit", $"{v.Speed * 3.6f:0}", "km/h");
-                ui.Stat("Fahrtdauer", FormatSeconds(traffic.Time - v.StartTime), "Verkehrszeit");
+                ui.Stat("Fahrtdauer", $"{Simulation.Core.TimeModel.GameMinutes(traffic.Time - v.StartTime):0}", "Spielminuten"); // Zeitmodell
             }
             if (BusFields(ui, world, v)) return; // ÖPNV: Linienbus
             string target = c != null && c.Destination.IsBuilding && world.City.GetBuilding(c.Destination.BuildingId) is Building tb
@@ -492,7 +492,7 @@ namespace CityBuilder.Game.Inspect
             {
                 ui.Field("Geschwindigkeit", $"{v.Speed * 3.6f:0} km/h (max. {v.MaxSpeed * 3.6f:0} km/h)");
                 if (v.WaitTime > 0.5f) ui.Field("Steht seit", $"{v.WaitTime:0} s", Tone.Accent);
-                ui.Field("Fahrtdauer", $"{FormatSeconds(traffic.Time - v.StartTime)} Verkehrszeit");
+                ui.Field("Fahrtdauer", $"{Simulation.Core.TimeModel.GameMinutes(traffic.Time - v.StartTime):0} Spielminuten ({FormatSeconds((float)(traffic.Time - v.StartTime))} Verkehrszeit)");
                 if (v.InJunction) ui.Field("Ort", "in einer Kreuzung");
                 else if (v.Lane != null) ui.Field("Ort", $"{v.Lane.Segment.Type.DisplayName} (Segment {v.Lane.Segment.Id})");
                 ui.Field("Restliche Abschnitte", v.RemainingEdges.ToString());

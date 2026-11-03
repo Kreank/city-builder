@@ -141,6 +141,11 @@ namespace CityBuilder.Simulation.Tests
         public void Determinism_AfterLoad_WorldsStayIdentical()
         {
             var a = BuildCity(days: 6);
+            // Zeitmodell: um Mitternacht fährt kaum jemand (Fahrten dauern realistisch kurz) → bis zum Morgenverkehr weiter und
+            // zusätzlich mitten in einen Tick hinein (Speichern zwischen zwei Verkehrsschritten)
+            for (int i = 0; i < SimulationClock.TicksPerDay && a.Traffic.Vehicles.Count(v => v.TripId != 0) < 3; i++) a.Step();
+            for (int i = 0; i < 37; i++) a.Substep();
+            Assert.False(a.AtTickBoundary);
             Assert.True(a.Citizens.Citizens.Count > 50, $"nur {a.Citizens.Citizens.Count} Bürger");
             Assert.True(a.Traffic.Vehicles.Count > 0, "Fahrzeuge erwartet");
             Assert.True(a.Goods.Firms.Count > 0, "Firmen erwartet");

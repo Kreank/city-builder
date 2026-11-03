@@ -98,17 +98,17 @@ namespace CityBuilder.Simulation.Citizens
 
         /// <summary>Zuzug, Jobsuche, Statistik alle 5 Ticks (30 Spielminuten).</summary>
         public const int ManageInterval = 5;
+        // Zeitmodell (TimeModel): Tagesablauf in Kalender-Ticks (6 Spielminuten), Wege in Verkehrszeit (30 s je Tick)
         /// <summary>Arbeitszeit 8 h.</summary>
-        public const int WorkTicks = 80;
+        public const int WorkTicks = 8 * TimeModel.TicksPerHour;
+        /// <summary>Einkauf 48 Spielminuten.</summary>
         const int ShopTicks = 8;
-        const int ShopFrom = 100, ShopUntil = 200;   // 10:00–20:00
-        const int WorkStartMin = 60, WorkStartMax = 95; // 6:00–9:30
+        const int ShopFrom = 10 * TimeModel.TicksPerHour, ShopUntil = 20 * TimeModel.TicksPerHour;   // 10:00–20:00
+        const int WorkStartMin = 6 * TimeModel.TicksPerHour, WorkStartMax = 95; // 6:00–9:30
         /// <summary>Sicherheitsnetz: Autofahrt ohne Rückmeldung gilt nach 3 Tagen als angekommen.</summary>
         const long CarTripTimeout = 3L * SimulationClock.TicksPerDay;
-        /// <summary>Platzhalter-Fahrten: Meter je Tick (≈ 15 km/h im Mittel aus Fuß/Rad/ÖPNV).</summary>
-        const float OtherMetersPerTick = 1500f;
-        /// <summary>Zusätzliche Fahrzeit außerhalb der Karte.</summary>
-        const int OutsideTicks = 3;
+        /// <summary>Zusätzliche Fahrzeit außerhalb der Karte (Verkehrszeit, <see cref="TimeModel.OutsideTrafficSeconds"/>).</summary>
+        const float OutsideSeconds = TimeModel.OutsideTrafficSeconds;
 
         /// <summary>Anteil der Fahrten von Einwohnern, die als sichtbares Auto fahren (× <see cref="TrafficSystem.Demand"/>).</summary>
         public float CarShare = 0.35f;
@@ -719,9 +719,10 @@ namespace CityBuilder.Simulation.Citizens
             if (TryStartTransit(c, b.Value, now, transit)) return;
             // --- Ende ÖPNV
 
-            int ticks = Math.Max(1, (int)MathF.Ceiling(dist / OtherMetersPerTick));
-            if (c.Location.IsOutside || destination.IsOutside) ticks += OutsideTicks;
-            c.ArriveTick = now + ticks;
+            // Platzhalter zu Fuß (bis 900 m, 1,3 m/s) bzw. Rad/Sonstiges – in Verkehrszeit (Zeitmodell), dann in Ticks
+            float seconds = TimeModel.OtherTripSeconds(dist);
+            if (c.Location.IsOutside || destination.IsOutside) seconds += OutsideSeconds;
+            c.ArriveTick = now + TimeModel.TicksFor(seconds);
             Stats.OtherTrips++;
         }
 
@@ -761,7 +762,7 @@ namespace CityBuilder.Simulation.Citizens
 
             // Bedürfnismodell: Stau erkennen (Verkehrszeit deutlich über freier Fahrt bzw. abgebrochen) → Erinnerung
             float expected = c.TripDistance * 1.3f / 11f + 20f;
-            float actual = traffic.Time - v.StartTime;
+            float actual = (float)(traffic.Time - v.StartTime);
             float strength = !arrived ? 0.6f : actual > expected * 2.2f + 20f ? Math.Clamp((actual / expected - 2f) / 3f, 0.25f, 0.8f) : 0f;
             if (strength > 0f) Remember(c, MemoryKind.TrafficJam, strength, street: v.Lane?.Segment.Id ?? 0,
                                         building: c.WorkplaceId != 0 ? c.WorkplaceId : 0);
