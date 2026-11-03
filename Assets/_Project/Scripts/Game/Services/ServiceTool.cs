@@ -285,6 +285,16 @@ namespace CityBuilder.Game.Services
 
         void OnGUI()
         {
+            if (CityBuilder.Game.UI.Panels.WorldLabels.Enabled)
+            {
+                // Neue UI: Beschriftung über der Vorschau als UI-Toolkit-Label melden
+                if (Event.current.type != EventType.Layout) return;
+                CityBuilder.Game.UI.Panels.WorldLabels.Begin(this);
+                if (Active && !string.IsNullOrEmpty(label))
+                    CityBuilder.Game.UI.Panels.WorldLabels.Add(this, labelWorld, label, labelError ? CityBuilder.Game.UI.Panels.WorldLabelStyle.Error : CityBuilder.Game.UI.Panels.WorldLabelStyle.Normal,
+                        -6f, above: true);
+                return;
+            }
             if (!Active || string.IsNullOrEmpty(label) || tool.Camera == null) return;
             if (labelStyle == null) labelStyle = new GUIStyle(GUI.skin.box) { fontSize = 12, richText = true, alignment = TextAnchor.MiddleCenter };
             var sp = tool.Camera.WorldToScreenPoint(labelWorld);

@@ -185,6 +185,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
             // --- Ende Stadtkasse
 
+            // --- Welt (Etappe 5): Weltkarte (F4); Ressourcen-Ansicht (F3) hängt am EnvironmentOverlayView
+            Ensure<CityBuilder.Game.WorldMap.WorldMapWindow>().Init(this);
+            // --- Ende Welt
+
             // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F3)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
             // --- Ende G5

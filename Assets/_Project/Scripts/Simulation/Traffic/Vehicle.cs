@@ -60,6 +60,10 @@ namespace CityBuilder.Simulation.Traffic
         public EdgeKey? NextEdge => RouteIndex + 1 < Route.Count ? Route[RouteIndex + 1] : (EdgeKey?)null;
         public EdgeKey? EdgeAfterNext => RouteIndex + 2 < Route.Count ? Route[RouteIndex + 2] : (EdgeKey?)null;
         public int RemainingEdges => Route.Count - RouteIndex;
+        /// <summary>Abschnitte der ganzen Route (lesend, für die Anzeige).</summary>
+        public int RouteEdges => Route.Count;
+        /// <summary>Fortschritt der Route 0..1 nach Abschnitten (lesend, für die Anzeige; Umleitung kann ihn zurücksetzen).</summary>
+        public float RouteProgress => Route.Count == 0 ? 0f : System.Math.Min(1f, System.Math.Max(0f, RouteIndex / (float)Route.Count));
 
         public override string ToString() => $"{VehicleClasses.DisplayName(Class)} #{Id}";
     }

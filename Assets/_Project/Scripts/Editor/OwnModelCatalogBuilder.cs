@@ -27,12 +27,15 @@ namespace CityBuilder.Editor
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
         };
 
-        /// <summary>G4: Dateiname (ohne .fbx) unter Models/Services → Id des Dienstgebäudes (<c>ServiceCatalog</c>).</summary>
-        static readonly Dictionary<string, string> ServiceFiles = new Dictionary<string, string>
+        /// <summary>G4: Id des Dienstgebäudes (<c>ServiceCatalog</c>) → Dateinamen unter Models/Services (erster vorhandener gilt).</summary>
+        static readonly Dictionary<string, string[]> ServiceFiles = new Dictionary<string, string[]>
         {
-            { "PoliceStation", "police_station" }, { "FireStation", "fire_station" }, { "Clinic", "clinic" }, { "Hospital", "hospital" },
-            { "PrimarySchool", "school_primary" }, { "HighSchool", "school_high" }, { "Library", "library" },
-            { "ParkSmall", "park_small" }, { "ParkLarge", "park_large" }, { "Landfill", "landfill" }, { "Incinerator", "incinerator" },
+            { "police_station", new[] { "PoliceStation" } }, { "fire_station", new[] { "FireStation" } },
+            { "clinic", new[] { "Clinic" } }, { "hospital", new[] { "Hospital" } },
+            { "school_primary", new[] { "PrimarySchool", "School" } }, { "school_high", new[] { "HighSchool", "School" } },
+            { "library", new[] { "Library" } },
+            { "park_small", new[] { "ParkSmall", "Park" } }, { "park_large", new[] { "ParkLarge", "Park" } },
+            { "landfill", new[] { "Landfill" } }, { "incinerator", new[] { "Incinerator" } },
         };
 
         static bool scheduled;
@@ -53,7 +56,8 @@ namespace CityBuilder.Editor
                 .Any(p => p.StartsWith(ModelsRoot + "/") && (p.EndsWith(".fbx") || p.EndsWith(".png")));
             if (!relevant || scheduled) return;
             scheduled = true;
-            EditorApplication.delayCall += () => { scheduled = false; Build(); };
+            // Eigener Katalog (Versorger/Dienste) + Asset-Katalog (Gebäude/Bäume/Laternen aus Models/Buildings, Nature, Props)
+            EditorApplication.delayCall += () => { scheduled = false; Build(); AssetCatalogBuilder.Build(); };
         }
 
         [MenuItem("City Builder/Build Own Model Catalog")]
@@ -82,10 +86,16 @@ namespace CityBuilder.Editor
             var services = new List<OwnModelCatalog.Entry>();
             foreach (var kv in ServiceFiles)
             {
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Services/{kv.Key}.fbx");
+                GameObject model = null;
+                string file = null;
+                foreach (var candidate in kv.Value)
+                {
+                    model = AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelsRoot}/Services/{candidate}.fbx");
+                    if (model != null) { file = candidate; break; }
+                }
                 if (model == null) continue;
-                services.Add(new OwnModelCatalog.Entry { Id = kv.Value, Model = model });
-                Debug.Log($"[OwnModels] {kv.Value} ← Services/{kv.Key}.fbx, Größe {Bounds(model).size}");
+                services.Add(new OwnModelCatalog.Entry { Id = kv.Key, Model = model });
+                Debug.Log($"[OwnModels] {kv.Key} ← Services/{file}.fbx, Größe {Bounds(model).size}");
             }
             catalog.Services = services.ToArray();
             // --- Ende G4

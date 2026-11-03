@@ -279,7 +279,13 @@ namespace CityBuilder.Simulation.Tests
         {
             var w = Town(days: 2);
             w.Citizens.LifeEventRate = 25f;
-            Run(w, SimulationClock.TicksPerDay * 6);
+            // Ereignisse tageweise sammeln: der Ringpuffer (40) läuft bei vielen Meldungen (Einstellungen, Krankheit) über
+            var seen = new List<LifeEventRecord>();
+            for (int d = 0; d < 6; d++)
+            {
+                Run(w, SimulationClock.TicksPerDay);
+                foreach (var e in w.Citizens.RecentEvents) if (!seen.Contains(e)) seen.Add(e);
+            }
             var s = w.Citizens.Stats;
             output.WriteLine($"Geburten {s.Born}, Paare {s.Partnerships}, Hochzeiten {s.Weddings}, Trennungen {s.Separations}, Auszüge {s.MovedOutOfParents}, krank {s.Ill}");
             foreach (var e in w.Citizens.RecentEvents.Take(12)) output.WriteLine($"  Tag {e.Day}: {e.Text}");
@@ -287,7 +293,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(s.Born > 0, "Geburten erwartet");
             var baby = w.Citizens.Citizens.First(c => c.Age == 0 && c.ParentAId != 0 && w.Citizens.Get(c.Id) != null);
             Assert.Contains(baby.Household.Members, m => m.Id == baby.ParentAId);
-            Assert.Contains(w.Citizens.RecentEvents, e => e.Kind == LifeEventKind.Birth && !e.Text.Contains("{"));
+            Assert.Contains(seen, e => e.Kind == LifeEventKind.Birth && !e.Text.Contains("{"));
             AssertConsistent(w);
         }
 

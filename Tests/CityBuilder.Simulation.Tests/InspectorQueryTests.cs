@@ -60,6 +60,10 @@ namespace CityBuilder.Simulation.Tests
                     Assert.Same(v, w.Citizens.VehicleOf(c));
                     Assert.True(c.TripStartTick <= w.Clock.Tick);
                     Assert.True(v.StartTime <= w.Traffic.Time);
+                    // Routenfortschritt für die Anzeige: 0..1, passt zu den restlichen Abschnitten
+                    Assert.InRange(v.RouteProgress, 0f, 1f);
+                    Assert.True(v.RouteEdges >= v.RemainingEdges);
+                    Assert.Equal((v.RouteEdges - v.RemainingEdges) / (float)v.RouteEdges, v.RouteProgress, 4);
                     checkedVehicles++;
                 }
             }

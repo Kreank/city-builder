@@ -69,7 +69,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, Goods)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -109,6 +109,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 
 ## Gelände
 - `TerrainMap` (Simulation, 4-m-Raster): erzeugt (Hügel bis ~90 m, Fluss, Wasserspiegel 0) oder flach (Tests).
+  Mit Weltkarte bekommt `Generate` `TerrainParams` der Startregion (Relief-Faktor, Fluss/Breite, Küste; s. „Welt (Etappe 5)“).
   `RoadNetwork.Ground` = Gelände. **Straßenhöhen sind absolut**, Brücke/Damm/Trog/Tunnel ergibt sich aus der
   Elevation (Höhe über Gelände). Bauhöhe im Werkzeug = Elevation. Ebenerdige Abschnitte (±4 m) formen das Gelände
   (`ConformTo`), Wasser nur per Brücke (≥ 2,5 m über Wasserspiegel).
@@ -261,8 +262,41 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
   Quellen bisher: `Game/Utilities/UtilityAlerts` (Netz unterdeckt/wieder ausreichend, Gebäude verlassen, Leitung durch Bau abgerissen).
 - Schrift: Manrope/Inter geplant, noch nicht im Projekt – Tausch über `-unity-font-definition` in `.cb-root`/`.cb-heading`.
-- Noch IMGUI: Inspektor, TrafficPanel, UtilityPanel, ServicePanel, DebugHud (F1), Welt-Beschriftungen (RoadGuidesView, UtilityTool).
-  Phase 2: Inspektor als rechtes Panel im neuen Stil (Entwurf `Panels.dc.html`).
+- Noch IMGUI: nur die Rückfall-`RoadToolbar` und die Rückfall-Fenster (s. Phase 2); neue IMGUI-Fenster anderer Agenten
+  (Wirtschaft, Weltkarte) sollen auf den Baukasten umziehen.
+
+## Spiel-UI Phase 2 (Fenster)
+- **Baukasten** `Game/UI/Panels`: `Ui` (Sofort-Modus: Fenster beschreiben ihren Inhalt bei jeder Aktualisierung neu,
+  Elemente werden nach Stelle + Art **wiederverwendet** → Hover/Klick/Scroll bleiben erhalten), Widgets in `Ui.Widgets.cs`:
+  Behälter `Card/Fields/Grid(2|3)/Chips/Actions/Row/Col` (für `using`), `Section`, `Text`, `Note`, `Title`, `Field`,
+  `FieldLink` (anklickbar), `TotalRow`, `Columns`, `Stat` (Kennzahl-Kachel), `Progress`, `Meter`, `Need` (Bedürfnisbalken),
+  `ValueBar`, `WeekBars` (Wochen-Saldo), `Chip`, `ListItem` (Avatar + Titel + Badge, anklickbar), `Quote`, `Message`,
+  `Tabs`, `ActionButton`, `IconButton`, `Stepper` (−/+), `Slider`, `Pager`; Farbtöne über `Tone`.
+  `GameWindow` (Basis: `OpenScore`, `Close`, `HandleEscape`, `DrawHead`/`DrawBody`, `Tick`/`Poll`, Kopf-Helfer `Head(...)`),
+  `WindowHost` (in `GameHud.Windows`; höchstens ein rechtes Panel + ein mittiges Fenster, höchster `OpenScore` gewinnt,
+  mittig verdrängt das neue das alte; Esc: mittig schließen, sonst `HandleEscape` des rechten Panels; 5×/s + nach Klick neu),
+  `WorldLabels` (Welt-Beschriftungen per `Begin/Add` je Frame, Ebene in der HUD), `UiPanels` (Schalter).
+  **Neues Fenster:** Klasse von `GameWindow` ableiten (Beispiel im Doc-Kommentar), `hud.Windows.Add(new …())`. USS-Abschnitt
+  „Fenster (Phase 2)“ in `CityHud.uss`.
+- **Fenster** (`Game/UI/Windows`, Inspektor in `Game/Inspect/InspectorWindow*.cs`): Inspektor (rechts, Info-Modus),
+  Verkehrsregeln (rechts, Modus T, Zufahrt-Buchstaben als Welt-Beschriftung), Versorgungsnetze (rechts, Werkzeug J/Ansicht O),
+  Dienste (rechts, Werkzeug 4/Ansicht ⇧4), Stadtkasse (mittig, M bzw. Klick auf den Kontostand), Hilfe & Tasten (mittig, F1 bzw.
+  „?“ oben) inkl. der Entwickler-Statistik. Welt-Beschriftungen von RoadGuidesView/UtilityTool/ServiceTool gehen bei aktiver
+  neuer UI über `WorldLabels`. Mausrad über Fenstern zoomt die Kamera nicht mehr.
+- **Rückfall:** Startet die neue UI nicht (Theme/USS fehlt) oder `UiPanels.ForceImgui`, zeichnen BudgetPanel, TrafficPanel,
+  UtilityPanel, ServicePanel und DebugHud wie früher per IMGUI (Aktionen wie Steuern/Verkehrsregeln bleiben so bedienbar).
+  Die IMGUI-Darstellung des Inspektors ist entfernt (rein lesend, sonst doppelte Pflege); seine Logik bleibt in `InspectorPanel`.
+- G6 im HUD: Inspektor zeigt Bodenwert, Stufe + Fortschritt + „was fehlt“, Zustand (Übersicht) und alle Bodenwert-Faktoren mit
+  Anforderungen der nächsten Stufe (Umfeld); linke Leiste Knopf „Bodenwert“ (F2); `UI/Hud/LandValueAlerts` meldet Aufstiege
+  und Verfall gesammelt höchstens 1× je Spieltag.
+- Welt im HUD: `UI/Windows/WorldMapUiWindow` (mittig, breit, F4 oder Globus-Knopf oben; Textur über
+  `WorldMapWindow.TextureFor(mode)`, Umschalter Biome/Relief/Länder/Temperatur/Niederschlag/Rohstoffe (+ 7 Vorkommen),
+  Hover = Zelleninfo, Klick wählt ein Land: Hauptstadt, Primär-/Sekundärstärke, Bevölkerung, BIP, Saldo je Güterkategorie;
+  das IMGUI-Fenster bleibt Rückfall). Linke Leiste „Rohstoffe“ (F3) mit Untermenü der 7 Raster (`ShowResource`), Name in der
+  Ansicht-Anzeige. Obere Leiste: Jahreszeit, Tagestemperatur (+ Niederschlag) aus `world.Climate.Today` hinter dem Datum.
+  Inspektor: „Vorkommen“ (`DepositAt`) im Gebäude-Reiter Umfeld, beim Versorger und in der Stadtübersicht unter dem Mauszeiger.
+  Baukasten: `Ui.Image(texture, w, h, onClick, onHover)`, `GameWindow.FrameClass` (z. B. `cb-window--wide`).
+- Optik ungetestet (Unity nicht gestartet); unsicher: Scroller-Klassen, Prozent-`translate` der Welt-Beschriftungen.
 
 ## Inspektor (Info-Modus, Taste C)
 - `Game/Inspect/InspectorPanel` (Begleiter am `RoadTool`, ersetzt das frühere `CitizenPanel`), `InspectorPicking`.
@@ -286,7 +320,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Bedürfnismodell im Inspektor:** Bürger mit Namen, Familienstand + Partner (anklickbar), Persönlichkeit/Charakterzüge;
   „Befinden“: Gesundheit/krank, Zufriedenheit, Gemüt, Sorgen, Bedürfnisbalken (Erfüllung rot→grün), Erinnerungen als
   Sätze, Rohwerte + Haushaltseinkommen; Freizeit „im Park“/„Spaziergang im Viertel“. Gebäude: Zustand, Zufriedenheit
-  Bewohner/Mitarbeiter/Umfeld. Noch offen: Bodenwert (G6), Zustand von Bauwerken.
+  Bewohner/Mitarbeiter/Umfeld, Bodenwert/Stufe/Zustand (G6). Darstellung seit Phase 2: `InspectorWindow` (rechtes Panel).
+  Noch offen: Zustand von Bauwerken (Versorger/Dienste).
 
 ## Strom & Wasser (G3)
 - `Simulation/Utilities`: `UtilityCatalog` (Kohle-/Gaskraftwerk, Windrad, Solarpark, Wasserpumpe am Ufer, Brunnen+Wasserturm;
@@ -384,11 +419,58 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abbiegeverbote in der Reichweite, Müllhalde leeren/Recycling, Medien (Zeitung/Radio/TV), Abwasser/Kläranlage,
   Budgetregler je Dienst, Ausbaustufen.
 
+## Bodenwert & Ausbaustufen (G6)
+- `Simulation/LandValue`: `LandValueRules` (alle Formeln/Zahlen, Platzhalter fürs Balancing), `LandValueSystem`
+  (`world.LandValue`, alle 30 min, nach Diensten und vor der Kasse) + `LandValueSystem.Levels.cs` (Stufen, Zustand).
+- **Bodenwert** 0..1 je Zelle im Raster `LandValue.Layer` (`GridLayer`, gleiches 16-m-Gitter wie Lärm/Abgas):
+  Grundwert 0,10 + Straßenanbindung 0,18 (voll bis 24 m, 0 ab 96 m) + Arbeitsplätze in 800 m 0,14 (Sättigung
+  1 − e^(−Jobs/250), „Nähe Zentrum/Jobs“) + Außenanschluss 0,04 (Luftlinie, 0 ab 2,5 km) + Dienste 0,25 (Polizei 0,06,
+  Feuerwehr 0,05, Gesundheit 0,05, Bildung 0,06, Bibliothek 0,03; Gebäude auf der Zelle → `Services.Coverage`, sonst
+  `CoverageAt` nur mit Straße ≤ 96 m) + Parks 0,12 + Wasserlage 0,08 (Ufer ≤ 72 m) + Aussicht 0,05 (Höhe über dem
+  Mittel im 150-m-Ring) + Dichte 0,06 + Nachbarschaft ±0,10 (Zufriedenheit der Bewohner/Beschäftigten in 160 m, 0,6
+  neutral) − Lärm 0,25 × − Abgas 0,35 × − Müll 0,20 × Müllstand (`Citizens.GarbageLevel`, also erst mit Müllabfuhr);
+  Wasserzellen 0. Ergebnis begrenzt auf 0..1.
+- **Gestaffelt & träge:** je Durchlauf 1/48 der Zellen → jede Zelle einmal am Spieltag; Wert läuft um 35 % zum Ziel
+  (erste Berechnung direkt). Hilfsraster: Straßenabstand (fein, bei `Roads.Version`), Autobahnnähe sowie Jobs, Dichte,
+  Zufriedenheit, Müll (grob 64 m, je Runde aus den Gebäuden gestempelt); Gelände (Wasser/Ufer/Aussicht) je Zelle
+  zwischengespeichert, verworfen über `TerrainMap.Changed`. Kosten: alle 16 384 Zellen ≈ 8 ms (Debug), ≈ 0,2 ms je Durchlauf.
+  `ForceRecalculate()` rechnet alles sofort und ungeglättet (Tests, Laden).
+- **Ausbaustufen** 1–3 (`Building.Level`, täglich): Aufstieg, wenn Bodenwert, Zufriedenheit (Bewohner bzw. Beschäftigte),
+  Versorgung (`Utilities.IsSatisfied`), Bildung/Fachkräfte (Wohnen: Erwachsene ≥ mittlerer Abschluss; Büro: Beschäftigte
+  mit Hochschule; Handel/Industrie: ≥ mittlerer Abschluss), Belegung ≥ 75 % und Zustand ≥ 0,5 erfüllt sind –
+  netto 5 Tage (Stufe 2) bzw. 8 Tage (Stufe 3); erfüllt +1, sonst −2 Tage. Anforderungen je Zone in
+  `LandValueRules.RequirementFor` (Bodenwert Wohnen 0,40/0,60, Büro 0,45/0,62, Handel 0,40/0,58, Industrie nur 0,25/0,40).
+  Aufstieg setzt den Zustand auf 1 (Modernisierung). Kapazität × 1,0/1,4/1,8 (`HouseholdsFor/JobsFor`, Stufe 1 = alte
+  Formel) → mehr Wohnungen/Jobs und damit mehr Strom-/Wasserbedarf und Müll. Abstieg nach netto 10 schlechten Tagen
+  (Bodenwert 0,12 unter der eigenen Stufe, Zufriedenheit < 0,4 oder keine Versorgung). Überbelegung nach Abstieg baut sich
+  über Umzug/Wegzug ab (es zieht niemand nach). Änderung → `CitySystem.NotifyBuildingChanged` (Version++, `BuildingChanged`).
+- **Zustand** `Building.Condition` 0..1 (täglich): −0,002 Alterung, −0,04 ohne Versorgung, −0,03 × Müllstand, −0,01 bei
+  Leerstand > 10 Tage, −0,01 bei Zufriedenheit < 0,35; +0,012 Instandhaltung, wenn versorgt, kaum Müll, belegt, zufrieden
+  (≥ 0,55) und Bodenwert ≥ 0,25. Zustand 0 → `BuildingDecayed`, Abriss (`DemolishDecayed`). Das Bürgersystem nutzt ihn:
+  `CitizenSystem.BuildingCondition(b)` = Wohnqualität (0,55 + 0,12 × Stufe) × (0,5 + 0,5 × Zustand) − 0,25 ohne Versorgung –
+  dieselbe Formel im Wohnbedürfnis (bei Zustand 1 wie vor G6).
+- **Grundsteuer nach Bodenwert:** `EconomySystem.PropertyTaxFactor` (Hook) = `EconomyRules.PropertyTaxFactor(Bodenwert)`
+  = Bodenwert / 0,30, begrenzt 0,25..2,5 (unbekannt → 1); Grundsteuer = bewohnte Haushalte × 40 € × Faktor × Satz Wohnen.
+  0,30 ≈ typisches Wohngebäude an der Straße ohne Dienste → Durchschnittsstadt bringt etwa die alte Pauschale.
+- **Standortwahl (Hook)** `CitySystem.LotPreference` = `LandValue.GrowthPreference`: Wohnen/Handel/Büro bevorzugen hohen
+  Bodenwert, Industrie günstiges Land + Autobahnnähe (0,55 × (1 − Wert) + 0,45 × Autobahn, 0 ab 640 m); Gewicht
+  0,05 + Vorliebe² beim Würfeln der Startzelle (gleich viel Zufall wie vorher).
+- **API (Inspektor/HUD):** `ValueAt(p)`, `ValueOf(b)` (−1 = unbekannt), `Explain(p|b)` → `LandValueFactors` (Beiträge je
+  Faktor, `Contributions()` als (Text, Wert), `Target`, `Current`), `LevelInfo(b)` → `BuildingLevelInfo` (Stufe, Fortschritt
+  0..1, Tage, `Missing` + `MissingText`, nächste Anforderungen, Abstiegs-Tage, Zustand + `ConditionText`, `Facts`),
+  `FactsOf(b)`, `HighwayAccessAt(p)`, `LandValueRules.ValueText/ConditionText/LevelGapText`. Events `LevelChanged`,
+  `BuildingDecayed`; Zähler `Upgrades/Downgrades/DecayedBuildings`. Test-Hook `FactsProvider`.
+- Darstellung: `EnvironmentOverlayView` Overlay „Bodenwert“ (**F2**, rot → gelb → grün); `BuildingView` sortiert die
+  Katalogmodelle einer Zone nach Höhe und wählt je Stufe aus einem Drittel (bei nur einem Modell dieses), Platzhalter
+  +30 % Höhe je Stufe. Knopf in der HUD-Ansichtsleiste/Inspektor-Anzeige baut `ui2` an diese API.
+- Später: Stufenaufstieg auch nach Wohlstand/Einkommen (G5), Brände/Kriminalität senken den Wert, Bodenwert als
+  Preis beim Kauf von Grundstücken, Denkmalschutz/Stilrichtungen, Abriss-Meldung im HUD.
+
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
   (alle Zahlen an einem Ort, Platzhalter fürs Balancing), `BudgetCategory`/`TaxKind`, `BudgetPeriod` (Buchungen eines
   Tages/einer Woche je Kategorie, Beträge ≥ 0, Einnahme/Ausgabe aus der Kategorie).
-- **Tagesabrechnung**: Grundsteuer = bewohnte Haushalte × 40 € × Satz Wohnen; Gewerbe-/Einkommensteuer = besetzte
+- **Tagesabrechnung**: Grundsteuer = bewohnte Haushalte × 40 € × Bodenwert-Faktor (G6) × Satz Wohnen; Gewerbe-/Einkommensteuer = besetzte
   Jobs × Basis (Handel/Mischgebiet 45, Büro 60, Industrie 40 €) × Satz der Zonenart. Unterhalt: Straßen 0,5 % des
   Neubauwerts je Tag (`RoadBuilder.SegmentValue` = Länge × €/m × Brücken-/Tunnelfaktor → 1 km Stadtstraße 60 €/Tag),
   freie Leitungen/Rohre 0,5 % je Tag, Versorgungsbauwerke `UpkeepPerDay` aus dem `UtilityCatalog`, weitere
@@ -494,10 +576,80 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   für Kraftwerke, Lagerhallen/Güterbahnhof/Hafen, Verträge statt Spotmarkt, Zölle/Subventionen, Löhne nach Gewinn, Ladenwahl
   nach Preis/Sortiment, Abfahrt-Puffer für Lkw, Spieler-Spezialisierung über `Restructure`.
 
+## Welt (Etappe 5)
+- `Simulation/World` (Namespace `CityBuilder.Simulation.World`): `PlanetGenerator` (+ `.Political`), `Planet` (+ `Region`,
+  `Country`, `CountryProfile`), `ClimateModel`, `ResourceMap`, `WorldEconomy`/`NationEconomy`, `WorldSystem`, `RegionMapping`,
+  `NameGenerator`, `WorldNoise` (3D-Wertrauschen auf der Kugel, `MinHeap`). Geländeparameter: `Environment/TerrainParams`.
+- **Einschalten:** `WorldSettings.GenerateWorld` (Standard **aus** → Tests/Standardwelt exakt wie bisher, Prüfsummen-Test),
+  `WorldSeed`, `StartRegion` (−1 = `Planet.SuggestStartRegion`: gemäßigt, fruchtbar, Fluss/Küste), `Planet` (`PlanetSettings`).
+  Das Spiel (`SimulationRunner`) schaltet die Welt ein (Seed 2024).
+- **Generator** (geseedet, ~0,45 s für 360 × 180 Zellen à ~111 km): Voronoi-Platten auf der Kugel (verzerrt), ~42 %
+  Kontinentalplatten, Drift → Kollision (Gebirge), Ozean-Kontinent (Gebirge + Vulkane, Graben), Inselbögen, Grabenbruch/
+  Rücken; alte abgetragene Gebirgsgürtel; Meeresspiegel als flächengewichtetes Quantil (30 % Land); Schelf auf
+  Kontinentalkruste. Temperatur = 27 − 55·(|Breite|/90)^1,6 − 6,5 K/km + Küstenmilderung; Jahresschwankung nach Breite ×
+  Kontinentalität. Niederschlag: Grundwert je Breite (ITCZ, Rossbreiten, Westwind), Feuchte zieht mit dem Wind (Passat
+  Ost, Westwind, polarer Ost) je Breitenzeile, füllt sich über dem Meer, regnet über Land aus, Steigungsregen beim
+  Aufstieg → **Regenschatten** dahinter (`ComputePrecipitation` ist rein/testbar). Abfluss per Priority-Flood → Flüsse
+  (abflussreichste ~7 %). Biome (Whittaker vereinfacht, `Biomes`). Geologie: **Erz** an Gebirgsgürteln (geglättete
+  Orogenese) in Häufungen, **Kohle** in Sedimentbecken (Tiefland, Senken, Vorland), **Öl** in tiefen Becken und auf dem
+  **Schelf** (Tiefsee 0), **Sand/Kies** an Flüssen/Küsten/Wüsten/Gletschervorland, **Grundwasser** aus Niederschlag ×
+  Becken (fossile Wüsten-Aquifere, Permafrost wenig), **Boden** aus Biom, Hang, Auen (Nil-Effekt), Vulkanen; **Wald** aus Biom.
+- **Regionen** (~360): Saatpunkte mit Mindestabstand, Mehrquellen-Dijkstra über Land (Höhenunterschied teuer → Grenzen auf
+  Kämmen), Inseln ab 6 Zellen eigene Region; Mittelwerte (Klima, Relief, Vorkommen inkl. halbem Schelf-Öl), Fluss, Küste +
+  Richtung zum Meer, Nachbarn. **Länder** (~36): Hauptstadt-Regionen mit Mindestabstand, Dijkstra über den Regionsgraph
+  (Land, Gebirge teurer; Seewege zu den 3 nächsten Regionen ×2,5). Namen aus dem Silbengenerator (eindeutig), Hauptstadt =
+  beste Zelle (Boden, Fluss, Küste, Klima). **Profil** (`CountryProfile`): `Raw` 0..1 aus Natur/Lage für Tourismus
+  (Küste, Wärme, Berge, Vielfalt), Landwirtschaft (Boden × Wachstum × Wasser), Rohstoffe (Erz/Kohle/Öl/Wald), Industrie
+  (Kohle+Erz, Wasser, Flüsse, Ebene, Küste), Technik (gemäßigt, Küste, Flüsse, „Kultur“-Zufall); `Rank` = Rang unter allen
+  Ländern; `Comparative` = Rang relativ zu den eigenen Stärken → `Primary`/`Secondary` (Spezialisierung).
+- **LOD-Volkswirtschaft** (`NationEconomy`, je Land, täglich über `WorldSystem`): Bevölkerung (aus Boden/Klima/Küste/Flüssen),
+  8 Güter-Kategorien (`GoodsCategory`: Lebensmittel, Holz, Erze/Baustoffe, Energie, Industrie, Konsum, Technik, Tourismus).
+  Kapazität je Kopf aus Profil/Vorkommen, Ernte und Heizbedarf aus dem Klima der Hauptstadt, Vorleistungen (Erz+Energie+Holz →
+  Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
+  Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
+  Startpreis spiegelt Knappheit). `Balance(cat)` = Überschuss/Defizit je Tag für die spätere Handels-KI, `WorldPrice` =
+  produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
+  vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
+- **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
+  0,35–2,2 aus der Zerklüftung, Fluss ja/nein + Breite nach Abfluss, Küste in Meeresrichtung mit 12–30 % Meer, Mitte bleibt
+  frei), Geländeseed = `TerrainSeed + Region.Id·7919`. `TerrainParams.Default` = bitgleich zum alten Gelände.
+- **Klima der Stadt** `world.Climate` (`ClimateModel`, immer gesetzt; ohne Welt 9,5 °C ± 9 K, 750 mm, 50° N): Tag 0 = 1. Januar,
+  Jahreszeit (Südhalbkugel vertauscht), `TemperatureOn(day)` (Jahresgang + Wetterlagen über ~4 Tage), `PrecipitationOn(day)`
+  (nasse/trockene Tage, Tropen mit Regenzeit), `HarvestFactor` 0..1, `HeatingFactor`/`CoolingFactor` 0..1,5, `Today`,
+  `AnnualHarvestFactor`. Zustandslos, deterministisch aus Seed + Tag.
+- **Ressourcen der Stadt** `world.Resources` (`ResourceMap`, immer gesetzt, Zellen = Umwelt-Raster 16 m): Ids in `ResourceIds`
+  („fertility“, „wood“, „ore“, „coal“, „oil“, „sand“, „groundwater“), je Id ein `GridLayer` mit verbleibender Ergiebigkeit 0..1.
+  **Verbindliche API:** `float DepositAt(string id, Vector2 p)` (0..1) und `float Extract(string id, Vector2 p, float amount)`
+  (Menge in `ResourceKind.Unit` je `AmountPerHectare`: Boden 100 Punkte, Holz 300 m³, Erz 50 000 t, Kohle 80 000 t,
+  Öl 20 000 m³, Sand 30 000 m³, Grundwasser 2 000 m³ je ha; entnimmt aus der Zelle, sonst aus den 8 Nachbarn, liefert die
+  entnommene Menge). Dazu `AmountAt`, `TotalAmount`, `NaturalAt`, `Layer(id)`, `Kind(id)`, `Version`. Erneuerung täglich
+  (`WorldSystem`): Wald logistisch + Anflug, Boden 1 %/Tag zum Ausgangswert, Grundwasser 2 %/Tag × Niederschlag des Tages;
+  Erz/Kohle/Öl/Sand endlich. Ebenerdige Straßen roden Wald und versiegeln Boden dauerhaft (`ClearUnderRoad`, Tunnel/Brücken
+  nicht). Lokale Verteilung aus den Regionswerten (`RegionResources.FromRegion`, √-angehoben) + Gelände: Boden in Ebenen/Auen,
+  Wald in Flecken (Startgebiet 180 m frei), Erz unter Hügeln, Kohle/Öl in großen Lagerstätten (Öl auch unter Wasser),
+  Sand am Ufer, Grundwasser in Senken.
+- **Darstellung:** Ressourcen-Ansicht im `EnvironmentOverlayView` (`Overlay.Resource`, **F3** schaltet Boden → … →
+  Grundwasser → aus, Legende oben mit Gesamtmenge; `ShowResource(id)` für die HUD). `ScenicPropsView`: Bäume = Waldraster
+  × 0,85 (gerodete Zellen lichten aus, Nachwuchs kommt zurück; Rückfall ohne Raster: alte Perlin-Verteilung).
+  `Game/WorldMap/WorldMapWindow` (IMGUI nur noch Rückfall – neue UI: `WorldMapUiWindow`; **F4**, Begleiter am `RoadTool`): Textur 360 × 180 (×2), Modi Biome/Relief/Länder/
+  Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
+  Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
+  (Im Editor noch nicht visuell abgenommen.)
+- Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
+  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Handel zwischen Ländern
+  (Etappe 8 über `Balance`/`Price`), Stadt-Wirtschaft (G5) speist ins Spieler-Land, Wechsel in andere Städte (LOD detailliert).
+
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
   in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
   und `InputSystem_Actions` – alles andere (Store-Pakete direkt nach dem Import) wird nie committet.
+- **Eigene Modelle kommen nach Ordner automatisch ins Spiel** (Neubau beider Kataloge, sobald sich ein FBX unter
+  `Models/` ändert): `Utilities/<Name>.fbx` und `Services/<Name>.fbx` über die Namenslisten in `OwnModelCatalogBuilder`
+  (Versorger/Dienste; `School` gilt für Grund- und Oberschule, `Park` für beide Parks); `Buildings/<Zone>/*.fbx`
+  (Ordnernamen = `AssetCatalog`-Felder: ResidentialLow/-Medium/-High, Mixed, Retail, Office, Industry),
+  `Nature/Tree_*.fbx`, `Props/StreetLamp*.fbx` über `AssetCatalogBuilder.Own(…)` in Originalgröße mit `CB_Palette.mat`.
+  Noch ohne Verwendung (Gebäude gibt es in der Simulation noch nicht): NuclearPlant, Newspaper, RadioStation,
+  TVTower, SewagePlant, Transport/*, Nature/Bush_*/Rock_*, übrige Props.
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -570,8 +722,13 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - Energie erweitern: Atomkraftwerk (und weitere reale Kraftwerkstypen)
    - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
      **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
-   - G6 Bodenwert, Zufriedenheit, Ausbaustufen (Zufriedenheit je Bürger/Gebäude liefert schon das Bedürfnismodell)
-5. Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
+   - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
+     Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
+     bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
+5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
+   (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
+   Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
+   im Editor noch nicht visuell abgenommen). Später: Startregion wählen, Klima auf Gelände-Optik, Handel (8)
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus

@@ -31,6 +31,14 @@ crashlytics-build.properties
 !/Assets/InputSystem_Actions.inputactions
 !/Assets/InputSystem_Actions.inputactions.meta
 
+# Blender: nur Skripte versionieren (Modelle entstehen reproduzierbar über blender/run.ps1 bzw. run_all.ps1);
+# .blend-Arbeitsdateien und Renders sind groß und jederzeit neu erzeugbar.
+/blender/blend/
+/blender/renders/
+*.blend1
+__pycache__/
+*.pyc
+
 # Von Unity generierte IDE-Dateien
 .vs/
 .idea/

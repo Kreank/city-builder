@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using CityBuilder.Game.Assets;
 using CityBuilder.Game.Roads;
+using CityBuilder.Simulation.Environment;
 using CityBuilder.Simulation.Roads;
+using CityBuilder.Simulation.World;
 using UnityEngine;
 using SimVector2 = System.Numerics.Vector2;
 
@@ -22,7 +24,13 @@ namespace CityBuilder.Game.Environment
         int roadsVersion = -1, terrainVersion = -1;
         float lastTreeRebuild = -1f;
 
-        struct Tree { public SimVector2 Pos; public float Scale, Yaw; public int Variant; public bool Alive; }
+        struct Tree { public SimVector2 Pos; public float Scale, Yaw, Roll; public int Variant; public bool Alive; }
+
+        // --- Welt (Etappe 5): Baumdichte = Waldbedeckung × Anteil; Holzeinschlag (Extract) lichtet sichtbar aus
+        const float TreeShare = 0.85f;
+        int woodVersion = -1;
+        GridLayer WoodLayer => runner != null ? runner.World.Resources?.Layer(ResourceIds.Wood) : null;
+        // --- Ende Welt
         Tree[] treeList;
         bool treesDirty = true;
 
@@ -45,15 +53,24 @@ namespace CityBuilder.Game.Environment
             float size = runner.World.Settings.SizeMeters;
             int n = Mathf.CeilToInt(size / TreeCell);
             var list = new List<Tree>();
+            var wood = WoodLayer;
             for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
             {
-                // Waldflecken: niederfrequentes Rauschen entscheidet über die Dichte
-                float density = Mathf.PerlinNoise(x * 0.045f + 13.7f, y * 0.045f + 7.3f);
                 float roll = Hash(x, y, 1);
-                if (roll > (density - 0.35f) * 1.6f) continue;
-
                 var p = min + new SimVector2((x + Hash(x, y, 2)) * TreeCell, (y + Hash(x, y, 3)) * TreeCell);
+                // --- Welt (Etappe 5): Bäume folgen dem Waldraster der Simulation (world.Resources „wood“)
+                if (wood != null)
+                {
+                    if (roll > wood.Sample(p) * TreeShare) continue;
+                }
+                else
+                {
+                    // Rückfall ohne Raster: Waldflecken aus niederfrequentem Rauschen (alte Verteilung)
+                    float density = Mathf.PerlinNoise(x * 0.045f + 13.7f, y * 0.045f + 7.3f);
+                    if (roll > (density - 0.35f) * 1.6f) continue;
+                }
+                // --- Ende Welt
                 if (terrain.HeightAt(p) < terrain.WaterLevel + 0.8f) continue;
                 if (p.Length() < 180f) continue; // Startgebiet frei lassen
                 list.Add(new Tree
@@ -63,6 +80,7 @@ namespace CityBuilder.Game.Environment
                     Yaw = Hash(x, y, 5) * 360f,
                     Variant = (int)(Hash(x, y, 6) * 1000f),
                     Alive = true,
+                    Roll = roll,
                 });
             }
             treeList = list.ToArray();
@@ -89,9 +107,11 @@ namespace CityBuilder.Game.Environment
             trees.Clear();
             var catalog = AssetCatalog.Instance;
             var terrain = runner.World.Terrain;
+            var wood = WoodLayer;
             foreach (var t in treeList)
             {
                 if (!t.Alive) continue;
+                if (wood != null && t.Roll > wood.Sample(t.Pos) * TreeShare) continue; // gerodet (Welt, Etappe 5)
                 float h = terrain.HeightAt(t.Pos);
                 if (h < terrain.WaterLevel + 0.3f) continue; // durch Terraforming geflutet
                 var model = AssetCatalog.Pick(catalog.Trees, t.Variant);
@@ -146,11 +166,15 @@ namespace CityBuilder.Game.Environment
             }
             // Geländeänderungen (Terraforming-Pinsel) höchstens 5× pro Sekunde nachziehen
             bool terrainChanged = world.Terrain.Version != terrainVersion && Time.unscaledTime - lastTreeRebuild > 0.2f;
-            if (treeList != null && (treesDirty || terrainChanged))
+            // Welt (Etappe 5): Waldraster geändert (Einschlag, Nachwuchs, Straßen) – höchstens 1× pro Sekunde
+            var woodLayer = WoodLayer;
+            bool woodChanged = woodLayer != null && woodLayer.Version != woodVersion && Time.unscaledTime - lastTreeRebuild > 1f;
+            if (treeList != null && (treesDirty || terrainChanged || woodChanged))
             {
                 treesDirty = false;
                 lastTreeRebuild = Time.unscaledTime;
                 terrainVersion = world.Terrain.Version;
+                if (woodLayer != null) woodVersion = woodLayer.Version;
                 RebuildTrees();
             }
             lamps.Render();

@@ -30,6 +30,7 @@ namespace CityBuilder.Game.Utilities
             if (tool == null || tool.Runner.World == null || tool.CurrentMode == RoadTool.Mode.Traffic) return;
             bool overlayOn = overlay != null && overlay.Current != UtilityOverlayView.Overlay.None;
             if (tool.CurrentMode != RoadTool.Mode.Utility && !overlayOn) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: s. UI/Windows (IMGUI nur Rückfall)
             if (header == null)
             {
                 header = new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, richText = true };

@@ -93,6 +93,20 @@ namespace CityBuilder.Simulation.Zoning
         public Func<ZoneType, float> DemandModifier { get; set; }
         // --- Ende Stadtkasse
 
+        // --- G6 Bodenwert (Hook): Vorliebe der Bauherren 0..1 für eine Zonenart an einem Ort (null = gleichverteilt).
+        // Gesetzt von SimulationWorld (LandValueSystem.GrowthPreference). Gewicht der Grundstückswahl: LandValueRules.GrowthWeight.
+        public Func<ZoneType, Vector2, float> LotPreference { get; set; }
+
+        /// <summary>Gebäude hat sich geändert (Stufe/Kapazität, G6) → Version erhöhen, Darstellung baut neu.</summary>
+        public event Action<Building> BuildingChanged;
+
+        internal void NotifyBuildingChanged(Building b)
+        {
+            Version++;
+            BuildingChanged?.Invoke(b);
+        }
+        // --- Ende G6
+
         // --- G5 Warenketten (Hook): Zu-/Abschlag je Zonenart auf die Nachfrage (vor dem Steuerfaktor). null = 0. Gesetzt in GoodsBinding.
         public Func<ZoneType, float> BusinessDemand { get; set; }
         // --- Ende G5
@@ -296,7 +310,10 @@ namespace CityBuilder.Simulation.Zoning
                 }
             if (candidates.Count == 0) return false;
 
-            var (b, col) = candidates[rng.Next(candidates.Count)];
+            // --- G6 Bodenwert (Hook): Bauherren bevorzugen passende Lagen (gleich viel Zufall verbraucht wie ohne Hook)
+            int pick = LotPreference == null ? rng.Next(candidates.Count) : PickPreferred(candidates, zone);
+            // --- Ende G6
+            var (b, col) = candidates[pick];
             foreach (var (w, d) in Zones.LotSizes(zone))
             {
                 // Grundstück darf links oder rechts der Startzelle beginnen
@@ -311,6 +328,27 @@ namespace CityBuilder.Simulation.Zoning
             }
             return false;
         }
+
+        // --- G6 Bodenwert: gewichtete Wahl der Startzelle nach LotPreference (ein Zufallswert)
+        int PickPreferred(List<(ZoneBlock block, int column)> candidates, ZoneType zone)
+        {
+            var weights = new float[candidates.Count];
+            double total = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var (block, c) = candidates[i];
+                weights[i] = LandValue.LandValueRules.GrowthWeight(Math.Clamp(LotPreference(zone, block[c, 0].Center), 0f, 1f));
+                total += weights[i];
+            }
+            double roll = rng.NextDouble() * total;
+            for (int i = 0; i < weights.Length; i++)
+            {
+                roll -= weights[i];
+                if (roll <= 0) return i;
+            }
+            return candidates.Count - 1;
+        }
+        // --- Ende G6
 
         bool LotFits(ZoneBlock b, int c0, int w, int d, ZoneType zone)
         {
