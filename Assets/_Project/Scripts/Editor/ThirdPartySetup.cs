@@ -30,6 +30,9 @@ namespace CityBuilder.Editor
             "Assets/Loading Games",          // Toon City Pack
             "Assets/Buildings",              // Lowpoly Modern City Buildings Set
             "Assets/Simple Vehicle Pack",
+            "Assets/Park",                   // Low-Poly Park (Thunderent)
+            "Assets/LowpolyStreetPack",      // Low Poly Street Pack (Dynamic Art)
+            "Assets/Unity Technologies",     // Cars Asset Pack
         };
 
         /// <summary>Mitgelieferte Skripte, die wir nicht wollen (eigene Kamera etc.).</summary>
@@ -50,21 +53,19 @@ namespace CityBuilder.Editor
             Report();
         }
 
-        /// <summary>Ordner direkt unter Assets/, die zum Projekt gehören und nie verschoben werden.</summary>
-        static readonly string[] ProjectFolders =
-        {
-            "_Project", "ThirdParty", "Scenes", "Settings", "Plugins", "Resources", "StreamingAssets", "Editor", "Gizmos",
-            "TextMesh Pro", "UI Toolkit",
-        };
+        /// <summary>Ordner, die ein Paketimport neu unter Assets/ angelegt hat (vom <see cref="StorePackageImporter"/>
+        /// mitgeschrieben, auch bei Import über den Package Manager). Nur diese und <see cref="PackageRoots"/> werden
+        /// verschoben – eigene Ordner (z. B. Blender-Modelle unter _Project) nie.</summary>
+        public const string RecordedRootsFile = Root + "/_Catalog/PackageRoots.txt";
 
         [MenuItem("City Builder/Third Party/Organize")]
         public static void Organize()
         {
             if (!AssetDatabase.IsValidFolder(Root)) AssetDatabase.CreateFolder("Assets", "ThirdParty");
-            // Bekannte Paketordner plus jeder andere neue Ordner direkt unter Assets/ (neu importierte Store-Pakete)
-            var roots = PackageRoots.Concat(AssetDatabase.GetSubFolders("Assets")
-                    .Where(f => !ProjectFolders.Contains(Path.GetFileName(f), System.StringComparer.OrdinalIgnoreCase)))
-                .Distinct().ToList();
+            var recorded = File.Exists(RecordedRootsFile)
+                ? File.ReadAllLines(RecordedRootsFile).Select(l => l.Trim()).Where(l => l.StartsWith("Assets/"))
+                : Enumerable.Empty<string>();
+            var roots = PackageRoots.Concat(recorded).Where(r => !r.StartsWith("Assets/_Project")).Distinct().ToList();
             foreach (var src in roots)
             {
                 if (!AssetDatabase.IsValidFolder(src)) continue;

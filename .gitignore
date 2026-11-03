@@ -18,6 +18,19 @@ crashlytics-build.properties
 /Assets/ThirdParty/
 /Assets/ThirdParty.meta
 
+# Unter Assets/ wird NUR Eigenes versioniert. Store-Pakete landen beim Import über den Package Manager
+# zunächst direkt unter Assets/ – so können sie nie versehentlich ins öffentliche Repo.
+# Eigene Assets (auch Blender-Modelle) gehören nach Assets/_Project/.
+/Assets/*
+!/Assets/_Project/
+!/Assets/_Project.meta
+!/Assets/Scenes/
+!/Assets/Scenes.meta
+!/Assets/Settings/
+!/Assets/Settings.meta
+!/Assets/InputSystem_Actions.inputactions
+!/Assets/InputSystem_Actions.inputactions.meta
+
 # Von Unity generierte IDE-Dateien
 .vs/
 .idea/

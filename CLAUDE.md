@@ -220,6 +220,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (dann ohne Platzverbrauch neben der Straße) später. Ebenso: Masten unter hohen Brücken erlauben, Masten mehrerer
   Leitungen am selben Punkt zusammenlegen.
 
+## Eigene Assets (im Git)
+- **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
+  in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
+  und `InputSystem_Actions` – alles andere (Store-Pakete direkt nach dem Import) wird nie committet.
+- Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
+  angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
+
 ## Store-Assets (nicht im Git, `Assets/ThirdParty/`)
 Einfachster Weg: Pakete im Package Manager → My Assets nur **herunterladen**, dann Fenster
 „City Builder → Third Party → Store-Pakete …“ (`StorePackageImporter`): listet den Cache `%APPDATA%\Unity\Asset Store-5.x`

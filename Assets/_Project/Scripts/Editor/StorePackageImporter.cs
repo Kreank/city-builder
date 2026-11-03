@@ -40,9 +40,13 @@ namespace CityBuilder.Editor
         List<Entry> entries = new List<Entry>();
         Vector2 scroll;
 
+        const string FoldersBeforeKey = "CityBuilder.StoreImport.FoldersBefore";
+
         static StorePackageImporter()
         {
-            AssetDatabase.importPackageCompleted += name => { MarkImported(name); Continue(); };
+            // Welche Ordner legt ein Import neu unter Assets/ an? (auch bei Import über den Package Manager)
+            AssetDatabase.importPackageStarted += _ => SessionState.SetString(FoldersBeforeKey, string.Join("|", AssetDatabase.GetSubFolders("Assets")));
+            AssetDatabase.importPackageCompleted += name => { RecordNewRoots(); MarkImported(name); Continue(); };
             AssetDatabase.importPackageFailed += (name, error) => { Debug.LogError($"[StoreImport] {name}: {error}"); Continue(); };
             AssetDatabase.importPackageCancelled += _ => Continue();
             // Nach einem Domain-Reload mitten im Ablauf weitermachen
@@ -166,6 +170,19 @@ namespace CityBuilder.Editor
             if (!set.Add(file)) return;
             Directory.CreateDirectory(Path.GetDirectoryName(ImportedFile));
             File.WriteAllLines(ImportedFile, set.OrderBy(s => s), new UTF8Encoding(false));
+        }
+
+        static void RecordNewRoots()
+        {
+            var before = new HashSet<string>(SessionState.GetString(FoldersBeforeKey, "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries));
+            if (before.Count == 0) return;
+            var created = AssetDatabase.GetSubFolders("Assets").Where(f => !before.Contains(f) && !f.StartsWith("Assets/_Project")).ToList();
+            if (created.Count == 0) return;
+            var set = ReadLines(ThirdPartySetup.RecordedRootsFile);
+            foreach (var c in created) set.Add(c);
+            Directory.CreateDirectory(Path.GetDirectoryName(ThirdPartySetup.RecordedRootsFile));
+            File.WriteAllLines(ThirdPartySetup.RecordedRootsFile, set.OrderBy(s => s), new UTF8Encoding(false));
+            Debug.Log($"[StoreImport] neue Paketordner: {string.Join(", ", created)}");
         }
 
         static HashSet<string> ReadLines(string path) =>
