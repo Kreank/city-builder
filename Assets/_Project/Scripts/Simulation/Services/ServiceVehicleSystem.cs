@@ -53,6 +53,19 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Fahrzeuge, die gerade im Verkehr fahren.</summary>
         public int ActiveTrips => byTrip.Count;
 
+        // --- Sicherheit (Brände, Kriminalität; gesetzt vom Safety.SafetySystem, null/true = wie bisher)
+        /// <summary>Platzhalter-Brandeinsätze aus dem Brandrisiko (aus, sobald es echte Brände gibt).</summary>
+        public bool PlaceholderFireCalls { get; set; } = true;
+        /// <summary>Fahrzeug bleibt am Halt, solange true (Löschfahrzeug am brennenden Gebäude). null = feste Standzeit.</summary>
+        public Func<ServiceUnit, bool> HoldAtStop { get; set; }
+        /// <summary>Gewicht je Gebäude für die Streifen-Auswahl (Kriminalität); null = gleichverteilt wie bisher.</summary>
+        public Func<Building, float> PatrolWeight { get; set; }
+        /// <summary>Fahrzeug ist am Halt angekommen (läuft im Verkehrsschritt: nur Zustand ändern, keine Fahrt starten).</summary>
+        public event Action<ServiceUnit> ArrivedAtStop;
+        /// <summary>Halt erledigt (vor der Weiterfahrt; läuft im Verkehrsschritt).</summary>
+        public event Action<ServiceUnit> StopFinished;
+        // --- Ende Sicherheit
+
         public ServiceVehicleSystem(ServiceSystem services, CitySystem city, TrafficSystem traffic, SimulationClock clock, CitizenSystem citizens, int seed)
         {
             this.services = services ?? throw new ArgumentNullException(nameof(services));
@@ -131,7 +144,7 @@ namespace CityBuilder.Simulation.Services
             for (int i = 0; i < units.Count; i++)
             {
                 var u = units[i];
-                if (u.State == ServiceUnitState.Working && u.WorkUntil <= t) FinishStop(u);
+                if (u.State == ServiceUnitState.Working && u.WorkUntil <= t && (HoldAtStop == null || !HoldAtStop(u))) FinishStop(u);
             }
         }
 
@@ -254,15 +267,43 @@ namespace CityBuilder.Simulation.Services
 
         void DispatchPatrols(long now, Dictionary<int, List<Building>> assigned)
         {
+            // Sicherheit: Reserve je Wache (Standard 0 = wie bisher)
+            Dictionary<int, int> idle = null;
+            if (PatrolReserve > 0)
+            {
+                idle = new Dictionary<int, int>();
+                foreach (var x in units)
+                    if (x.Kind == ServiceVehicleKind.PoliceCar && !x.IsBusy) { idle.TryGetValue(x.DepotId, out int n); idle[x.DepotId] = n + 1; }
+            }
             foreach (var u in units)
             {
                 if (u.Kind != ServiceVehicleKind.PoliceCar || u.IsBusy || u.ReadyTick > now) continue;
+                if (idle != null)
+                {
+                    idle.TryGetValue(u.DepotId, out int free);
+                    if (free <= PatrolReserve) continue;
+                    idle[u.DepotId] = free - 1;
+                }
                 if (!assigned.TryGetValue(u.DepotId, out var buildings) || buildings.Count == 0) continue;
                 var own = buildings; // Gebäude, die diese Wache betreut (Schlüssel = Dienst-Id)
                 var stops = new List<int>();
+                var weight = PatrolWeight; // Sicherheit: Streifen fahren bevorzugt dorthin, wo viel passiert
+                float total = 0f;
+                if (weight != null) foreach (var b in own) total += 0.25f + Math.Max(0f, weight(b));
                 for (int i = 0; i < ServiceVehicleRules.PatrolStops * 3 && stops.Count < ServiceVehicleRules.PatrolStops; i++)
                 {
-                    var b = own[rng.Next(own.Count)];
+                    Building b;
+                    if (weight == null) b = own[rng.Next(own.Count)];
+                    else
+                    {
+                        double r = rng.NextDouble() * total;
+                        b = own[own.Count - 1];
+                        foreach (var x in own)
+                        {
+                            r -= 0.25f + Math.Max(0f, weight(x));
+                            if (r < 0) { b = x; break; }
+                        }
+                    }
                     if (!stops.Contains(b.Id)) stops.Add(b.Id);
                 }
                 Begin(u, ServiceMission.Patrol, stops, now);
@@ -272,6 +313,7 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Platzhalter-Brandeinsätze: je Stunde und Gebäude Chance Brandrisiko × Rate / 24 (stabiler Hash, kein Zufallsverbrauch).</summary>
         void FireCalls(long now)
         {
+            if (!PlaceholderFireCalls) return; // Sicherheit: echte Brände ersetzen die Platzhalter
             bool any = false;
             foreach (var u in units) if (u.Kind == ServiceVehicleKind.FireTruck) { any = true; break; }
             if (!any) return;
@@ -302,6 +344,78 @@ namespace CityBuilder.Simulation.Services
             return u;
         }
 
+        // --- Sicherheit: Einsatz mit Rückfall auf andere Wachen
+        /// <summary>
+        /// Einsatz zu einem Gebäude (Brand, Tatort, Rettung): zuerst die zuständige Wache, sonst die schnellste andere Wache
+        /// der Art mit freiem Fahrzeug, deren Reichweite das Gebäude erreicht. Liefert das ausrückende Fahrzeug oder null
+        /// (kein Fahrzeug frei → zählt als verpasst).
+        /// </summary>
+        public ServiceUnit Dispatch(ServiceMission mission, Building b, long now)
+        {
+            if (b == null || !Enabled) return null;
+            string channel; ServiceVehicleKind kind;
+            switch (mission)
+            {
+                case ServiceMission.FireCall: channel = ServiceKinds.Fire; kind = ServiceVehicleKind.FireTruck; break;
+                case ServiceMission.CrimeCall: channel = ServiceKinds.Police; kind = ServiceVehicleKind.PoliceCar; break;
+                case ServiceMission.Rescue: channel = ServiceKinds.Health; kind = ServiceVehicleKind.Ambulance; break;
+                default: return null;
+            }
+            var station = services.AssignedFacility(channel, b);
+            var u = station != null ? EmergencyUnit(station.Id, kind) : null;
+            if (u == null)
+            {
+                float best = float.PositiveInfinity;
+                foreach (var f in services.Facilities)
+                {
+                    if (f.Kind != channel || f.Reach == null) continue;
+                    var cand = EmergencyUnit(f.Id, kind);
+                    if (cand == null) continue;
+                    float secs = services.ResponseSeconds(f, b);
+                    if (secs > f.Reach.RangeSeconds * 1.5f) continue;
+                    if (secs < best || (secs == best && u != null && cand.Id < u.Id)) { best = secs; u = cand; }
+                }
+            }
+            if (u == null) { Today.MissedCalls++; return null; }
+            if (u.State == ServiceUnitState.Working && u.Mission == ServiceMission.Patrol)
+            {
+                // Streife unterbrechen: der Wagen fährt vom aktuellen Halt direkt zum Einsatz
+                int at = u.TargetBuildingId;
+                Begin(u, mission, new List<int> { b.Id }, now, startTrip: false);
+                u.FromBuildingId = at;
+                TryStart(u, now);
+            }
+            else Begin(u, mission, new List<int> { b.Id }, now);
+            return u;
+        }
+
+        /// <summary>
+        /// Fahrzeug für einen Notfall: zuerst eins in der Wache (auch in der Pause nach einer Streife), sonst ein Streifenwagen,
+        /// der gerade an einem Streifen-Halt steht (wird umgeleitet). Fahrende Streifen werden nicht umgeleitet.
+        /// </summary>
+        ServiceUnit EmergencyUnit(int depotId, ServiceVehicleKind kind)
+        {
+            foreach (var u in units)
+                if (u.DepotId == depotId && u.Kind == kind && !u.IsBusy) return u;
+            if (kind == ServiceVehicleKind.PoliceCar)
+                foreach (var u in units)
+                    if (u.DepotId == depotId && u.Kind == kind && u.Mission == ServiceMission.Patrol && u.State == ServiceUnitState.Working && u.TripId == 0)
+                        return u;
+            return null;
+        }
+
+        /// <summary>Sicherheit: so viele Streifenwagen je Wache bleiben für Einsätze in der Wache (0 = alle fahren Streife, wie bisher).</summary>
+        public int PatrolReserve { get; set; }
+
+        /// <summary>Fahrzeuge, die gerade zu einem Gebäude unterwegs sind bzw. dort arbeiten (Auftrag, Ziel), nach Id.</summary>
+        public IEnumerable<ServiceUnit> UnitsAt(int buildingId, ServiceMission mission)
+        {
+            foreach (var u in units)
+                if (u.Mission == mission && u.TargetBuildingId == buildingId &&
+                    (u.State == ServiceUnitState.Driving || u.State == ServiceUnitState.Working)) yield return u;
+        }
+        // --- Ende Sicherheit
+
         internal void OnBecameIll(Citizen c)
         {
             if (!Enabled || c == null || c.Household == null || c.Household.HomeId == 0) return;
@@ -322,7 +436,7 @@ namespace CityBuilder.Simulation.Services
 
         // ------------------------------------------------------------ Fahrten
 
-        void Begin(ServiceUnit u, ServiceMission mission, List<int> stops, long now)
+        void Begin(ServiceUnit u, ServiceMission mission, List<int> stops, long now, bool startTrip = true)
         {
             if (stops.Count == 0) return;
             u.Mission = mission;
@@ -336,7 +450,7 @@ namespace CityBuilder.Simulation.Services
             u.HasPark = false;
             u.Retries = 0;
             u.MissionStartTick = now;
-            TryStart(u, now);
+            if (startTrip) TryStart(u, now);
         }
 
         int NextTripId()
@@ -402,6 +516,7 @@ namespace CityBuilder.Simulation.Services
             u.HasPark = true;
             u.State = ServiceUnitState.Working;
             u.WorkUntil = traffic.Time + StopSeconds(u.Mission);
+            ArrivedAtStop?.Invoke(u); // Sicherheit
         }
 
         static float StopSeconds(ServiceMission m)
@@ -411,6 +526,7 @@ namespace CityBuilder.Simulation.Services
                 case ServiceMission.Collection: return ServiceVehicleRules.GarbageStopSeconds;
                 case ServiceMission.Patrol: return ServiceVehicleRules.PatrolStopSeconds;
                 case ServiceMission.FireCall: return ServiceVehicleRules.FireCallSeconds;
+                case ServiceMission.CrimeCall: return ServiceVehicleRules.CrimeCallSeconds; // Sicherheit
                 default: return ServiceVehicleRules.RescueSeconds;
             }
         }
@@ -434,6 +550,7 @@ namespace CityBuilder.Simulation.Services
                     case ServiceMission.FireCall: Today.FireCalls++; break;
                     case ServiceMission.Rescue: Today.Rescues++; break;
                 }
+                StopFinished?.Invoke(u); // Sicherheit
             }
             u.FromBuildingId = u.TargetBuildingId;
             NextStop(u, clock.Tick);

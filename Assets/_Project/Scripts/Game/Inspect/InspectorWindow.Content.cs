@@ -60,6 +60,7 @@ namespace CityBuilder.Game.Inspect
                 ui.Note("Stufe × Zustand, ohne Versorgung schlechter");
             }
 
+            SafetySection(ui, world, b); // Sicherheit: Brand, Ruine/Sanierung, Kriminalität (InspectorWindow.Safety.cs)
             LandValueAndLevel(ui, world, b);
             if (b.IsPlayerPlaced) HouseActions(ui, world, b); // Wohnhäuser setzen: Verschieben/Abreißen
 
@@ -220,9 +221,11 @@ namespace CityBuilder.Game.Inspect
             {
                 float level = services.GarbageLevel(b);
                 ui.Field("Müll am Gebäude", $"{services.GarbageAt(b):0.##} t ({level * 100f:0} % voll)", level >= 0.5f ? Tone.Warn : Tone.None);
-                ui.Field("Brandrisiko", $"{services.FireRisk(b) * 100f:0} % (Kennwert, noch ohne Brände)");
+                if (world.Safety == null || !world.Safety.Enabled)
+                    ui.Field("Brandrisiko", $"{services.FireRisk(b) * 100f:0} % (Kennwert, Brände aus)");
                 ui.Field("Zufriedenheit Umfeld", Percent(world.Citizens.SurroundingsScore(b)));
             }
+            SafetyFactors(ui, world, b); // Sicherheit: Faktoren Kriminalität/Brandgefahr
 
             ui.Section("Gelände");
             var terrain = world.Terrain;
@@ -839,6 +842,7 @@ namespace CityBuilder.Game.Inspect
             if (s.ExternalConnections == 0)
                 ui.Message("Keine Außenanschlüsse", "Straße bis an den Kartenrand bauen, dann kommen Pendler und Durchgangsverkehr.", Tone.Warn);
             GatewayOverview(ui, world); // Außenanbindungen (Autobahn, Bahn, Wasser, Luft)
+            SafetyOverview(ui, world);  // Sicherheit: Brände, Kriminalität
 
             ui.Section("Alter");
             int maxAge = Mathf.Max(1, s.AgeGroups.Max());

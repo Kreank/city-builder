@@ -50,6 +50,12 @@ namespace CityBuilder.Simulation.Citizens
         TrainRide,
         /// <summary>Zug kam spät, war voll oder fiel aus.</summary>
         TrainLate,
+        // --- Sicherheit (Brände, Kriminalität)
+        /// <summary>Brand in der eigenen Wohnung/Firma (stark) bzw. nebenan (schwach).</summary>
+        Fire,
+        /// <summary>Einbruch/Diebstahl bei einem selbst.</summary>
+        Burglary,
+        // --- Ende Sicherheit
     }
 
     /// <summary>
@@ -124,6 +130,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.BusRide: return 0.25f;
                 case MemoryKind.TrainRide: return 0.3f;  // Bahn
                 case MemoryKind.TrainLate: return -0.3f; // Bahn
+                case MemoryKind.Fire: return -0.85f;     // Sicherheit
+                case MemoryKind.Burglary: return -0.7f;  // Sicherheit
                 default: return 0.3f; // QuietEvening
             }
         }
@@ -153,6 +161,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.FeelsUnsafe:
                 case MemoryKind.NicePark: return 0.88f;
                 case MemoryKind.PartnerDied: return 0.985f;
+                case MemoryKind.Fire: return 0.95f;     // Sicherheit: Brand bleibt lange im Kopf
+                case MemoryKind.Burglary: return 0.93f; // Sicherheit
                 case MemoryKind.Birth:
                 case MemoryKind.Wedding:
                 case MemoryKind.Separation: return 0.975f;
@@ -196,6 +206,8 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.BusRide: return "gute Busfahrt";
                 case MemoryKind.TrainRide: return "gute Zugfahrt";      // Bahn
                 case MemoryKind.TrainLate: return "Zug verspätet/voll";  // Bahn
+                case MemoryKind.Fire: return "Brand";          // Sicherheit
+                case MemoryKind.Burglary: return "Einbruch";   // Sicherheit
                 default: return "ruhiger Abend";
             }
         }

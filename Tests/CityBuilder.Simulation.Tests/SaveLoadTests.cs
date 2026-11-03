@@ -58,6 +58,9 @@ namespace CityBuilder.Simulation.Tests
             }
             var w = SimulationWorld.CreateDefault(settings, seed);
             w.ServiceVehicles.Enabled = true; // Eigene Assets 2: Dienstfahrzeuge im Determinismus-Test
+            w.Safety.Enabled = true;          // Sicherheit: Brände/Kriminalität im Determinismus-Test
+            w.Safety.IgnitionScale = 20f;     // genug Brände in wenigen Tagen (Faktor steht im Spielstand)
+            w.Services.TryBuild(ServiceCatalog.FireStation, new Vector2(-200, -40));
             // Hauptachse bis zum Kartenrand (Außenanschluss) + Querstraßen
             TryRoad(w, new Vector2(-500, 0), new Vector2(1020, 0), RoadCatalog.CityFourLane);
             TryRoad(w, new Vector2(-500, 160), new Vector2(500, 160));

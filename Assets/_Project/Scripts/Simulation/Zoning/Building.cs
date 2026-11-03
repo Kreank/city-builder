@@ -54,6 +54,11 @@ namespace CityBuilder.Simulation.Zoning
         public float Condition { get; internal set; } = 1f;
         // --- Ende G6
 
+        // --- Sicherheit (Brände): nach schwerem Brand unbewohnbar (Sanierung) bzw. Brandruine – Baufortschritt ruht,
+        // niemand zieht ein. Gesetzt/gespeichert vom Safety.SafetySystem (Abschnitt „safety“).
+        public bool OutOfService { get; internal set; }
+        // --- Ende Sicherheit
+
         public float Width => WidthCells * ZoneGrid.CellSize;
         public float Depth => DepthCells * ZoneGrid.CellSize;
         /// <summary>Richtung entlang der Straße.</summary>

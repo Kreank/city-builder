@@ -21,6 +21,8 @@ namespace CityBuilder.Game.UI.Hud
         Bus,
         /// <summary>Bahn: Zug von vorn auf dem Gleis.</summary>
         Train,
+        /// <summary>Sicherheit: Flamme (Brände/Brandgefahr), Schild mit Stern (Kriminalität/Polizei).</summary>
+        Flame, Shield,
     }
 
     /// <summary>
@@ -101,6 +103,17 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Info:
                     Circle(12, 12, 9); Line(12, 11, 12, 16.5f); Line(12, 7.5f, 12, 7.6f);
+                    break;
+                case HudIconKind.Flame: // Sicherheit: Flamme mit innerer Zunge
+                    p.BeginPath(); p.MoveTo(P(12, 3)); p.BezierCurveTo(P(16, 8), P(19, 11), P(18, 15.5f));
+                    p.BezierCurveTo(P(17, 19.5f), P(14.5f, 21), P(12, 21)); p.BezierCurveTo(P(9.5f, 21), P(7, 19.5f), P(6, 15.5f));
+                    p.BezierCurveTo(P(5.5f, 12.5f), P(7.5f, 10), P(9, 8.5f)); p.BezierCurveTo(P(9.5f, 11), P(10.5f, 12), P(11.5f, 12.5f));
+                    p.BezierCurveTo(P(11, 9), P(11, 6), P(12, 3)); p.ClosePath(); p.Stroke();
+                    p.BeginPath(); p.MoveTo(P(12, 21)); p.BezierCurveTo(P(10, 20), P(9.5f, 17.5f), P(12, 14.5f)); p.BezierCurveTo(P(14.5f, 17.5f), P(14, 20), P(12, 21)); p.Stroke();
+                    break;
+                case HudIconKind.Shield: // Sicherheit: Polizeischild mit Stern
+                    Poly(true, 12, 3, 20, 6, 19, 14, 12, 21, 5, 14, 4, 6);
+                    Poly(true, 12, 8, 13.2f, 10.8f, 16, 11, 13.8f, 12.9f, 14.5f, 15.6f, 12, 14.1f, 9.5f, 15.6f, 10.2f, 12.9f, 8, 11, 10.8f, 10.8f);
                     break;
                 case HudIconKind.Bus: // ÖPNV
                     Poly(true, 3, 17, 3, 7, 21, 7, 21, 17);
