@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace CityBuilder.Game.Inspect
 {
-    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service, TransitStop, TransitDepot /* ÖPNV */ }
+    public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service, TransitStop, TransitDepot /* ÖPNV */, Gateway /* Außenanbindung */ }
 
     /// <summary>Was im Inspektor ausgewählt ist (nur Art + Id – das Objekt wird jedes Frame neu nachgeschlagen).</summary>
     public readonly struct Selection
@@ -91,6 +91,19 @@ namespace CityBuilder.Game.Inspect
             }
             // --- Ende ÖPNV
 
+            // --- Außenanbindungen: Schild am Gateway (Kugel um den Schildpunkt, s. GatewayView)
+            if (world.Gateways != null)
+                foreach (var g in world.Gateways.All)
+                {
+                    if (!g.HasLocation) continue;
+                    if (RaySphere(ray, GatewayPoint(world, g), 18f, out float t) && t < best)
+                    {
+                        best = t;
+                        result = new Selection(SelectionKind.Gateway, g.Id);
+                    }
+                }
+            // --- Ende Außenanbindungen
+
             float bestVehicle = best + VehicleBias;
             foreach (var v in world.Traffic.Vehicles)
             {
@@ -120,6 +133,13 @@ namespace CityBuilder.Game.Inspect
             var p = System.Numerics.Vector2.Lerp(v.PrevPosition, v.Position, alpha);
             float h = Mathf.Lerp(v.PrevHeight, v.Height, alpha);
             return SimConvert.ToWorld(p, h + RoadMeshBuilder.RoadHeight + 1f);
+        }
+
+        /// <summary>Punkt des Gateway-Schilds in Unity-Koordinaten (wie <c>GatewayView</c>: etwas innerhalb des Kartenrands).</summary>
+        public static Vector3 GatewayPoint(SimulationWorld world, CityBuilder.Simulation.Gateways.Gateway g)
+        {
+            var p = g.Position - g.Direction * 90f;
+            return SimConvert.ToWorld(p, world.Terrain.HeightAt(p) + 8f);
         }
 
         /// <summary>Grobe sichtbare Höhe der Platzhalter aus <c>UtilityView</c>.</summary>

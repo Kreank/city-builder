@@ -236,11 +236,39 @@ namespace CityBuilder.Game.WorldMap
                 var col = c.IsPlayer ? new Color32(255, 216, 74, 255) : new Color32(20, 20, 20, 255);
                 px[(p.Height - 1 - p.YOf(c.CapitalCell)) * p.Width + p.XOf(c.CapitalCell)] = col;
             }
+            DrawGatewayRays(p, px); // Außenanbindungen: Richtungen der Anschlüsse ab der Startregion
             texture.SetPixels32(px);
             texture.Apply(false);
             shownMode = mode;
             shownCountryVersion = start;
         }
+
+        // --- Außenanbindungen (Gateways): Strahl je Anschluss ab der Mitte der Startregion (Autobahn rot, Bahn braun, Wasser hellblau)
+        void DrawGatewayRays(Planet p, Color32[] px)
+        {
+            var gw = tool != null && tool.Runner != null ? tool.Runner.World?.Gateways : null;
+            var start = p.StartRegion;
+            if (gw == null || start == null) return;
+            int cx = p.XOf(start.CenterCell), cy = p.YOf(start.CenterCell);
+            float cosLat = Mathf.Max(0.2f, Mathf.Cos(start.Latitude * Mathf.Deg2Rad));
+            foreach (var g in gw.All)
+            {
+                if (!g.HasLocation) continue;
+                Color32 col = g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Highway ? new Color32(230, 60, 40, 255)
+                    : g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Rail ? new Color32(140, 100, 70, 255)
+                    : new Color32(120, 220, 255, 255);
+                int len = g.Kind == CityBuilder.Simulation.Gateways.GatewayKind.Highway ? 7 : 4;
+                for (int k = 2; k <= len; k++)
+                {
+                    int x = cx + Mathf.RoundToInt(g.Direction.X * k / cosLat);
+                    int y = cy - Mathf.RoundToInt(g.Direction.Y * k); // Weltkarte: y wächst nach Süden
+                    if (y < 0 || y >= p.Height) break;
+                    x = ((x % p.Width) + p.Width) % p.Width;
+                    px[(p.Height - 1 - y) * p.Width + x] = col;
+                }
+            }
+        }
+        // --- Ende Gateways
 
         static readonly Color32[] BiomeColors =
         {

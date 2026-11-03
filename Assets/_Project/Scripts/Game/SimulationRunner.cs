@@ -40,6 +40,13 @@ namespace CityBuilder.Game
         /// <summary>Erster Start ohne Spielstand: läuft eine Platzhalterwelt, bis der Spieler im Neues-Spiel-Fenster startet.</summary>
         public bool AwaitingNewGame { get; private set; }
         // --- Ende Spielstart
+        // --- Außenanbindungen (Gateways)
+        [Header("Außenanbindung")]
+        [Tooltip("Beim Kartenstart eine Autobahn mit Anschlussstelle + Zubringer bauen (wie Cities: Skylines); dazu Bahn-/Wasserwege vorbereitet.")]
+        [SerializeField] bool prebuiltConnections = true;
+        [Tooltip("Zuzug und Handel nur über Anschlüsse (die Stadt muss an die Autobahn angeschlossen werden).")]
+        [SerializeField] bool requireGateways = true;
+        // --- Ende Gateways
 
         static int[] SpeedMultipliers => TimeModel.SpeedMultipliers;
 
@@ -86,6 +93,7 @@ namespace CityBuilder.Game
             {
                 var placeholder = CreateSettings();
                 placeholder.GenerateWorld = false;
+                placeholder.PrebuiltConnections = placeholder.RequireGatewayForMoveIn = placeholder.RequireGatewayForTrade = false; // Gateways: Platzhalter braucht keine Autobahn
                 World = SimulationWorld.CreateDefault(placeholder);
                 SetSpeed(0);
                 return;
@@ -144,6 +152,10 @@ namespace CityBuilder.Game
             GenerateWorld = generateWorld,   // Welt (Etappe 5)
             WorldSeed = worldSeed ?? this.worldSeed,
             StartRegion = startRegion ?? this.startRegion,
+            // --- Außenanbindungen (Gateways)
+            PrebuiltConnections = prebuiltConnections,
+            RequireGatewayForMoveIn = requireGateways,
+            RequireGatewayForTrade = requireGateways,
         };
 
         /// <summary>Ersetzt die laufende Welt (geladener Spielstand oder neues Spiel) und meldet <see cref="WorldReplaced"/>.</summary>

@@ -9,6 +9,11 @@ namespace CityBuilder.Simulation.Roads
         None = 0,
         /// <summary>Teil eines Kreisverkehrs (Ring hat Vorfahrt).</summary>
         Roundabout = 1,
+        /// <summary>
+        /// Gehört der Welt (vorgebaute Fernstraße/Anschlussstelle, s. <c>Gateways</c>): nicht abreißbar, nicht umbaubar,
+        /// Kosten und Unterhalt trägt die Welt. Bleibt beim Zerteilen erhalten (Anschluss neuer Rampen ist erlaubt).
+        /// </summary>
+        Locked = 2,
     }
 
     /// <summary>
@@ -39,6 +44,8 @@ namespace CityBuilder.Simulation.Roads
         public float[] Profile => profile == null ? null : (float[])profile.Clone();
 
         public bool IsRoundabout => (Flags & RoadSegmentFlags.Roundabout) != 0;
+        /// <summary>Gehört der Welt (Gateways): der Spieler darf es nicht abreißen, umbauen oder umdrehen.</summary>
+        public bool IsLocked => (Flags & RoadSegmentFlags.Locked) != 0;
         public float Slope => Length > 0f ? MathF.Abs(End.Height - Start.Height) / Length : 0f;
 
         /// <summary>Höhe der Fahrbahn über dem Gelände an Stelle t (negativ = unter der Erde).</summary>

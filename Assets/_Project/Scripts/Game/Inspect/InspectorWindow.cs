@@ -140,6 +140,7 @@ namespace CityBuilder.Game.Inspect
                 }
             }
             if (TransitHead(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
+            if (GatewayHead(ui, world, s)) return; // Außenanbindung
             // Keine (gültige) Auswahl: Stadtübersicht
             Head(ui, "Stadtübersicht (C)", Tone.Accent, GameHud.CityName, "Klick auf Gebäude, Fahrzeug, Dienst oder Versorger wählt aus · × schließt");
         }
@@ -204,6 +205,7 @@ namespace CityBuilder.Game.Inspect
                 }
             }
             if (TransitBody(ui, world, s)) return; // ÖPNV: Haltestelle/Depot
+            if (GatewayBody(ui, world, s)) return; // Außenanbindung
             CityBody(ui, world);
         }
 
@@ -218,7 +220,8 @@ namespace CityBuilder.Game.Inspect
                 if (b != null) ui.FieldLink(label, BuildingName(b), () => Go(SelectionKind.Building, b.Id));
                 else ui.Field(label, $"Gebäude #{p.BuildingId} (abgerissen)", Tone.Muted);
             }
-            else ui.Field(label, p.IsOutside ? $"außerhalb (Außenanschluss {p.ConnectionNodeId})" : "–");
+            else if (p.IsOutside) GatewayField(ui, world, label, p.ConnectionNodeId); // Außenanbindung: Gateway-Name
+            else ui.Field(label, "–");
         }
 
         /// <summary>Bürger als Listenzeile mit Avatar und Stimmung; Klick wählt ihn aus.</summary>
