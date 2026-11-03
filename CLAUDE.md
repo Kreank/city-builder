@@ -140,7 +140,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -462,7 +462,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Standard = Auswählen** (`RoadTool.SelectMode` = der vorhandene `Mode.Inspect`; bewusst kein neuer Enum-Wert, damit
   Inspektor/Picking/Views und Werkzeuge anderer Agenten unverändert passen). Start in diesem Modus, keine Bauvorschau,
   Linksklick wählt Gebäude, Fahrzeug, Bürger, Dienst, Versorger, Haltestelle/Depot.
-- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5 6) →
+- **Rückkehr:** Esc bzw. Rechtsklick (ohne laufenden Vorgang) → Auswählen; Werkzeugtaste erneut (K B U I T Z J L 4 5 6 7) →
   Auswählen (`RoadTool.ToggleMode`); R bleibt Gerade ↔ Kurve. Aktive Kategorie in der Bauleiste erneut anklicken → Auswählen.
   In Zonen/Gelände hat Rechtsklick eigene Bedeutung, dort nur Esc. Laufende Vorgänge melden Begleiter mit
   `RoadTool.RegisterOperation(busy, esc, rechtsklick)` (Leitungskette, Buslinie zeichnen, Verschieben): dann bricht Esc/RMB
@@ -1355,9 +1355,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   an Kreuzungen, ≤ 5 m vor Zufahrten, ≤ 12 m an Haltestellen, ≤ 2,5 m an Laternen, nicht auf Brücken/in Tunneln, nur wenn der
   Gehweg breit genug ist) und in Parks (innerer Ring, Kiosk nur im großen Park), LOD 450 m. `Environment/NoiseBarrierView`:
   Lärmschutzwände als 16-m-Kacheln. BusStop: wie bisher über `OwnModelCatalog.Transport` („bus_stop“).
-  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance/TrainStation, Infrastructure/Drawbridge, Vehicles/Taxi,
+  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance, Rail/Tram (vorgemerkt), Infrastructure/Drawbridge, Vehicles/Taxi,
   Terrain/Cliff_Corner/Cliff_Waterfall/Hill/Pond/River_* (Begründung im Bericht). Energy/*, Vehicles/*, Terrain/Cliff_Straight+Rocks:
-  s. „Energie erweitert & Dienstfahrzeuge“.
+  s. „Energie erweitert & Dienstfahrzeuge“. Transport/TrainStation + Rail/Locomotive/PassengerCoach/ContainerWagon/TankWagon/
+  LevelCrossing/Track_Straight: s. „Bahn (Stufe 2)“ (Ids train_station, rail_*; `Track_Straight` zugeordnet, Gleise zeichnet bisher das Mesh).
 - Organize verschiebt nur bekannte Paketordner (`ThirdPartySetup.PackageRoots`) und Ordner, die ein Paketimport neu
   angelegt hat (`ThirdParty/_Catalog/PackageRoots.txt`, mitgeschrieben vom `StorePackageImporter`), nie `_Project`.
 
@@ -1414,9 +1415,10 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - **Gesperrte Straßen** (`RoadSegment.IsLocked`): `RoadBuilder.Demolish` → false, `CheckReplace` → `RoadBuildError.Locked`,
   `RoadBuilder.Reverse` → null, `LockedReason(seg)` für den Hinweis; Kreisverkehr entfernt sie nicht; kein Unterhalt
   (`EconomySystem`); Flag bleibt beim Zerteilen (Rampen an die Autobahn anschließen geht weiter).
-- **Bahn** (vorbereitet): gerader Korridor quer durch die Karte (≥ 45° zur Autobahn, ≥ 480 m von der Anschlussstelle, Enden auf Land,
-  ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways „noch nicht befahrbar (Züge folgen)“. Freigehalten über den verketteten
-  `CitySystem.LotBlocker` (`InRailCorridor`). Gelände wird nicht gesperrt.
+- **Bahn**: gerader Korridor quer durch die Karte (≥ 45° zur Autobahn, ≥ 480 m von der Anschlussstelle, Enden auf Land,
+  ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways. Freigehalten über den verketteten `CitySystem.LotBlocker` (`InRailCorridor`).
+  **Seit Stufe 2 liegt darauf die zweigleisige Fernbahn-Hauptstrecke** (s. „Bahn (Stufe 2)“); die Rail-Gateways sind „noch nicht
+  befahrbar (Bahnhof an der Hauptstrecke fehlt)“ (`Gateway.RailBuilt`), bis ein Bahnhof in Betrieb ist → `Operational`.
 - **Wasser** (vorbereitet): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
   → Water-Gateways mit Breite, Tiefe, schiffbar ab 40 m/2,5 m (Meer immer), Name „Fluss stromab-/stromaufwärts Richtung …“ bzw.
   „Seeweg · Küste“. **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
@@ -1425,7 +1427,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   keine Gateways, zählt jeder befahrbare Außenanschluss (Testwelten). Sonst null → kein Zuzug (`BlockedMoveInsToday`). Zuzug startet
   die erste Fahrt (`StartMoveInTrip`: ein Erwachsener von `Place.Outside(Einfahrt)` heim, Rest ist schon da); `MovedInVia` zählt je
   Gateway. `ConnectionHint` („Stadt an die A 7 (Zubringer an der Anschlussstelle) anschließen, damit Leute kommen.“) solange ein
-  Wohngebäude ohne Anschluss ist (Stundenprüfung).
+  Wohngebäude ohne Anschluss ist (Stundenprüfung). **Bahn:** ein Personenbahnhof in Betrieb im Netzteil zählt als Anschluss
+  (`RailEntryFor` → Zugangsknoten des Bahnhofs, abwechselnd nach Wichtigkeit mit der Autobahn; `RailGatewayOfNode` ordnet
+  Bahnhofsknoten dem Rail-Gateway zu, `OfNode` fällt darauf zurück).
 - **Handel** (Hook `GoodsSystem.PreferredGateway`, `RequireGatewayForTrade`): `TradeNode(gut, import, vertrag, netzteil)` – Vertrag →
   Partner des laufenden Vertrags (`ContractPartner`), Weltmarkt → günstigstes Lieferland (Preis + Fracht) bzw. bester Abnehmer
   (`SpotPartner`, täglich); `GatewayToward(land)`: Landweg → Gateway Richtung Handelsort des Landes, Seeweg → Gateway Richtung Hafen
@@ -1437,7 +1441,8 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - **Zählung**: Fahrzeuge rein/raus je Straßen-Gateway (Fahrzeug-Ids auf dem ersten/letzten Stück, alle 8 Verkehrsschritte = 2 s Verkehrszeit als `ISubstepSystem`, gespeichert),
   Zuzüge, Import/Export-Ladungen + Wert (neue `Shipment`s mit `ConnectionNodeId`).
 - **Darstellung**: `Game/Gateways/GatewayView` (Begleiter am RoadTool): Schilder „A 7 · Richtung …“ (90 m innerhalb des Rands,
-  `WorldLabels`), Bahntrasse als gestrichelte Doppellinie mit „Bahntrasse · Züge folgen“, Wasserwege beschriftet, „Zubringer · hier
+  `WorldLabels`), Bahntrasse als gestrichelte Doppellinie mit „Bahntrasse · Züge folgen“ (nur ohne Hauptstrecke; mit Gleisen
+  „Fernbahn · Bahnhof an die Gleise setzen“, bis ein Bahnhof in Betrieb ist), Wasserwege beschriftet, „Zubringer · hier
   anschließen“ + Meldung (Schlüssel „gateway-connect“) solange `ConnectionHint`; HUD-Warnchip „Nicht angeschlossen“ (Klick →
   `CameraController.FocusOn` Zubringer). Inspektor: Gateways anklickbar (`SelectionKind.Gateway`, Art, Ziel inkl. Handelsweg, Zustand,
   Verkehr/Zuzug/Handel heute/gestern), Liste in der Stadtübersicht, Lkw/Orte außerhalb zeigen den Gateway. Weltkarte: Strahlen je
@@ -1447,7 +1452,7 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   abreißbar, Unterhalt, Zuzug erst nach Anschluss + Zuzügler-Auto auf der Einfahrt, Durchgangsverkehr ohne Anschluss/ohne Wende,
   Bahnkorridor frei, Wasser-Gateways, Import über den Gateway Richtung Partnerland + Vertrag, kein Umland, Speichern/Laden ohne
   Neubau + bitgleich, Erzeugung deterministisch; volle Erde Seeds 2024/74/333/592).
-- Später: Stufe 2 Bahn (Gleise, Bahnhof, Güter-/Personenzüge auf dem Korridor), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über
+- Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über
   den Wasser-Gateway, Klappbrücken), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
   Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
   andere echte Städte als Ziel.
@@ -1509,6 +1514,111 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   ≈ 11,6 ms je Kalender-Tick inkl. 180 Verkehrsschritten).
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
   (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
+
+## Bahn (Stufe 2)
+- `Simulation/Rail` (Namespace `CityBuilder.Simulation.Rail`): `RailTypes.cs` (`RailRules` = alle Zahlen, `StationCatalog`,
+  `TrainCatalog`, `RailCars`, `Station`/`Platform`, `Train`, `LevelCrossing`, `RailPassenger`, `RailOffer`), `RailSystem` (`world.Rail`,
+  `ISimulationSystem` + `ISubstepSystem` + `IUpkeepSource` „Bahn“, partial: `.Tracks` Gleise/Prüfungen/Fahrweg-Graph, `.Mainline`,
+  `.Stations`, `.Trains` Fahrplan/Blöcke/Fahren, `.Crossings`, `.Passengers`, `.Freight`, `.Save`). Erzeugt in `CreateDefault` nach den
+  Gateways (`Connect()` verdrahtet alle Hooks, auch beim Laden), `BuildMainline()` direkt nach `Gateways.Generate()` (nur neue Welt).
+- **Entscheidung Gleisnetz:** eigenes **zweites `RoadNetwork`** (`Rail.Tracks`) mit Gleistypen (`RoadCategory.Rail`, `RoadCatalog.RailMain`
+  160 km/h / `RailTrack` 120 km/h, nicht in `RoadCatalog.All`) statt Gleise im Straßennetz: Bézier, Knoten/Zerteilen, Höhen, Profile/
+  automatische Trassierung (Tunnel/Brücke), `RoadBuilder.Plan/Build/Demolish`, Budget-Hook und der Spielstand-Code werden 1:1
+  wiederverwendet, aber kein Straßenverbraucher (Spurgraph, Wegfindung, Gehwege, Zonenraster, Netzteile, Dienst-Reichweiten,
+  Bodenwert, Masten …) muss Gleise herausfiltern – und `TrafficSystem`/`VehicleView` (parallel bei agent/models2) bleiben fast
+  unberührt. Kleine, markierte Änderungen im Straßencode: `RoadType.MaxSlope` für Rail **3,5 %** (Stadt 10 %, Autobahn 6 %),
+  `RoadType.MinJunctionAngle` (Gleise 0°, Weiche zweigt flach ab), `RoadBuilder.InSwitchZone` (45 m Weichenbereich ist keine Kreuzung),
+  Hook `RoadNetwork.ExternalCheck` am Ende von `Validate`, neue Fehler `RailCrossing`, `OverlapsRail`, `TrackGeometry`, `TrackOccupied`.
+- **Gleisregeln** (`CheckTrackPlan`): Bogenhalbmesser ≥ `MinRadius` 150 m (`MinRadius(p0, c, p2)` aus der Bézier-Krümmung), Anschluss
+  **tangential**: am Gleisende Fortsetzung, mitten auf dem Gleis Weiche ≤ `MaxSwitchAngle` 12°, höchstens 3 Gleise je Knoten,
+  ebenerdige Gleiskreuzung ≥ 25°, belegte/reservierte Gleise werden weder zerteilt noch angeschlossen noch abgerissen. Fahrweg-Graph:
+  Übergang an einem Knoten nur bei Ablenkung ≤ `MaxDeflection` 20° (Weiche/Kreuzung von selbst richtig). Zonen-Gebäude unter neuen
+  Gleisen werden abgerissen, Bauwerke (Dienste, Versorger, Depots, gesetzte Häuser, Bahnhofsgebäude) sperren. Gelände: `ConformTo` wie
+  Straßen, verkettete `RoadRule`/`LockQuery`/`LotBlocker`; Kasse „Bau Bahn“ (`RailBudget` biegt die RoadBuilder-Buchung um),
+  Unterhalt 0,9 €/m/Woche, Abriss 25 %; Lärm (Gleistyp × 0,75 „Schienenbonus“, Tunnel still) über `NoiseSystem` → `StampNoise`.
+- **Straße ↔ Gleis** (eine Regel `CrossCheck` für beide Richtungen: Straßenplan gegen Gleise, Gleisplan gegen Straßen): gleiche Ebene
+  (±1,5 m) = **Bahnübergang** nur mit Stadtstraße, Winkel ≥ 35°, ≥ 20 m von Straßenknoten (Planenden + Straßenkreuzungen) und ≥ 25 m
+  von Weichen, nicht an Bahnsteigen; sonst **lichte Höhe** Gleis über Straße 5 m, Straße über Gleis 6,5 m (Oberleitung), dazwischen
+  `InsufficientClearance`; längs übereinander `OverlapsRail`. Autobahn/Rampe ebenerdig → `RailCrossing`.
+- **Hauptstrecke** (`BuildMainline`): zwei Gleise ±2,25 m um die Korridorachse (Rechtsverkehr: Gleis 1 A→B, Gleis 2 B→A), Gradiente =
+  geglättetes Gelände (160 m) mit 2 % (`MainlineGrade`), Boden über Wasser (Brücke), über jeder Straße, die den Korridor kreuzt
+  (Autobahn), Gleis ≥ Straße + 5 m + 1,2 m Tragwerk – steigungsgerecht ausgebreitet; Stücke ~260 m = Blockabschnitte (nicht über
+  Wasser/Kreuzungen geschnitten), eigenes Höhenprofil je Stück (`AddSegment(..., profile)`, Böschung bis 6 m). Gesperrt (`Locked`),
+  Kosten/Unterhalt trägt die Welt. Test (flach, Gelände, Weltseeds 99/7): Brücke 6,0–18,5 m über der Autobahn.
+- **Bahnhöfe** (`PlanStation(type, cursor)` → `BuildStation`, `DemolishStation` 25 %): rastet am nächsten ebenerdigen Gleis ≤ 40 m ein –
+  Rückseite parallel, 6 m hinter der Gleismitte (Bahnsteig dazwischen), Vorderseite zeigt vom Gleis weg zur Straße. **Personenbahnhof**
+  44×20 m, Bahnsteig 200 m, 120 000 € / 2 400 €/Woche; **Güterbahnhof** 60×30 m, Ladegleis 260 m, 150 000 € / 3 000 €/Woche. Bahnsteige
+  (`Platform`, abgeleitet): Gleise mit Mitte 3–16 m hinter der Rückseite, parallel (≤ 10°), mittig, über ≥ 60 % der Länge, max. 3 (an der
+  Hauptstrecke: beide Gleise). **In Betrieb** = Stadtstraße vor der Vorderseite (`RoadFront.FindAccess` ≤ 8 m; bauen geht auch ohne –
+  dann außer Betrieb mit Hinweis) **und** ein Bahnsteiggleis auf einem Fahrweg der Hauptstrecke (`MainlineEdges`: vorwärts von den
+  Einfahrten und rückwärts von den Ausfahrten erreichbar). Sperren: Straßen weder durch Gebäude noch Bahnsteigfläche (Bauwerks-Art
+  „station“), Gleise nur nicht durchs Gebäude; Grundstücke/Terraforming/Versorger/Dienste gesperrt (verkettete Hooks).
+  `AccessNodeId` = Straßenknoten an der Zufahrt = **Ankunftsort** für Zuzug/Pendler per Bahn. Namen „{Stadt} Hbf“, weitere mit Himmelsrichtung.
+- **Züge** (`TrainCatalog`): **Fernzug** Lok + 6 Reisezugwagen (≈ 180 m, 160 km/h, 0,45/0,7 m/s², 432 Plätze), **Güterzug** Lok + 10 Wagen
+  (6 Container-, 4 Kesselwagen, ≈ 209 m, 100 km/h, 0,25/0,45 m/s²). **Fahrplan** (Kalender-Ticks): Fernzug je Richtung stündlich 6–22 Uhr (A zur
+  vollen, B zur halben Stunde), Güterzug alle 2 h rund um die Uhr. Fahrweg (`PlanRouteFrom`, Dijkstra über Fahrzeit, deterministisch)
+  Einfahrt → Ausfahrt, über das Bahnsteiggleis eines passenden Bahnhofs mit dem kürzesten Umweg (Überholgleis/Bahnhofsschleife wird
+  genommen); weitere Bahnhöfe auf dem Fahrweg bekommen auch einen Halt (Zugmitte an der Bahnsteigmitte). **Blocksystem:** Gleisstück =
+  Blockabschnitt mit Signal am Anfang, Knoten = Fahrstraßenelement; ein Zug fährt nur in Abschnitte, die er für sich reserviert hat
+  (Gleisstück frei + Einfahrknoten frei), reserviert voraus bis Bremsweg + 200 m und gibt hinter dem Zugende frei → Folgezüge halten am
+  Signal (10 m davor), Gegenzüge auf eingleisigen Stücken warten; warten zwei Züge > 240 s aufeinander, fällt der später eingesetzte aus.
+  Fahrt nach Bremskurve (v ≤ √(2·b·Abstand) bis Signal/Halteplatz, Bremskurven vor langsameren Abschnitten), Haltezeit 45 s + 0,3 s je
+  Ein-/Aussteiger bzw. 240 s Umschlag. Einfahrt am Kartenrand, sobald der erste Block frei ist (sonst ≤ 900 s warten, dann Ausfall),
+  Ausfahrt über den Rand hinaus. Umbau vor einem fahrenden Zug: Fahrweg ab dem letzten reservierten Stück neu (`Replan`).
+- **Bahnübergänge** (`LevelCrossing`, abgeleitet aus beiden Netzen, Zustand gespeichert): Schranke schließt, wenn ein Zug in 28 s + 40 m da
+  wäre oder den Übergang belegt, öffnet 3 s nach dem Zugende. Verkehr: Hook `TrafficSystem.BarrierAhead` (`TrafficSystem.Rail.cs`, eine
+  markierte Zeile in `StepOnLane`) = Haltelinie 3,5 m vor dem Gleisrand (schräg verlängert); Wartezeit vor der Schranke zählt nicht bis zum
+  90-s-Abbruch. Test: kein Auto auf dem Gleis, solange ein Zug drüberfährt.
+- **Fahrgäste** (Verkehrsmittelwahl bleibt im Bürgersystem, „Bus-Logik erweitert“, `CitizenSystem.Rail.cs`): Fahrten mit einem Ende
+  außerhalb (Pendler, Heim-/Arbeitswege, Zuzügler) bekommen ein Angebot `RailOffer` vom nächsten Personenbahnhof in Betrieb ≤ 2,2 km
+  (Zugang zu Fuß/Rad, Wartezeit bis zum nächsten Fernzug + 30 s, Fahrt bis zum Kartenrand, außerhalb 0,6 × Autozeit) →
+  `RailProbability` = logistisch((t_Auto − t_Bahn,gefühlt)/600 s + gesellig/naturverbunden/sparsam + Stau-Erinnerung − „Zug verspätet“ +
+  „gute Zugfahrt“). Echte Fahrgäste: abfahrend gehen sie zum Bahnhof, warten (≤ 1 100 s) und steigen in den nächsten haltenden Fernzug
+  (Plätze), fahren mit ihm aus der Karte; ankommend warten sie „draußen“ (≤ 1 400 s) und werden vom nächsten einfahrenden Fernzug mit Halt
+  an ihrem Bahnhof mitgenommen, steigen aus und gehen zum Ziel. Ergebnis → Erinnerungen `TrainRide`/`TrainLate` (neue `MemoryKind`s, je 4
+  Gedanken). Ohne Bahnhof wird kein Zufall gezogen (alles wie vorher). **Zuzug per Bahn:** `MoveInEntry` liefert den Ankunftsknoten des
+  Bahnhofs → Zuzügler fahren immer Zug (Ort „außerhalb“ = Bahnhofsknoten); **Pendler ohne Straßenanschluss** (`NearestExternal` fällt auf
+  den Bahnhof zurück) ebenso. Rail-Gateways zählen Zuzug (`TotalMoveIns`).
+- **Güter** (Hook-Kette um `GoodsSystem.PreferredGateway` + neu `GoodsSystem.FreightShareFor`): Güterbahnhof in Betrieb im Netzteil der
+  Firma → Import/Export über seinen Zugangsknoten (Lkw nur Firma ↔ Güterbahnhof), Fernfracht **4,5 %** statt 8 % des Warenwerts;
+  Kapazität 480 Ladungen/Tag (24 Güterzughalte × 10 Wagen × 2), darüber wieder per Lkw über die Autobahn. Ladungen werden gezählt
+  (`LoadsToday`, `PendingLoads` → Umschlag beim nächsten Güterzughalt).
+- **Kasse:** neue Kategorien (hinten angefügt) `RailConstruction` „Bau Bahn“ (Gleise, Bahnhöfe) und `RailFares` „Bahn: Entgelte &
+  Fahrgeld“ (Einnahme: 60 € je Fernzughalt, 90 € je Güterzughalt, 2,50 € je Ein-/Aussteiger, 6 € je umgeschlagener Ladung, gebucht alle 5
+  Ticks); Unterhalt Bahnhöfe + Spielergleise als `IUpkeepSource` „Bahn“ (Kategorie Dienste). Fernzüge/Hauptstrecke zahlt die Welt.
+- **Spielstand** „rail“ v1 (automatisch hinten in der `SaveRegistry`, `IAfterLoad`): Gleisnetz (`RoadNetwork.Write/Read`), Hauptstrecken-
+  Enden, Bahnhöfe + Statistik, Züge vollständig (Fahrweg inkl. Längen, Spitze, Tempo, Reservierungen, Halte, Fahrgäste), Fahrgäste
+  (wartend/draußen/im Zug), Schrankenzustand (über die Lage), Zähler. Abgeleitet: Fahrweg-Graph, Bahnsteige/Zufahrt, Bahnübergänge,
+  Gateway-Status. Test: Speichern mitten in der Zugfahrt (Bahnübergang, Halt) → beide Welten 2 500 Verkehrsschritte bitgleich.
+- **Unity** (`Game/Rail`, Begleiter am RoadTool): `RailView` (Gleis-Mesh je Stück: Schotter, Schwellen, Schienen, Fahrdraht + Masten,
+  Brücken mit Tragwerk/Pfeilern; Blocksignale rot/grün per Instancing, `ShowSignals`; Bahnhof = Modell „train_station“
+  (`Models/Transport/TrainStation`) bzw. Platzhalter, Bahnsteige + Dach, Güterbahnhof-Platzhalter mit Halle/Containern/Kran;
+  Bahnübergang = Modell „rail_level_crossing“ (`Models/Rail/LevelCrossing`, Schranken `BarrierA/B` drehen um die Gleisachse) bzw.
+  Platzhalter; Züge aus `Models/Rail` – Lok, Reisezugwagen, Container-/Kesselwagen, an zwei Drehgestellpunkten ausgerichtet, zwischen
+  zwei Verkehrsschritten interpoliert, sonst Quader; `PickTrain`/`TryGetTrainPosition` für den Inspektor). `RailTool` (**Taste 7** – 7 war
+  frei; Modus `RoadTool.Mode.Rail`): Gleis (Start/Ende, Kette; ab einem Gleis automatisch tangential = Weiche), Gleisbogen (3 Klicks),
+  Personen-/Güterbahnhof (Geist am Gleis eingerastet, Hinweis zu Bahnsteigen/Straßenfront), Abriss (Gleis/Bahnhof); Bild↑/↓ Bauhöhe
+  (0 = automatische Trassierung). Bauleiste: eigene Kategorie **„Bahn“** (`GameHud.Rail.cs`, Icon `HudIconKind.Train`, Abriss-Kachel
+  „Gleis/Bahnhof“). `RailWindow` (rechts, **F7** bzw. im Werkzeug): Hauptstrecke/Rail-Gateways, Fahrplan, Bahnhöfe, Züge, Bahnübergänge.
+  Inspektor: `SelectionKind.Train` (anklickbar, Folgen, Halte, Fahrgäste aus der Stadt) und `SelectionKind.Station` (Betrieb, Gleise
+  belegt/frei, Statistik, Entgelte), Bürger „im Zug/wartet am Bahnsteig“. `GatewayView`: gestrichelte Trasse nur ohne Hauptstrecke.
+  Modellzuordnung über `Name.json` (role transport) + `OwnModelDescriptions.TransportFiles`; `Rail/Tram` bleibt vorgemerkt.
+  **Optik ungeprüft** (Unity nicht gestartet): Gleis-Mesh/Normalen, Ausrichtung der Rail-Modelle und Schrankendrehsinn, Bahnsteighöhen,
+  Signale, Fahrdrahthöhe, Platzhalter.
+- **Tests** `RailTests` (19): Hauptstrecke zweigleisig/gesperrt/2 %/Brücke über Autobahn und Wasser (flach + 3 Gelände-Seeds), Spielwelten
+  2024/74/333 (Bahnhofsplatz vorhanden, ½ Tag Fahrplan ohne Ausfall), Gleisregeln (Radius, 3,5 % statt 10 %, Weiche flach ja/30° nein,
+  Sperre, Kosten), Straße ↔ Gleis (Bahnübergang, Autobahn nein, 3 m nein/7 m ja, 20° nein, längs nein, zu nah an Kreuzung, Gleis über
+  vorhandene Straße), Bahnhof (Einrasten, 2 Bahnsteige, Straßenfront → Betrieb → Gateway befahrbar, Sperre, Abriss), Fernzug hält/Güterzug
+  fährt durch, Blocksignale (3 Züge, nie Abstand < 0, Signalhalt), Überholgleis mit Bahnhof (Fernzug nimmt es, wartender Zug plant neu),
+  Bahnübergang (Schranke zu, Autos warten, keins auf dem Gleis), Zuzug + Auspendler nur per Bahn, Güterbahnhof (Hook, Import per Bahn
+  billiger, Umschlag), Speichern/Laden bitgleich, ohne Gateways keine Bahn.
+- **Nächste Teilstufe (offen):** eigene Regional-/S-Bahn-Linien des Spielers (Zugdepot, Linien zwischen eigenen Bahnhöfen, Takt, Fahrgeld
+  wie Bus, Umstieg Bus ↔ Bahn in `PlanRide`), Wenden in Kopfbahnhöfen (heute nur Durchgangsfahrwege), Güterbahnhof an einem Stumpfgleis,
+  echte Ladungen im Güterzug (Wagen je Gut statt Zähler, Lieferzeit per Zug), Signale als eigene Objekte (Vorsignal, Blockteilung
+  langer Stücke, Fahrstraßen über ganze eingleisige Abschnitte statt Ausfall bei Gegenseitigkeit), Rückstau über den Bahnübergang
+  verhindern (heute dürfen Autos auf dem Übergang stehen bleiben, der Zug „fährt durch“), Fußgänger an Schranken, Bahnhof verschieben (Y),
+  Bahnhof als Ziel im Bus-Netz (Zubringerlinien), Schlagzeilen (neuer Bahnhof, Verspätungen), Tram (`Models/Rail/Tram`, `RoadCatalog.CityTram`),
+  Lärm nach echten Zugzahlen je Gleis, Bodenwert-Bonus Bahnhofsnähe, Oberleitung/Masten als Modell (`Track_Straight` liegt bereit).
 
 ## Speichern & Laden
 - **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
@@ -1614,9 +1724,15 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
        Weltkarte, Zuzug nur über Anschlüsse (Zuzügler fahren vom Gateway), Handel über den Gateway Richtung Partnerland (Seeweg
        vorerst per Lkw zum Hafen außerhalb), Durchgangsverkehr nach Wichtigkeit, Bahnkorridor + Wasserstraßen vorbereitet,
        Schilder/Inspektor/HUD-Hinweis/Weltkarte (im Editor noch nicht visuell abgenommen)
-     - Stufe 2 Bahn (Gleise auf dem Korridor, Bahnhof, Güter-/Personenzüge), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über den
-       Wasser-Gateway), Stufe 4 Flughafen
-   - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien, Tram, U-Bahn, S-Bahn, Fernbahn, Flughafen
+     - ✅ Stufe 2 Bahn (s. „Bahn (Stufe 2)“): zweigleisige Fernbahn-Hauptstrecke auf dem Korridor (gesperrt, Brücke über die
+       Autobahn), eigenes Gleisnetz mit strengeren Regeln (3,5 %, Radius 150 m, tangentiale Weichen), Bahnübergang mit Schranke
+       (Verkehr wartet) bzw. Brücke/Tunnel, Personen- und Güterbahnhof (Straßenfront, Bahnsteige), Fernzüge (Halt am eigenen Bahnhof)
+       und Güterzüge mit Blockabschnitten/Signalen, Fahrgäste aus der Verkehrsmittelwahl, Zuzug/Pendler per Bahn (Rail-Gateway
+       befahrbar), Import/Export über den Güterbahnhof billiger, Kasse, Spielstand, Werkzeug 7/F7/Inspektor (im Editor noch nicht
+       visuell abgenommen). Nächste Teilstufe: eigene Regional-/S-Bahn-Linien mit Zugdepot, Kopfbahnhöfe/Wenden, echte Ladung je Wagen,
+       Fahrstraßen über eingleisige Abschnitte, Rückstau am Bahnübergang, Tram
+     - Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über den Wasser-Gateway), Stufe 4 Flughafen
+   - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien ✅, Fernbahn ✅ (Stufe 2), Tram, U-Bahn, S-Bahn, Flughafen
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
        Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
