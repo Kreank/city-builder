@@ -125,7 +125,6 @@ namespace CityBuilder.Game.Roads
 
             // Zugehörige Anzeigen hängen am Werkzeug – so muss die Szene nicht neu erzeugt werden.
             Ensure<RoadGuidesView>().Init(this, previewMaterial);
-            Ensure<RoadToolbar>().Init(this);
             Ensure<TrafficPanel>().Init(this, previewMaterial);
 
             var networkView = GetComponent<RoadNetworkView>();
@@ -167,11 +166,16 @@ namespace CityBuilder.Game.Roads
                 utilityOverlay.Init(runner, litBase, previewMaterial);
             }
             Ensure<CityBuilder.Game.Utilities.UtilityPanel>().Init(this, utilityOverlay);
+            Ensure<CityBuilder.Game.Utilities.UtilityAlerts>().Init(runner); // Meldungen (Toasts) zur Versorgung
             // --- Ende G3
 
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
             // --- Ende Stadtkasse
+
+            // Spiel-UI (UI Toolkit) zuletzt – sie greift auf die Begleiter oben zu. Fehlen Theme/USS in Resources,
+            // bleibt die alte IMGUI-Bauleiste als Rückfall.
+            if (!Ensure<CityBuilder.Game.UI.Hud.GameHud>().Init(this)) Ensure<RoadToolbar>().Init(this);
         }
 
         /// <summary>Unterirdisch-Ansicht erzwingen (G3: Wasserrohre verlegen).</summary>
