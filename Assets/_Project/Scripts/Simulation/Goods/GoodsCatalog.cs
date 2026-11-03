@@ -24,16 +24,16 @@ namespace CityBuilder.Simulation.Goods
         Luxury,
     }
 
-    /// <summary>Ressourcen der Welt-/Bodenkarte (Ids als Strings, wie sie der Agent „world“ liefert).</summary>
+    /// <summary>Ressourcen der Welt-/Bodenkarte – dieselben Ids wie <see cref="World.ResourceIds"/> (verbindlich dort).</summary>
     public static class ResourceIds
     {
-        public const string Fertility = "fertility";
-        public const string Wood = "wood";
-        public const string Ore = "ore";
-        public const string Coal = "coal";
-        public const string Oil = "oil";
-        public const string Sand = "sand";
-        public const string Groundwater = "groundwater";
+        public const string Fertility = World.ResourceIds.Fertility;
+        public const string Wood = World.ResourceIds.Wood;
+        public const string Ore = World.ResourceIds.Ore;
+        public const string Coal = World.ResourceIds.Coal;
+        public const string Oil = World.ResourceIds.Oil;
+        public const string Sand = World.ResourceIds.Sand;
+        public const string Groundwater = World.ResourceIds.Groundwater;
 
         public static readonly string[] All = { Fertility, Wood, Ore, Coal, Oil, Sand, Groundwater };
 

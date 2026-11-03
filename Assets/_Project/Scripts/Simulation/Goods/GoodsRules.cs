@@ -101,6 +101,23 @@ namespace CityBuilder.Simulation.Goods
         /// <summary>Büro/Dienstleistung: Erlös je Beschäftigtem und Tag bei normaler Nachfrage.</summary>
         public const double OfficeRevenuePerWorker = 185.0;
 
+        // ------------------------------------------------------------ Vorkommen (Bindung an world.Resources)
+        /// <summary>
+        /// Entnahme aus der Bodenkarte je geförderter Einheit (Einheit der Karte, <c>ResourceKind.Unit</c>).
+        /// Erz/Kohle in t = Gewicht der Ware, Erdöl/Sand in m³ = Volumen der Ware (1:1 physisch). Holz und Boden
+        /// im Spielmaßstab: die Karte entnimmt nur im 3×3-Zellen-Fenster (~48 × 48 m) um den Betrieb, ein Forst bzw.
+        /// Hof bewirtschaftet aber viel mehr Fläche – physisch (1,5 m³ Holz je Einheit) wäre der Wald in Stunden weg.
+        /// </summary>
+        public const float WoodPerUnit = 0.01f;       // m³ Waldbestand je Einheit Holz
+        public const float FertilityPerUnit = 0.001f; // Bodenpunkte je Einheit Ernte (Getreide/Vieh)
+        /// <summary>Ernte: Jahresmittel des Klimas wird auf diesen Bezug normiert (gemäßigt ≈ 1), begrenzt 0,4–1,2.</summary>
+        public const float HarvestReference = 0.5f;
+        /// <summary>
+        /// Grundertrag unabhängig von der Jahreszeit (Vieh, Lager, Gewächshaus): Ernte = Grund + (1 − Grund) × Jahresgang.
+        /// Ohne ihn stünde jeder Hof den ganzen Winter still und ginge über die 21-Tage-Verlustregel pleite.
+        /// </summary>
+        public const float HarvestFloor = 0.6f;
+
         // ------------------------------------------------------------ Haushalte
         /// <summary>Ein Einkauf deckt so viele Tage Verbrauch (das Bedürfnis „Einkauf“ erreicht 1 nach ~3 Tagen).</summary>
         public const float DaysPerShopping = 3f;

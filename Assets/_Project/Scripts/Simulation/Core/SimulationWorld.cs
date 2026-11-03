@@ -167,6 +167,7 @@ namespace CityBuilder.Simulation.Core
             world.Goods = new GoodsSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
             world.AddSystem(world.Goods);
             GoodsBinding.Connect(world.Goods, world.City, world.Citizens, world.Utilities);
+            GoodsBinding.ConnectWorld(world.Goods, world.Resources, world.Climate); // Vorkommen + Ernte aus der Welt
             // --- Ende G5
 
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)

@@ -77,6 +77,43 @@ namespace CityBuilder.Simulation.Goods
         /// </summary>
         public Func<string, Vector2, float, float> Extract { get; set; } = (id, p, amount) => amount;
 
+        /// <summary>
+        /// Erntefaktor der Landwirtschaft am Spieltag (Jahreszeit/Klima, Mittel ≈ 1). null = 1. Gesetzt in
+        /// <see cref="GoodsBinding.ConnectWorld"/> aus <c>world.Climate.HarvestFactor</c>.
+        /// </summary>
+        public Func<int, float> HarvestFactor { get; set; }
+        int harvestDay = -1;
+        float harvestToday = 1f;
+
+        /// <summary>Erntefaktor heute (für Inspektor/Tests).</summary>
+        public float HarvestToday
+        {
+            get
+            {
+                int day = clock.Day;
+                if (day != harvestDay) { harvestDay = day; harvestToday = HarvestFactor != null ? MathF.Max(0f, HarvestFactor(day)) : 1f; }
+                return harvestToday;
+            }
+        }
+
+        /// <summary>
+        /// Abstand (m) für die Güte des Vorkommens: &gt; 0 = Mittel über 3×3 Punkte (wie das Entnahmefenster der Bodenkarte),
+        /// 0 = nur der Grundstücksmittelpunkt.
+        /// </summary>
+        public float DepositSampleSpacing { get; set; }
+
+        /// <summary>Güte eines Vorkommens an einem Ort (0..1, s. <see cref="DepositSampleSpacing"/>).</summary>
+        public float DepositQualityAt(string id, Vector2 p)
+        {
+            if (DepositAt == null || id == null) return 0f;
+            float d = DepositSampleSpacing;
+            if (d <= 0f) return Math.Clamp(DepositAt(id, p), 0f, 1f);
+            float sum = 0f;
+            for (int y = -1; y <= 1; y++)
+                for (int x = -1; x <= 1; x++) sum += DepositAt(id, p + new Vector2(x * d, y * d));
+            return Math.Clamp(sum / 9f, 0f, 1f);
+        }
+
         /// <summary>Löhne je Tag der Beschäftigten eines Gebäudes (Bürgersystem). null = Beschäftigte × <see cref="GoodsRules.DefaultWage"/>.</summary>
         public Func<int, double> WageBill { get; set; }
 
@@ -217,7 +254,7 @@ namespace CityBuilder.Simulation.Goods
                 f.InputValue[g] = value;
                 f.Cash -= value;
             }
-            f.DepositQuality = f.Recipe.Deposit != null ? Math.Clamp(DepositAt?.Invoke(f.Recipe.Deposit, f.Building.Position) ?? 0f, 0f, 1f) : 0f;
+            f.DepositQuality = f.Recipe.Deposit != null ? DepositQualityAt(f.Recipe.Deposit, f.Building.Position) : 0f;
             f.ProfitEma = f.RevenueEma = 0;
             f.LossDays = 0;
         }
@@ -264,6 +301,7 @@ namespace CityBuilder.Simulation.Goods
                 if (f.DepositQuality < f.Recipe.MinDeposit) { f.Status = FirmStatus.NoDeposit; f.Productivity = 0f; return; }
                 p *= Math.Clamp(0.5f + f.DepositQuality, 0.5f, 1.5f);
             }
+            if (f.Form == IndustryForm.Agriculture) p *= HarvestToday; // Jahreszeit/Klima
             f.Productivity = p;
             if (f.Role == FirmRole.Retail)
             {
@@ -420,7 +458,7 @@ namespace CityBuilder.Simulation.Goods
                 // Täglich: Belegschaft/Bildung, Vorkommen, Lagergröße bei geänderten Arbeitsplätzen
                 UpdateSkills(f);
                 if (f.Recipe.Deposit != null)
-                    f.DepositQuality = Math.Clamp(DepositAt?.Invoke(f.Recipe.Deposit, b.Position) ?? 0f, 0f, 1f);
+                    f.DepositQuality = DepositQualityAt(f.Recipe.Deposit, b.Position);
                 if (!sizedJobs.TryGetValue(f.BuildingId, out int sized) || sized != f.Jobs)
                 {
                     f.SizeStorage();

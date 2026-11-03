@@ -192,6 +192,76 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(0f, mine.OutputOf(GoodsCatalog.Grain));
         }
 
+        // ------------------------------------------------------------ Welt: Vorkommen und Ernte
+
+        [Fact]
+        public void Mining_DepletesOreDeposit_FromWorldResources()
+        {
+            var lab = new Lab(retail: false);
+            var res = lab.W.Resources;
+            GoodsBinding.ConnectWorld(lab.Goods, res, lab.W.Climate);
+            var firm = lab.Industry[0];
+            var pos = firm.Building.Position;
+            // Erz um den Betrieb (3×3 Zellen) auf 0,3 setzen, damit es in überschaubarer Zeit erschöpft ist
+            var layer = res.Layer(ResourceIds.Ore);
+            Assert.True(layer.TryWorldToCell(pos, out int cx, out int cy));
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++) layer.RawValues[(cy + dy) * layer.Width + cx + dx] = 0.3f;
+            layer.MarkChanged();
+            double before = res.TotalAmount(ResourceIds.Ore);
+            Assert.True(lab.Goods.Restructure(firm, RecipeCatalog.Get("ore_mine")));
+            Assert.Equal(0.3f, firm.DepositQuality, 3);
+
+            float produced = 0f;
+            int day = 0;
+            for (; day < 200 && firm.Status != FirmStatus.NoDeposit; day++)
+            {
+                for (int h = 0; h < GoodsRules.StepsPerDay; h++) lab.Goods.ForceStep();
+                produced += firm.Today.Produced;
+                lab.Goods.ForceCloseDay();
+            }
+            double after = res.TotalAmount(ResourceIds.Ore);
+            output.WriteLine($"Erz gefördert {produced:0} E in {day} Tagen, Karte −{before - after:0} t, Güte jetzt {lab.Goods.DepositQualityAt(ResourceIds.Ore, pos):0.000}");
+            Assert.True(produced > 100f);
+            // Wareneinheit Erz = 1 t (Gewicht) → Karte verliert genau die geförderte Menge
+            Assert.Equal(produced * GoodsCatalog.Ore.Weight, before - after, 0);
+            Assert.Equal(FirmStatus.NoDeposit, firm.Status);
+            Assert.True(lab.Goods.DepositQualityAt(ResourceIds.Ore, pos) < RecipeCatalog.Get("ore_mine").MinDeposit);
+            // Erschöpft → keine Förderung mehr
+            lab.Goods.ForceStep();
+            Assert.Equal(0f, firm.Today.Produced);
+        }
+
+        [Fact]
+        public void Harvest_FollowsSeason()
+        {
+            var lab = new Lab(retail: false);
+            GoodsBinding.ConnectWorld(lab.Goods, lab.W.Resources, lab.W.Climate);
+            var farm = lab.Setup("farm")[0];
+            Assert.True(farm.DepositQuality >= farm.Recipe.MinDeposit, $"Fruchtbarkeit {farm.DepositQuality:0.00}");
+            var climate = lab.W.Climate;
+            // Mittel über das Jahr ≈ Klima-Faktor, Winter (Januar) deutlich unter Sommer (Juli)
+            float mean = 0f;
+            for (int d = 0; d < SimulationClock.DaysPerYear; d++) mean += lab.Goods.HarvestFactor(d);
+            mean /= SimulationClock.DaysPerYear;
+            float scale = Math.Clamp(climate.AnnualHarvestFactor / GoodsRules.HarvestReference, 0.4f, 1.2f);
+            Assert.Equal(scale, mean, 2);
+
+            float ProducedOn(int dayOfYear)
+            {
+                while (lab.W.Clock.Day % SimulationClock.DaysPerYear != dayOfYear) for (int i = 0; i < SimulationClock.TicksPerDay; i++) lab.W.Clock.Advance();
+                farm.Today.Clear();
+                farm.OutputStock[GoodsCatalog.Grain.Index] = 0f;
+                farm.OutputStock[GoodsCatalog.Livestock.Index] = 0f;
+                lab.Goods.ForceStep();
+                return farm.Today.Produced;
+            }
+            float winter = ProducedOn(15), summer = ProducedOn(195);
+            output.WriteLine($"Ernte je Stunde Winter {winter:0.00}, Sommer {summer:0.00}, Jahresmittel-Faktor {mean:0.00}");
+            Assert.True(summer > winter * 1.5f, "Sommer bringt deutlich mehr als Winter");
+            Assert.True(summer > 0f);
+        }
+
         // ------------------------------------------------------------ Markt & Preise
 
         [Fact]

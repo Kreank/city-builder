@@ -16,7 +16,7 @@ namespace CityBuilder.Simulation.Goods
             float depositFactor = 1f, depositBonus = 0f;
             if (r.Deposit != null)
             {
-                float q = DepositAt?.Invoke(r.Deposit, b.Position) ?? 0f;
+                float q = DepositQualityAt(r.Deposit, b.Position);
                 if (q < r.MinDeposit) return float.NegativeInfinity;
                 // Rohstoff vor Ort ist ein Standortvorteil (reiche Vorkommen werden fast immer genutzt)
                 depositFactor = 0.6f + q;
