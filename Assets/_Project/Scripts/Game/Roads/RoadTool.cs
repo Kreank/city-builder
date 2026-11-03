@@ -8,6 +8,8 @@ using CityBuilder.Simulation.Roads;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using SimVector2 = System.Numerics.Vector2;
+using IndustryFocus = CityBuilder.Simulation.Goods.IndustryFocus;       // Produktion lenken
+using IndustryBranches = CityBuilder.Simulation.Goods.IndustryBranches; // Produktion lenken
 
 namespace CityBuilder.Game.Roads
 {
@@ -224,6 +226,7 @@ namespace CityBuilder.Game.Roads
 
             // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
+            Ensure<CityBuilder.Game.Goods.IndustryFocusView>().Init(this, previewMaterial); // Produktion lenken: Schwerpunkt-Gebiete
             // --- Ende G5
 
             // --- Speichern & Laden: Spielmenü (Esc), Strg+S/Strg+L, Autosave
@@ -247,10 +250,40 @@ namespace CityBuilder.Game.Roads
         public void SelectZone(ZoneType zone)
         {
             SelectedZone = zone;
+            SelectedFocus = null; // Produktion lenken: zurück zum Zonen-Pinsel
+            SetBrush(BrushRadius);
             SetMode(Mode.Zone);
         }
 
-        public void SetBrush(float radius) => BrushRadius = Mathf.Clamp(radius, 4f, 60f);
+        public void SetBrush(float radius) => BrushRadius = Mathf.Clamp(radius, 4f, SelectedFocus.HasValue ? 160f : 60f);
+
+        // --- Produktion lenken: Pinsel-Art „Schwerpunkt“ im Zonen-Werkzeug (keine eigene Taste)
+        /// <summary>Gewählter Schwerpunkt (null = normaler Zonen-Pinsel). <see cref="IndustryFocus.Auto"/> = Schwerpunkt entfernen.</summary>
+        public IndustryFocus? SelectedFocus { get; private set; }
+
+        public void SelectFocus(IndustryFocus focus)
+        {
+            bool fromZoneBrush = !SelectedFocus.HasValue;
+            SelectedFocus = focus;
+            if (fromZoneBrush && BrushRadius < 48f) BrushRadius = 48f; // Gebiete sind groß
+            SetMode(Mode.Zone);
+        }
+
+        /// <summary>LMB malt den Schwerpunkt, RMB setzt „automatisch“; Hinweis = Vorkommen unter dem Pinsel.</summary>
+        void UpdateFocusBrush(SimVector2 raw, Mouse mouse)
+        {
+            var policy = runner.World.Policy;
+            if (policy == null || !SelectedFocus.HasValue) return;
+            var focus = SelectedFocus.Value;
+            if (mouse.leftButton.isPressed) policy.Paint(raw, BrushRadius, focus);
+            else if (mouse.rightButton.isPressed) policy.Paint(raw, BrushRadius, IndustryFocus.Auto);
+            var here = policy.FocusAt(raw);
+            string info = policy.DepositHint(focus, raw);
+            if (here != focus) info += $"  ·  hier bisher: {IndustryBranches.ShortName(here)}";
+            float h = GroundAt(raw);
+            Guide = new GuideState { Active = true, LabelOnly = true, Valid = true, Start = raw, End = raw, StartHeight = h, EndHeight = h, Info = info };
+        }
+        // --- Ende Produktion lenken
 
         void UpdateZone(SimVector2 raw)
         {
@@ -258,6 +291,7 @@ namespace CityBuilder.Game.Roads
             CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw));
             HidePreview();
             var mouse = Mouse.current;
+            if (SelectedFocus.HasValue) { UpdateFocusBrush(raw, mouse); return; } // Produktion lenken
             var city = runner.World.City;
             // Malen mit gedrückter linker, Löschen mit gedrückter rechter Maustaste
             if (mouse.leftButton.isPressed) city.Paint(raw, BrushRadius, SelectedZone);

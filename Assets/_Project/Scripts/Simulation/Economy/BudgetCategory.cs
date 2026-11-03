@@ -56,6 +56,11 @@ namespace CityBuilder.Simulation.Economy
         // --- Ende Etappe 8
         /// <summary>Ausgabe: Bau/Umzug einzeln gesetzter Wohnhäuser (Anno-Stil).</summary>
         HouseConstruction,
+
+        // --- Produktion lenken (hinten angefügt)
+        /// <summary>Ausgabe: Wirtschaftsförderung je Branche (Geld je Beschäftigtem an geförderte Firmen).</summary>
+        IndustrySubsidies,
+        // --- Ende Produktion lenken
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -69,7 +74,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.HouseConstruction + 1; // letzte Kategorie (Wohnhäuser hinter Etappe 8)
+        public const int Count = (int)BudgetCategory.IndustrySubsidies + 1; // letzte Kategorie (Wohnhäuser, dann Produktion lenken hinter Etappe 8)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -116,6 +121,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.PenaltiesPaid: return "Vertragsstrafen (gezahlt)";
                 // --- Ende Etappe 8
                 case BudgetCategory.HouseConstruction: return "Bau Wohnhäuser";
+                case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
                 default: return c.ToString();
             }
         }

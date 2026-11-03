@@ -12,9 +12,9 @@ namespace CityBuilder.Game.UI.Windows
     /// und Lieferungen. Zustand (offen/zu, Reiter, Taste) bleibt im <see cref="GoodsPanel"/>, das sonst als IMGUI-Rückfall
     /// zeichnet. Liest nur die Abfrage-API des <see cref="GoodsSystem"/>.
     /// </summary>
-    public sealed class GoodsWindow : GameWindow
+    public sealed partial class GoodsWindow : GameWindow
     {
-        static readonly string[] TabNames = { "Güter", "Firmen", "Lieferungen" };
+        static readonly string[] TabNames = { "Güter", "Firmen", "Lieferungen", "Lenkung" }; // Lenkung: GoodsWindow.Policy.cs
         const int MaxRows = 60;
 
         readonly GoodsPanel panel;
@@ -53,7 +53,8 @@ namespace CityBuilder.Game.UI.Windows
             {
                 case 0: DrawGoods(ui, g); break;
                 case 1: DrawFirms(ui, g); break;
-                default: DrawShipments(ui, g); break;
+                case 2: DrawShipments(ui, g); break;
+                default: DrawPolicy(ui, g); break; // Produktion lenken
             }
         }
 

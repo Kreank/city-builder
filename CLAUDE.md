@@ -78,7 +78,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
-  Schwerpunkte/Förderung statt selbst gebauter Produktionsketten.
+  Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
@@ -960,7 +960,66 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   ≈ 10 ms je Kalender-Tick inkl. 180 Verkehrsschritten); Warensystem allein ≈ 2 ms je Spieltag.
 - Später: Baustoffe für den Bau, Brennstoffe
   für Kraftwerke, Lagerhallen/Güterbahnhof/Hafen, Verträge statt Spotmarkt, Zölle/Subventionen, Löhne nach Gewinn, Ladenwahl
-  nach Preis/Sortiment, Abfahrt-Puffer für Lkw, Spieler-Spezialisierung über `Restructure`.
+  nach Preis/Sortiment, Abfahrt-Puffer für Lkw. (~~Spieler-Spezialisierung über `Restructure`~~ ✅ s. „Produktion lenken“.)
+
+## Produktion lenken (Teil von G5, Entscheidung Bauart)
+- **Modell:** Die Simulation wählt die Industrie weiter selbst (Standortwahl), der Spieler lenkt mit zwei Hebeln. Kein Bau
+  einzelner Betriebe, kein Verbot. Dateien: `Simulation/Goods/IndustryFocus.cs` (Enum `IndustryFocus`, `FocusFit`, Datentabelle
+  `IndustryBranches`), `ProductionPolicy.cs` (+ `.Save.cs`, `PolicyRules` = alle Zahlen), `world.Policy` (täglich nach dem
+  Warensystem, vor der Stadtkasse).
+- **Branchen/Schwerpunkte** (= auch Förder-Branchen): automatisch (Standard), Landwirtschaft & Viehzucht (Bauernhof, Mühle),
+  Forst (Forstbetrieb, Sägewerk), Erz, Kohle, Öl/Gas, Baustoffe (Kiesgrube, Zementwerk, Baustoffwerk), Verarbeitung (Stahl,
+  Raffinerie/Kunststoff, Glas), Konsumgüter (Lebensmittel, Kleidung, Möbel), Technik (Elektronik, Fahrzeuge). Jedes der 18
+  Industrie-Rezepte hat genau eine Heimat-Branche (`HomeOf`); je Schwerpunkt **Kern** (`Primary`), **verwandt** (`Related`,
+  z. B. Stahlwerk im Erz-/Kohle-Gebiet, Raffinerie bei Öl/Gas – bleibt, kein Bonus) und **fremd**. **Entscheidung Viehzucht:**
+  kein eigener Schwerpunkt, weil der Rezeptkatalog nur den Bauernhof (Getreide **und** Vieh) kennt – getrennt hätte er
+  dieselbe Wirkung; kommt ein Weide-/Viehbetrieb, wird er in der Tabelle ergänzt.
+- **Schwerpunkt-Gebiete:** eigenes Raster im Umwelt-Zellmaß (16 m, `Paint(mitte, radius, focus)`, `FocusAt`, `Hectares`),
+  unabhängig von Straßen und Zonen → überlebt Umbau/Entzonen. Standortwahl: Hook `GoodsSystem.SiteModifier` →
+  `SiteAdjust`: Kern **+1,2**, fremd **−0,6** auf den Score (typisch 0,3–2,5); sehr dringender Bedarf kann einen fremden Betrieb
+  also trotzdem gewinnen lassen. **Vorkommen unter der Mindestgüte bleibt −∞** (keine Ölförderung ohne Öl). Bestehende fremde
+  Betriebe im Gebiet stellen **träge** um (`Steer`, täglich, Firmen in Id-Reihenfolge, `SimRandom`): frühestens 14 Tage nach
+  Gründung bzw. letztem Wechsel, Tageschance 6 % (rentabel, Schwerpunkt neu) bzw. 25 % (geglätteter Verlust), höchstens 3
+  Wechsel je Tag; Ziel = beste Standortwahl ohne den alten Betrieb (`GoodsSystem.SuggestIndustry`) und nur, wenn er Kern oder
+  verwandt ist (`GoodsSystem.Restructure`: neuer Betreiber, Lager leer, Startkapital). Sonst bleibt er (`BlockedYesterday`).
+  Automatik-Gebiete werden nie umgestellt.
+- **Förderung je Branche** (Stufe 0–3 keine/gering/mittel/stark, `SetSubsidy`/`ChangeSubsidy`): **5/12/25 € je Beschäftigtem und
+  Tag** an jede Industriefirma der Branche (überall, nicht nur im Gebiet; Hook `GoodsSystem.SubsidyFor` → `FirmLedger.Subsidy`,
+  zählt zum Gewinn → weniger Pleiten, mehr Nachfrage, ~25 % kommen über die Gewerbesteuer zurück) + Standort-Zuschlag
+  0,15/0,3/0,5 → mehr Betriebe dieser Art. Die Stadtkasse bucht die gezahlte Summe des Tageswechsels (`GoodsStats.SubsidiesYesterday`,
+  Hook `EconomySystem.DailySubsidies`) als neue Ausgaben-Kategorie **„Wirtschaftsförderung“** (`BudgetCategory.IndustrySubsidies`,
+  hinten angefügt). Bei Baustopp (`CanPay`: Kasse zu lange überzogen) ruht die Förderung samt Zuschlag.
+- **Rückmeldung:** `DepositHint(focus, p)` („Erdöl-Vorkommen hier: gut (62 %)“ / „schwach“ / „keins (5 %, mind. 15 %) – hier kann
+  kein Betrieb „Ölförderung“ entstehen“; ab 35 % „gut“), `RateDeposit`, `Report(branch)` (Betriebe, Beschäftigte, Förderung/Tag,
+  Produktion/Import/Export gestern der Branchen-Güter, Fläche), `Recommendations()` (bei Bedarf, je Tag/Stand zwischengespeichert,
+  kein Spielzustand): ungenutzte ergiebige Vorkommen mit Himmelsrichtung („Hohes Ölvorkommen im Osten ungenutzt (~12 ha)“; ≥ 8
+  Zellen ohne passenden Betrieb in 200 m, Boden erst ab 0,75, Wald ab 0,6), Importanteil ≥ 60 % bei Rohstoffen/Zwischenprodukten
+  („Stahl wird zu 80 % importiert – Schwerpunkt oder Förderung „Verarbeitung““), Förderung ohne Betrieb, Schwerpunkt ohne Vorkommen.
+- **Spiel:** Zonen-Werkzeug (Taste Z, **keine neue Taste**) bekommt unter den Zonenkacheln „Schwerpunkt Industrie“: Kachel je
+  Schwerpunkt (Farbe, Fläche/Förderstufe) + „Automatisch“ (entfernen), Pinsel-Vorgaben 48/96/160 m (Schwerpunkt-Pinsel bis 160 m,
+  Zonen-Pinsel weiter max. 60 m). `RoadTool.SelectedFocus`/`SelectFocus` (null = Zonen-Pinsel; `SelectZone` setzt zurück);
+  LMB malt, RMB setzt automatisch, Esc zurück zum Auswählen (wie Zonen). Hinweiszeile + Beschriftung am Pinsel = `DepositHint`.
+  `Game/Goods/IndustryFocusView` (Begleiter): Gebiete als farbige 16-m-Flächen im Zonen-Werkzeug (kräftig beim Schwerpunkt-Pinsel),
+  schaltet beim Wählen eines Rohstoff-Schwerpunkts die passende Rohstoff-Ansicht (F3-Raster) ein und beim Verlassen wieder aus.
+  Fenster Wirtschaft (F5) Reiter **„Lenkung“** (`GoodsWindow.Policy.cs`): Förderung je Woche/gestern, Betriebswechsel, Empfehlungen,
+  je Branche −/+ Förderstufe, Betriebe/Jobs, €/Woche, Produktion/Import/Export gestern, Fläche („malen“ öffnet den Pinsel).
+  Inspektor-Reiter „Firma“ (`InspectorWindow.Policy.cs`): Schwerpunkt des Standorts + Passung („fremd – stellt mit der Zeit um“),
+  Vorkommen dafür, Branche + Förderstufe + €/Tag; Gewinnrechnung mit Zeile „Förderung“. Hilfe (F1) ergänzt.
+  **Optik ungetestet** (Unity nicht gestartet): Farben/Deckkraft der Gebietsflächen über der Rohstoff-Ansicht, Kachel-Unterzeilen,
+  Breite des Stepper-Zusatztexts.
+- **Spielstand:** Abschnitt „policy“ v1 (Raster mit Namenstabelle der Enum-Werte, Förderstufen über den Namen, letzter Wechsel je
+  Gebäude, Zufall, Zähler); fehlt er (alte Stände) → überall automatisch, keine Förderung. Waren **v3**: `FirmLedger.Subsidy` und
+  `SubsidiesYesterday` (v2 → 0). Determinismus-Test (`SaveLoadTests.BuildCity`) malt Schwerpunkt Verarbeitung + Förderung.
+- **Tests** (`ProductionPolicyTests`, 10): Score-Wirkung Kern/verwandt/fremd/Förderung/Baustopp exakt; Standortwahl mit/ohne
+  Schwerpunkt deterministisch (Labor, Öl 0,6 überall: ohne 1 von 7 Betrieben Ölförderung, mit Schwerpunkt Öl 6 von 7);
+  Vorkommen-Grenze (Öl 5 % → keine Ölförderung, Hinweis „keins“, Empfehlung); träger Wechsel (7 fremde Betriebe: nach 1/5/10/30/60
+  Tagen 1/2/4/5/7 umgestellt, Verlustbetriebe 7 in 5 Tagen, Automatik 0); ohne Vorkommen kein Wechsel (33 blockiert); Förderung
+  = Firmen-Ledger = Kassenbuchung; Baustopp → 0; Spielstand Rundreise + Weiterlaufen bitgleich; fehlender Abschnitt.
+  Info: Ölfeld im Osten, Stadt 12 Tage – ohne Schwerpunkt 1 von 4 Industriebetrieben über dem Feld fördert/verarbeitet Öl,
+  mit Schwerpunkt Öl/Gas + Förderung gering 3 von 4 (kleine Stichprobe).
+- Offen: eigener Viehbetrieb (dann Schwerpunkt Viehzucht), Förderung je Gut statt je Branche, Bodenwert/Lärm-Wirkung von
+  Schwerpunkten, Schwerpunkt auch für Gewerbe/Büro (Tourismus, Technik-Büros), NPC-Städte mit Schwerpunkten (Etappe 7),
+  Balancing der Fördersätze gegen echte Steuereinnahmen großer Städte.
 
 ## Welt (Etappe 5)
 - `Simulation/World` (Namespace `CityBuilder.Simulation.World`): `PlanetGenerator` (+ `.Political`), `Planet` (+ `Region`,
@@ -1451,6 +1510,10 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
        Gewerbesteuer aus Gewinn, Vorkommen/Ernte aus der Welt, Industrie-Strom/Wasser nach Rezept, Fenster „Wirtschaft“
        (F5, Baukasten) und Inspektor-Reiter „Firma“/Lkw-Ladung (im Editor noch nicht visuell abgenommen).
        Offen: Baustoffe/Brennstoffe nutzen, Verträge
+     - ✅ Produktion lenken: Schwerpunkt-Gebiete (Zonen-Werkzeug, eigenes Raster, Bonus/Abschlag in der Standortwahl, träger
+       Betriebswechsel, Vorkommen bleibt Pflicht), Förderung je Branche (Stufe 0–3, Kasse „Wirtschaftsförderung“), Hinweis
+       zum Vorkommen + Rohstoff-Ansicht, Reiter „Lenkung“ (F5) mit Empfehlungen, Inspektor, Spielstand „policy“ v1/Waren v3
+       (im Editor noch nicht visuell abgenommen). Offen: Viehbetrieb, Förderung je Gut, Gewerbe-/Büro-Schwerpunkte
      - ✅ Stadtkasse vorgezogen: Kontostand, Steuern je Zonenart mit Nachfragewirkung, Unterhalt, Baukosten,
        Abrisserlös, Überziehungsrahmen mit Zinsen + Baustopp, Wochenbilanz/Historie, `IUpkeepSource` für Dienste,
        Fenster (M). Offen: Gebühren, Handelseinnahmen, Kredite mit Laufzeit, Wirkung auf Zuzug/Zufriedenheit

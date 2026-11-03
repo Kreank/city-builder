@@ -403,7 +403,7 @@ namespace CityBuilder.Game.UI.Hud
                 var z = zone;
                 var tile = Tile(BuildLabels.ZoneName(z), null, BuildLabels.ZoneColor(z), HudIconKind.Zones,
                     () => tool.SelectZone(z),
-                    () => tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == z,
+                    () => tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == z && !tool.SelectedFocus.HasValue, // Produktion lenken
                     () => $"{Zones.DisplayName(z)} · Nachfrage {Mathf.Clamp(city.Demand[z], 0f, 100f):0} %");
                 var bar = Container("cb-bar");
                 var fill = Container("cb-bar__fill");
@@ -416,10 +416,11 @@ namespace CityBuilder.Game.UI.Hud
             tiles.Add(Container("cb-tile-sep"));
             tiles.Add(Tile("Entzonen", null, BuildLabels.ZoneColor(ZoneType.None), HudIconKind.Bulldoze,
                 () => tool.SelectZone(ZoneType.None),
-                () => tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == ZoneType.None,
+                () => tool.CurrentMode == RoadTool.Mode.Zone && tool.SelectedZone == ZoneType.None && !tool.SelectedFocus.HasValue,
                 "Zonen entfernen (auch RMB in jeder Zone)"));
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Balken in den Kacheln = Nachfrage · Zonen entstehen 4 Reihen tief an ebenerdigen Stadtstraßen"));
+            BuildFocusSection(); // Produktion lenken: Pinsel-Art „Schwerpunkt“ (GameHud.Focus.cs)
         }
 
         VisualElement Tile(string name, string sub, Color swatch, HudIconKind icon, Action onClick, Func<bool> isOn, Func<string> tip)

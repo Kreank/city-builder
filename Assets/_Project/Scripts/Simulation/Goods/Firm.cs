@@ -19,7 +19,7 @@ namespace CityBuilder.Simulation.Goods
         NoStock,
     }
 
-    /// <summary>Gewinnrechnung eines Tages: Erlös − Wareneinsatz (Einkauf) − Löhne − Transport.</summary>
+    /// <summary>Gewinnrechnung eines Tages: Erlös + Förderung − Wareneinsatz (Einkauf) − Löhne − Transport.</summary>
     public sealed class FirmLedger
     {
         /// <summary>Verkaufserlöse (lokal, Export, an Haushalte, Dienstleistungen).</summary>
@@ -31,22 +31,24 @@ namespace CityBuilder.Simulation.Goods
         public double Transport;
         /// <summary>Gezahlte Einkäufe (Geldfluss, nicht Wareneinsatz) – Information.</summary>
         public double Purchases;
+        /// <summary>Wirtschaftsförderung der Stadt (Produktion lenken), zählt zum Gewinn.</summary>
+        public double Subsidy;
         public float Produced;
         public float Sold;
         public float Exported;
         public float Imported;
 
-        public double Profit => Revenue - InputCost - Wages - Transport;
+        public double Profit => Revenue + Subsidy - InputCost - Wages - Transport;
 
         internal void Clear()
         {
-            Revenue = InputCost = Wages = Transport = Purchases = 0;
+            Revenue = InputCost = Wages = Transport = Purchases = Subsidy = 0;
             Produced = Sold = Exported = Imported = 0f;
         }
 
         internal void CopyFrom(FirmLedger o)
         {
-            Revenue = o.Revenue; InputCost = o.InputCost; Wages = o.Wages; Transport = o.Transport; Purchases = o.Purchases;
+            Revenue = o.Revenue; InputCost = o.InputCost; Wages = o.Wages; Transport = o.Transport; Purchases = o.Purchases; Subsidy = o.Subsidy;
             Produced = o.Produced; Sold = o.Sold; Exported = o.Exported; Imported = o.Imported;
         }
     }

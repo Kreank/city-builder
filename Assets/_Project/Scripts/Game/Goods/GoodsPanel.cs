@@ -24,10 +24,10 @@ namespace CityBuilder.Game.Goods
         int tab;
         Vector2 scroll;
         GUIStyle header, small, right;
-        static readonly string[] Tabs = { "Güter", "Firmen", "Lieferungen" };
+        static readonly string[] Tabs = { "Güter", "Firmen", "Lieferungen", "Lenkung" }; // Lenkung: Produktion lenken
 
         public bool Visible { get => visible; set => visible = value; }
-        /// <summary>Gewählter Reiter (0 Güter, 1 Firmen, 2 Lieferungen) – geteilt mit dem UI-Toolkit-Fenster.</summary>
+        /// <summary>Gewählter Reiter (0 Güter, 1 Firmen, 2 Lieferungen, 3 Lenkung) – geteilt mit dem UI-Toolkit-Fenster.</summary>
         public int Tab { get => tab; set => tab = Mathf.Clamp(value, 0, Tabs.Length - 1); }
 
         public void Init(RoadTool roadTool) => tool = roadTool;
@@ -66,7 +66,7 @@ namespace CityBuilder.Game.Goods
             var g = Goods;
             if (g == null) return;
             GUILayout.BeginHorizontal();
-            tab = GUILayout.Toolbar(tab, Tabs, GUILayout.Width(330f));
+            tab = GUILayout.Toolbar(tab, Tabs, GUILayout.Width(420f));
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("×", GUILayout.Width(24f))) visible = false;
             GUILayout.EndHorizontal();
@@ -82,7 +82,8 @@ namespace CityBuilder.Game.Goods
             {
                 case 0: DrawGoods(g); break;
                 case 1: DrawFirms(g); break;
-                default: DrawShipments(g); break;
+                case 2: DrawShipments(g); break;
+                default: GUILayout.Label("Lenkung (Schwerpunkte, Förderung) gibt es nur in der neuen Oberfläche.", small); break; // Produktion lenken
             }
             GUILayout.EndScrollView();
             GUI.DragWindow(new Rect(0f, 0f, 10000f, 22f));

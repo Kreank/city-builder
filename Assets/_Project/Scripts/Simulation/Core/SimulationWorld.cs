@@ -199,6 +199,13 @@ namespace CityBuilder.Simulation.Core
             GoodsBinding.ConnectWorld(world.Goods, world.Resources, world.Climate); // Vorkommen + Ernte aus der Welt
             // --- Ende G5
 
+            // --- Produktion lenken: Schwerpunkt-Gebiete + Förderung (täglich nach dem Warensystem, vor der Stadtkasse)
+            world.Policy = new ProductionPolicy(world.Goods, world.Clock, world.Min, world.Settings.SizeMeters, world.Settings.EnvironmentCellSize, seed);
+            world.AddSystem(world.Policy);
+            world.Goods.SiteModifier = world.Policy.SiteAdjust;
+            world.Goods.SubsidyFor = world.Policy.SubsidyFor;
+            // --- Ende Produktion lenken
+
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
             world.Roads.Budget = world.Economy;
@@ -218,6 +225,9 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
+            var goodsStats = world.Goods.Stats;                                       // Produktion lenken: Förderung bucht die Kasse,
+            world.Economy.DailySubsidies = () => goodsStats.SubsidiesYesterday;       // bei Baustopp ruht sie
+            world.Policy.CanPay = () => economy.UnlimitedFunds || !economy.ConstructionFrozen;
 
             // --- Etappe 8 Handel zwischen Ländern (nur mit Weltkarte): Weltpreis aus den Ländern, Verträge über das Grenzlager,
             // Zölle/Strafen in der Stadtkasse; läuft nach dem WorldSystem (Länder sind schon einen Tag weiter)
@@ -263,6 +273,8 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public GoodsSystem Goods { get; private set; }
+        /// <summary>Produktion lenken: Schwerpunkt-Gebiete und Förderung je Branche. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public ProductionPolicy Policy { get; private set; }
         /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Transit.TransitSystem Transit { get; private set; }
 

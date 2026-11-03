@@ -126,6 +126,12 @@ namespace CityBuilder.Simulation.Goods
         /// <summary>Strom/Wasser versorgt (oder in der Stadt noch nicht verlangt)? null = immer.</summary>
         public Func<Building, bool> UtilitiesSatisfied { get; set; }
 
+        /// <summary>
+        /// Produktion lenken: Förderung je Firma und Tag (€, zum Tageswechsel gutgeschrieben, zählt zum Gewinn). null = keine.
+        /// Gesetzt in <c>SimulationWorld.CreateDefault</c> (<see cref="ProductionPolicy.SubsidyFor"/>).
+        /// </summary>
+        public Func<Firm, double> SubsidyFor { get; set; }
+
         // --- Etappe 8 Handel (Hooks, gesetzt von Trade.TradeSystem.AttachCity)
         /// <summary>Weltmarktpreis je Gut aus den Ländern (Angebot/Nachfrage). null = deterministisches Rauschen (G5, ohne Welt).</summary>
         public Func<GoodType, float> WorldPriceSource { get; set; }
@@ -419,6 +425,7 @@ namespace CityBuilder.Simulation.Goods
             s.Firms = firms.Count;
             s.Extraction = s.Processing = s.Manufacturing = s.Retail = s.Office = 0;
             s.TotalProfitYesterday = 0;
+            double subsidies = 0; // Produktion lenken
             bankrupt.Clear();
             foreach (var f in firms)
             {
@@ -449,6 +456,15 @@ namespace CityBuilder.Simulation.Goods
                 double wages = WageBill != null ? WageBill(f.BuildingId) : f.Workers * GoodsRules.DefaultWage;
                 f.Today.Wages += wages;
                 f.Cash -= wages;
+
+                // Produktion lenken: Wirtschaftsförderung der Stadt (die Stadtkasse bucht die Summe)
+                double subsidy = SubsidyFor != null ? SubsidyFor(f) : 0;
+                if (subsidy > 0)
+                {
+                    f.Today.Subsidy += subsidy;
+                    f.Cash += subsidy;
+                    subsidies += subsidy;
+                }
 
                 // Verderb
                 foreach (var g in GoodsCatalog.All)
@@ -490,6 +506,8 @@ namespace CityBuilder.Simulation.Goods
                     sizedJobs[f.BuildingId] = f.Jobs;
                 }
             }
+
+            s.SubsidiesYesterday = subsidies; // Produktion lenken
 
             // Märkte: Bestand, Bedarf, Preise, Weltmarkt
             var stock = new float[markets.Length];

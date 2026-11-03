@@ -258,8 +258,20 @@ namespace CityBuilder.Simulation.Economy
                 double weekly = src.WeeklyUpkeep();
                 if (weekly > 0) d.AddService(src.Name, weekly / EconomyRules.DaysPerWeek);
             }
+            // --- Produktion lenken: Wirtschaftsförderung, die das Warensystem zum Tageswechsel an die Firmen gezahlt hat
+            if (DailySubsidies != null)
+            {
+                double sub = DailySubsidies();
+                if (sub > 0) d.Add(BudgetCategory.IndustrySubsidies, sub);
+            }
+            // --- Ende Produktion lenken
             return d;
         }
+
+        // --- Produktion lenken (Hook): an Firmen gezahlte Förderung des letzten Tageswechsels (GoodsStats.SubsidiesYesterday).
+        // Das Warensystem schließt den Tag im selben Tick vor der Kasse ab → die Abrechnung bucht genau den gezahlten Betrag.
+        public Func<double> DailySubsidies { get; set; }
+        // --- Ende Produktion lenken
 
         static double JobTaxBase(TaxKind kind)
         {
