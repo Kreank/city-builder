@@ -77,6 +77,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Freie Straßen bleiben** (kein Anno-Raster).
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
+- **Nachtrag (2026-11-03, Spieler): Setzen statt Zonen.** Alle Gebäude (Wohnen, Laden, Büro, Industriehalle) werden gesetzt,
+  per gehaltener linker Maustaste als **Reihe entlang der Straße** (wie Anno). Welcher Betrieb in Laden/Büro/Halle einzieht,
+  entscheidet die Simulation (Vorkommen, Nachfrage, Schwerpunkt). Zonen verschwinden aus der Bauleiste (Code bleibt für alte
+  Stände), Zonenraster/Grundstücksplatten entfallen; Nachfrage als eigene Anzeige; Straßen-Abstandshilfe nach Haustiefen.
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
