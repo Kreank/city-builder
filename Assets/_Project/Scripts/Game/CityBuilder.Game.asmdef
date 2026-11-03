@@ -1,0 +1,17 @@
+{
+    "name": "CityBuilder.Game",
+    "rootNamespace": "CityBuilder.Game",
+    "references": [
+        "CityBuilder.Simulation",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

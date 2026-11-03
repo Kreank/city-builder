@@ -1,0 +1,34 @@
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+crashlytics-build.properties
+
+# Von Unity generierte IDE-Dateien
+.vs/
+.idea/
+*.csproj
+!Tests/**/*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+
+# dotnet Tests
+Tests/**/bin/
+Tests/**/obj/
+
+# OS
+.DS_Store
+Thumbs.db

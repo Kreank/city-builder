@@ -1,0 +1,19 @@
+{
+    "name": "CityBuilder.Editor",
+    "rootNamespace": "CityBuilder.Editor",
+    "references": [
+        "CityBuilder.Game",
+        "CityBuilder.Simulation"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
