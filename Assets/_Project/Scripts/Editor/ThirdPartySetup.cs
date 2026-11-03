@@ -33,6 +33,7 @@ namespace CityBuilder.Editor
             "Assets/Park",                   // Low-Poly Park (Thunderent)
             "Assets/LowpolyStreetPack",      // Low Poly Street Pack (Dynamic Art)
             "Assets/Unity Technologies",     // Cars Asset Pack
+            "Assets/Pack_FREE_Cars",         // FREE Cartoon Car Pack (OlyPoly)
         };
 
         /// <summary>Mitgelieferte Skripte, die wir nicht wollen (eigene Kamera etc.).</summary>
@@ -43,6 +44,8 @@ namespace CityBuilder.Editor
             "Triangularity/ColorfulCity/Scripts/libs/Editor",
             // Demo-Skripte (alte Input-API, eigene Ampel-/Lichtlogik)
             "Loading Games/Toon City Pack/Demo/Scripts",
+            // Bewertungs-Popup beim Import (öffnet nur auf Klick die Store-Seite, löscht sich sonst selbst) – geprüft, harmlos
+            "Pack_FREE_Cars/Editor",
         };
 
         [MenuItem("City Builder/Third Party/Organize And Convert")]
