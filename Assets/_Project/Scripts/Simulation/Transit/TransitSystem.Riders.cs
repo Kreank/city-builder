@@ -102,15 +102,15 @@ namespace CityBuilder.Simulation.Transit
         }
 
         /// <summary>
-        /// Fahrgast beginnt die Fahrt: wartet ab sofort an der Einstiegshaltestelle (der Fußweg dorthin ist bei
-        /// 6 Spielminuten je Tick vernachlässigt). null = Verbindung ungültig.
+        /// Fahrgast beginnt die Fahrt: geht zur Einstiegshaltestelle (Luftlinie × <see cref="Core.TimeModel.WalkDetour"/> ÷
+        /// Gehtempo, Verkehrszeit) und wartet danach dort (<see cref="Passenger.ReadyTime"/>). null = Verbindung ungültig.
         /// </summary>
         public Passenger StartRide(int citizenId, in TransitOption option, Vector2 destination)
         {
             if (!option.Valid) return null;
             var stop = GetStop(option.Board);
             if (stop == null || GetLine(option.Line1) == null) return null;
-            float now = traffic.Time;
+            double now = traffic.Time;
             var p = new Passenger
             {
                 Id = nextPassengerId++,
@@ -118,10 +118,11 @@ namespace CityBuilder.Simulation.Transit
                 Plan = option,
                 Destination = destination,
                 WaitingAtStop = stop.Id,
-                WaitSince = now,
+                ReadyTime = now + Core.TimeModel.WalkSeconds(option.AccessMeters),
                 StartTime = now,
                 EndPosition = stop.Position,
             };
+            p.WaitSince = p.ReadyTime;
             stop.Waiting.Add(p);
             return p;
         }
@@ -165,7 +166,7 @@ namespace CityBuilder.Simulation.Transit
         void Finish(Passenger p, RideOutcome outcome, Vector2 at)
         {
             if (!p.IsActive) return;
-            if (p.WaitingAtStop != 0) p.WaitedSeconds += traffic.Time - p.WaitSince;
+            if (p.WaitingAtStop != 0) p.WaitedSeconds += (float)Math.Max(0.0, traffic.Time - p.WaitSince);
             Detach(p);
             p.IsActive = false;
             p.Outcome = outcome;
@@ -179,7 +180,7 @@ namespace CityBuilder.Simulation.Transit
         /// <summary>Wartende geben nach max(<see cref="TransitRules.MinPatienceSeconds"/>, 2,5 × Takt) auf.</summary>
         void CheckWaiting()
         {
-            float now = traffic.Time;
+            double now = traffic.Time;
             foreach (var s in stops)
                 for (int i = s.Waiting.Count - 1; i >= 0; i--)
                 {

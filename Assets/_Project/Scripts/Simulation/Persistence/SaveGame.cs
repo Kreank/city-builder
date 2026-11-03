@@ -24,8 +24,11 @@ namespace CityBuilder.Simulation.Persistence
         public const string GameVersion = "0.6";
         /// <summary>Abschnitt mit Einstellungen, Seed und Uhr – wird vor allen anderen gelesen (baut die Welt).</summary>
         public const string WorldSectionId = "world";
-        /// <summary>v2 (Spielstart &amp; Startregion): Anteil freies Land + Stadtname. v1-Stände laden mit freiem Land 0 (altes Modell).</summary>
-        const int WorldSectionVersion = 2;
+        /// <summary>
+        /// v2: Zeitmodell – Verkehrsschritt im laufenden Tick. v3 (Spielstart &amp; Startregion): Anteil freies Land + Stadtname;
+        /// v1/v2-Stände laden mit freiem Land 0 (altes politische Modell).
+        /// </summary>
+        const int WorldSectionVersion = 3;
 
         // ------------------------------------------------------------ Speichern
 
@@ -116,14 +119,14 @@ namespace CityBuilder.Simulation.Persistence
             if (ws.Version > WorldSectionVersion) throw new SaveLoadException("Der Spielstand stammt aus einer neueren Spielversion (Weltdaten).");
 
             WorldSettings settings;
-            int seed;
+            int seed, substep;
             long tick;
             try
             {
                 using (var ms = new MemoryStream(ws.Data, writable: false))
                 {
                     var r = new SaveReader(ms);
-                    ReadWorld(r, ws.Version, out settings, out seed, out tick);
+                    ReadWorld(r, ws.Version, out settings, out seed, out tick, out substep);
                 }
             }
             catch (SaveFormatException e) { throw new SaveLoadException($"Weltdaten beschädigt: {e.Message}", e); }
@@ -135,6 +138,7 @@ namespace CityBuilder.Simulation.Persistence
                 throw new SaveLoadException("Weltdaten ungültig (Welt kann nicht erzeugt werden).", e);
             }
             world.Clock.Restore(tick);
+            world.RestoreSubstep(substep);
 
             var saveables = SaveRegistry.Collect(world);
             foreach (var s in saveables)
@@ -194,12 +198,13 @@ namespace CityBuilder.Simulation.Persistence
             }
             w.Int(world.Seed);
             w.Long(world.Clock.Tick);
-            // v2 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
+            w.Int(world.SubstepInTick); // v2
+            // v3 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
             w.Float(s.Planet?.FreeLandShare ?? World.PlanetSettings.DefaultFreeLandShare);
             w.String(s.CityName);
         }
 
-        static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick)
+        static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick, out int substep)
         {
             s = new WorldSettings
             {
@@ -222,10 +227,11 @@ namespace CityBuilder.Simulation.Persistence
                 };
             seed = r.Int();
             tick = r.Long();
-            // Spielstart: v1 kannte kein freies Land → Welt im alten Modell neu erzeugen (alle Regionen gehören NPC-Ländern,
+            substep = version >= 2 ? r.Int() : 0; // v1: immer auf der Tick-Grenze gespeichert
+            // Spielstart: v1/v2 kannten kein freies Land → Welt im alten Modell neu erzeugen (alle Regionen gehören NPC-Ländern,
             // Spieler-Land = Land der Startregion). Nur so passen die gespeicherten Länder-/Handelsabschnitte (Länder-Ids).
             float free = 0f;
-            if (version >= 2)
+            if (version >= 3)
             {
                 free = r.Float();
                 if (!(free >= 0f && free <= 0.9f)) throw new SaveFormatException("Welteinstellungen ungültig (freies Land).");

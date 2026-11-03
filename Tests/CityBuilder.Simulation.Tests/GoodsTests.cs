@@ -393,7 +393,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(s.TripId < 0, "Lkw-Fahrten haben negative Fahrt-Ids");
             var v = lab.Traffic.Vehicles.First(x => x.TripId == s.TripId);
             Assert.Equal(VehicleClass.Truck, v.Class);
-            lab.W.Step(); // Statistik zählt Lkw getrennt von Bürgerfahrzeugen
+            lab.W.Substep(); // Statistik zählt Lkw getrennt von Bürgerfahrzeugen (Zeitmodell: ein Verkehrsschritt – ein Tick sind 30 s, da wäre der Lkw schon da)
             Assert.Equal(0, lab.Traffic.Stats.CitizenVehicles);
             Assert.True(lab.Traffic.Stats.DeliveryVehicles >= 1);
             Assert.Same(s, lab.Goods.ShipmentForTrip(s.TripId));

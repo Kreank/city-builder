@@ -5,16 +5,20 @@ using UnityEngine.InputSystem;
 namespace CityBuilder.Game
 {
     /// <summary>
-    /// Brücke zwischen Unity und Simulation: erzeugt die Welt und führt pro Frame
-    /// so viele Ticks aus, wie es die Spielgeschwindigkeit verlangt.
+    /// Brücke zwischen Unity und Simulation: erzeugt die Welt und führt pro Frame so viele <b>Verkehrsschritte</b>
+    /// (<see cref="SimulationWorld.Substep"/>) aus, wie es die Spielgeschwindigkeit verlangt – je 120 Schritte folgt ein
+    /// Kalender-Tick (Zeitmodell, <see cref="TimeModel"/>). Tempo 1/2/3 = 1 Spieltag in 5 / 2,5 / 1,25 Minuten.
+    /// Überlast: höchstens <see cref="maxSimMillisecondsPerFrame"/> Rechenzeit je Frame; was nicht passt, entfällt
+    /// (die Simulation läuft dann langsamer, der Frame friert nicht ein).
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public sealed class SimulationRunner : MonoBehaviour
     {
         [SerializeField] float worldSize = 2048f;
-        [Tooltip("Ticks pro Echtzeit-Sekunde bei Geschwindigkeit 1.")]
-        [SerializeField] float ticksPerSecond = 10f;
-        [SerializeField] int maxTicksPerFrame = 20;
+        [Tooltip("Kalender-Ticks (6 Spielminuten) pro Echtzeit-Sekunde bei Geschwindigkeit 1 (Standard aus TimeModel: 0,8 → 5 min je Spieltag).")]
+        [SerializeField] float ticksPerSecond = TimeModel.TicksPerRealSecond;
+        [Tooltip("Rechenzeit-Budget der Simulation je Frame (ms). Darüber wird die Simulation langsamer statt den Frame einzufrieren.")]
+        [SerializeField] float maxSimMillisecondsPerFrame = 8f;
         [Header("Gelände")]
         [SerializeField] bool generateTerrain = true;
         [SerializeField] int terrainSeed = 4711;
@@ -37,17 +41,41 @@ namespace CityBuilder.Game
         public bool AwaitingNewGame { get; private set; }
         // --- Ende Spielstart
 
-        static readonly int[] SpeedMultipliers = { 0, 1, 3, 10 };
+        static int[] SpeedMultipliers => TimeModel.SpeedMultipliers;
 
-        float accumulator;
+        /// <summary>Offene Verkehrsschritte (Bruchteil = Interpolation zwischen zwei Schritten).</summary>
+        double accumulator;
+        readonly System.Diagnostics.Stopwatch frameWatch = new System.Diagnostics.Stopwatch();
 
         public SimulationWorld World { get; private set; }
         public int SpeedIndex { get; private set; } = 1;
         public int SpeedMultiplier => SpeedMultipliers[SpeedIndex];
         public bool IsPaused => SpeedIndex == 0;
 
-        /// <summary>Anteil (0..1) zwischen letztem und nächstem Tick – für flüssige Darstellung (Interpolation).</summary>
-        public float TickAlpha => Mathf.Clamp01(accumulator);
+        /// <summary>
+        /// Anteil (0..1) zwischen letztem und nächstem <b>Verkehrsschritt</b> – Interpolation der Fahrzeuge
+        /// (<c>Vehicle.PrevPosition</c> → <c>Position</c>).
+        /// </summary>
+        public float TickAlpha => Mathf.Clamp01((float)accumulator);
+
+        /// <summary>Kalenderzeit in Ticks inkl. Bruchteil (Verkehrsschritte + Interpolation) – für Fußgänger und Uhr-Anzeigen.</summary>
+        public double GameTickTime => World.TickTime + TickAlpha / (double)TimeModel.TrafficStepsPerTick;
+
+        /// <summary>Verkehrssekunden je Echtzeitsekunde beim aktuellen Tempo (0 bei Pause) – für Animationsraten der Views.</summary>
+        public float TrafficSecondsPerRealSecond => ticksPerSecond * SpeedMultiplier * TimeModel.TrafficSecondsPerTick;
+
+        /// <summary>Höchste Beschleunigung von Darstellungs-Animationen (Schritte, Rotoren) gegenüber Verkehrszeit = Echtzeit.</summary>
+        public const float MaxAnimationSpeedup = 3f;
+        /// <summary>
+        /// Zeitfaktor für Animationen der Views (Schrittfrequenz, Rotoren): folgt der Verkehrszeit, ist aber auf
+        /// <see cref="MaxAnimationSpeedup"/> begrenzt (sonst flimmern Beine/Rotorblätter bei 24-facher Verkehrszeit). 0 bei Pause.
+        /// </summary>
+        public float AnimationTimeScale => IsPaused ? 0f : Mathf.Min(TrafficSecondsPerRealSecond, MaxAnimationSpeedup);
+
+        /// <summary>Verkehrsschritte, die im letzten Frame wegen des Rechenzeit-Budgets entfallen sind (Überlast-Anzeige).</summary>
+        public int DroppedStepsLastFrame { get; private set; }
+        /// <summary>Rechenzeit der Simulation im letzten Frame (ms).</summary>
+        public float LastFrameSimMilliseconds { get; private set; }
 
         void Awake()
         {
@@ -73,18 +101,27 @@ namespace CityBuilder.Game
         {
             HandleSpeedInput();
 
-            if (IsPaused) return;
-            accumulator += Time.deltaTime * ticksPerSecond * SpeedMultiplier;
+            DroppedStepsLastFrame = 0;
+            if (IsPaused) { LastFrameSimMilliseconds = 0f; return; }
+            // Höchstens 0,25 s Echtzeit nachholen (z. B. nach einem Ruckler/Laden)
+            float dt = Mathf.Min(Time.deltaTime, 0.25f);
+            accumulator += dt * ticksPerSecond * SpeedMultiplier * TimeModel.TrafficStepsPerTick;
 
-            int ticks = 0;
-            while (accumulator >= 1f && ticks < maxTicksPerFrame)
+            frameWatch.Restart();
+            while (accumulator >= 1.0)
             {
-                World.Step();
-                accumulator -= 1f;
-                ticks++;
+                World.Substep();
+                accumulator -= 1.0;
+                if (frameWatch.Elapsed.TotalMilliseconds >= maxSimMillisecondsPerFrame) break;
             }
-            // Wenn der Rechner nicht hinterherkommt, lieber langsamer laufen als einfrieren.
-            if (ticks == maxTicksPerFrame) accumulator = 0f;
+            LastFrameSimMilliseconds = (float)frameWatch.Elapsed.TotalMilliseconds;
+            // Überlast: Rückstand verwerfen – lieber langsamer laufen als einfrieren (Ergebnis bleibt deterministisch,
+            // nur die Geschwindigkeit sinkt)
+            if (accumulator >= 1.0)
+            {
+                DroppedStepsLastFrame = (int)accumulator;
+                accumulator -= System.Math.Floor(accumulator);
+            }
         }
 
         // --- Speichern & Laden: Welt ersetzen (Laden, Neues Spiel)
@@ -113,7 +150,7 @@ namespace CityBuilder.Game
         public void ReplaceWorld(SimulationWorld world)
         {
             World = world ?? throw new System.ArgumentNullException(nameof(world));
-            accumulator = 0f;
+            accumulator = 0.0;
             WorldGeneration++;
             WorldReplaced?.Invoke();
         }

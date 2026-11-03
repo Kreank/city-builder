@@ -324,7 +324,7 @@ namespace CityBuilder.Simulation.Transit
 
         void SpawnBuses()
         {
-            float now = traffic.Time;
+            double now = traffic.Time;
             foreach (var l in lines)
             {
                 if (!l.RouteValid || l.ActiveVehicles >= l.TargetVehicles || now < l.NextSpawnTime) continue;
@@ -377,14 +377,14 @@ namespace CityBuilder.Simulation.Transit
                 DriveOn(bus, line, bus.VisitIndex, 1f);
                 return;
             }
-            float now = traffic.Time;
+            double now = traffic.Time;
 
             // Pünktlichkeit des Abschnitts
             if (bus.MeasureLeg && bus.State == BusState.InService)
             {
                 int leg = (visit - 1 + line.Visits.Length) % line.Visits.Length;
                 float planned = line.LegSeconds[leg];
-                float actual = now - bus.LegStartTime;
+                float actual = (float)(now - bus.LegStartTime);
                 bool onTime = actual <= planned * TransitRules.LateFactor + TransitRules.LateSlackSeconds;
                 bus.LastLegOnTime = onTime;
                 bus.LastDelaySeconds = MathF.Max(0f, actual - planned);
@@ -423,7 +423,7 @@ namespace CityBuilder.Simulation.Transit
                 for (int i = 0; i < stop.Waiting.Count; i++)
                 {
                     var p = stop.Waiting[i];
-                    if (p.CurrentLineId != line.Id) continue;
+                    if (p.CurrentLineId != line.Id || p.ReadyTime > now) continue; // noch auf dem Fußweg zur Haltestelle
                     // Richtung prüfen (Pendel): fährt dieser Bus in vertretbarer Zeit zum Ziel-Halt?
                     float ride = line.RideSecondsFromVisit(visit, p.AlightStopId);
                     float plannedRide = line.RideSeconds(stop.Id, p.AlightStopId);
@@ -438,7 +438,7 @@ namespace CityBuilder.Simulation.Transit
                     stop.Waiting.RemoveAt(i--);
                     p.WaitingAtStop = 0;
                     p.Bus = bus;
-                    p.WaitedSeconds += now - p.WaitSince;
+                    p.WaitedSeconds += (float)(now - p.WaitSince);
                     p.BoardTime = now;
                     p.PlannedRide = ride;
                     bus.Riders.Add(p);

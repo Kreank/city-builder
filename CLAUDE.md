@@ -76,13 +76,55 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
-- Simulation läuft in festen Ticks (`SimulationWorld.Step`, 1 Tick = 6 Spielminuten), nie mit `Time.deltaTime`.
+- Simulation läuft in festen Ticks (`SimulationWorld.Step`, 1 Tick = 6 Spielminuten = 180 Verkehrsschritte à 0,25 s,
+  s. „Zeitmodell“), nie mit `Time.deltaTime`. Alle Zeitkonstanten stehen in `Core/TimeModel`.
   Teilsysteme implementieren `ISimulationSystem`.
 - Views (`Scripts/Game`) lesen die Simulation und hören auf Events; sie ändern keinen Zustand an der Simulation vorbei.
   Spieleraktionen gehen über Methoden der Simulation (später: Commands, wichtig für Multiplayer/Replays).
 - Umwelt (Lärm, Abgas, später Klima, Böden, Rohstoffe) = `GridLayer`-Raster, obwohl Bauen frei ist.
 - C#-Stand von Unity: max. C# 9. Das Testprojekt erzwingt `LangVersion 9`.
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
+
+## Zeitmodell (2026-11-03)
+- **Zwei verzahnte Zeitachsen**, alles in `Simulation/Core/TimeModel.cs` (einziger Ort für Zeitkonstanten):
+  **Kalender** 1 Tick = 6 Spielminuten (`TicksPerDay` 240, `TicksPerHour` 10) – Tagesabläufe, Produktion, Bedürfnisse,
+  Abrechnungen, Ausfalldauern rechnen in Ticks. **Verkehrszeit** (`TrafficSystem.Time`, double aus der Schrittzahl, über Jahre
+  exakt): je Tick `TrafficStepsPerTick` 180 Verkehrsschritte à `TrafficStepSeconds` 0,25 s = 45 s. **Zeitdehnung**
+  `Dilation` = 8 Spielsekunden je Verkehrssekunde (3 min Fahrt = 24 Spielminuten); ein Spieltag = 3 h Verkehrszeit.
+- **Ablauf** `SimulationWorld.Substep()`: alle `ISubstepSystem` (Verkehr; ÖPNV setzt Busse ein) einen Verkehrsschritt, nach dem
+  180. Schritt der Kalender-Tick (Uhr + 1, alle Systeme nach `TickInterval`). `Step()` = einen ganzen Tick (bzw. den laufenden zu
+  Ende); Tests/headless wie bisher. `SubstepInTick`, `AtTickBoundary`, `TickTime` (Ticks inkl. Bruchteil, synchron zur
+  Verkehrszeit). Ereignisse aus dem Verkehr (Ankunft, Halt) kommen mitten im Tick (Uhr noch beim alten Tick).
+- **Wege in Verkehrszeit:** Auto/Lkw/Bus fahren ohnehin dort. Platzhalter ohne Auto/Bus: bis `WalkMaxMeters` 900 m Luftlinie zu
+  Fuß (`WalkSeconds` = Luftlinie × 1,25 ÷ `WalkSpeed` 1,3 m/s), darüber Rad/Sonstiges (`BikeSpeed` 4,5 m/s), außerhalb + 3 Ticks
+  (`OutsideTrafficSeconds`); Umrechnung `TicksFor(sekunden)` (aufgerundet). Gilt für `CitizenSystem.StartTrip`, Fußweg vom
+  Ziel-Halt (`CitizenSystem.EgressTicks`), Parkwege (`TimeModel.WalkTicks`, gleiche Formel in `PedestrianPlanner.ParkWalkTicks`),
+  statistische Busfahrten, Lkw-Platzhalter (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s). ÖPNV-Fahrgast geht erst zur
+  Haltestelle (`Passenger.ReadyTime` = Start + Zugangsweg) und kann erst dann einsteigen.
+- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,67) × `SpeedMultipliers` 1/2/4 →
+  1 Spieltag = 6 / 3 / 1,5 Minuten (120 / 240 / 480 Verkehrsschritte je Sekunde). Der Runner verteilt die Verkehrsschritte über
+  die Frames (`Substep`), Budget `maxSimMillisecondsPerFrame` 8 ms: Rückstand wird verworfen (Simulation langsamer, Frame
+  friert nicht ein; `DroppedStepsLastFrame`, `LastFrameSimMilliseconds` in Debug-HUD/Hilfe). `TickAlpha` = Bruchteil zum nächsten
+  **Verkehrsschritt** (Fahrzeug-Interpolation), `GameTickTime` = Kalenderzeit für Fußgänger, `AnimationTimeScale` = Verkehrszeit je
+  Echtzeit, begrenzt auf 3 (Schrittfrequenz der Fußgänger, Rotoren – sonst Flimmern). Sichtbar: Autos fahren bei Tempo 1 mit
+  30-facher Echtzeit (Verkehrszeit), Fußgänger 1,3 m/s Verkehrszeit.
+- **Entscheidung** (Analyse im Bericht): Mischform aus „Kalender bleibt 6 min/Tick“ + „Verkehr in 180 Teilschritten“ statt
+  (a) 1-Minuten-Ticks (alle Tick-Konstanten aller Systeme umrechnen, 6× Rechenzeit der Kalendersysteme) oder (b) frei getrennter
+  Takte (Verhältnis zur Laufzeit wäre nicht deterministisch speicherbar). Vorbild Cities: Skylines: Bewegung läuft im Verhältnis
+  zum Kalender langsam, Tagesabläufe sind tolerant. Zielwerte erreicht (Info-Test `TimeModelTests.Balancing_…`, große Stadt
+  ~12 700 Einwohner, 10 Buslinien): Autofahrt Ø 25, Median 21, 90 % 49 Spielminuten; Lkw 76 % der Lieferungen echt (vorher ~10 %),
+  27 ohne Platz; Busfahrgäste 87 % regulär angekommen (vorher 80 von 3 862); Gehtempo Median 1,30 m/s; Verkehrsschritt Ø 0,1 ms,
+  Kalender-Tick-Schritt Ø 4,4 ms (Tageswechsel bis ~21 ms, einzelner Frame), gesamt ≈ 23 ms je Kalender-Tick → Tempo 3 ≈ 1 ms je
+  Frame bei 60 fps.
+- **Neue Zeitkonstanten** immer in `TimeModel` (oder dort ableiten), Fahr-/Gehzeiten in Verkehrssekunden, Tagesablauf in Ticks.
+  Tests mit Fahrverhalten laufen in `Substep()`-Schritten (z. B. `TrafficTests.Run`), Kalender-Logik in `Step()`.
+- **Speichern:** Weltabschnitt v2 speichert `SubstepInTick` (Speichern mitten im Tick erlaubt); Verkehr v2 / ÖPNV v2 / Waren v2:
+  Verkehrszeiten als double, `Passenger.ReadyTime`. Alte Stände: Uhr unverändert (Tick-Länge gleich), Verkehrszeit = Schritte ×
+  0,25 s (wie vorher), alte Fahrgäste gelten als schon an der Haltestelle, laufende Platzhalter-Fahrten behalten ihre alte
+  (kürzere) Ankunft.
+- Offen: Abfahrten der Bürger/Lkw innerhalb eines Ticks verteilen (heute alle an der Tick-Grenze), Rad als eigene Darstellung,
+  `CarShare` neu abstimmen (Rechenzeit ließe deutlich mehr echte Autos zu), Lockstep-Multiplayer: Spieleraktionen müssten auf
+  Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
 - `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
@@ -220,10 +262,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kinder/Schüler bleiben vorerst zu Hause (ab 12 Jahren Freizeit im Viertel, s. Bedürfnismodell).
 - Fahrten: Anteil `CarShare` (35 %, Einpendler 60 %) × `TrafficSystem.Demand` fährt als echtes Auto
   (`TrafficSystem.RequestTrip` von Zufahrt/Außenanschluss zu Zufahrt/Außenanschluss), höchstens 70 % von `MaxVehicles`.
-  Rest = Platzhalter (zu Fuß/Rad, Fahrzeit aus Luftlinie, 15 km/h) bzw. seit ÖPNV Stufe 1 Bus (s. „ÖPNV“). Ankunft meldet `TrafficSystem.TripEnded`
+  Rest = Platzhalter (bis 900 m zu Fuß mit 1,3 m/s, sonst Rad 4,5 m/s – in Verkehrszeit, s. „Zeitmodell“) bzw. seit ÖPNV Stufe 1 Bus (s. „ÖPNV“). Ankunft meldet `TrafficSystem.TripEnded`
   (auch bei Abbruch → Bürger kommt trotzdem an; Sicherheitsnetz 3 Tage). Handler dürfen dort keine Fahrten starten.
-  **Zeitverzerrung:** Verkehr läuft mit 0,25 s je Tick, die Uhr mit 6 min je Tick – eine Autofahrt dauert daher
-  oft Spielstunden bis über einen Tag (wie Cities: Skylines). Der Tagesablauf ist darauf robust, Autofahrer sind länger „unterwegs“.
+  **Zeitmodell** (früher „Zeitverzerrung“: 0,25 s Verkehr je 6-min-Tick, Fahrten dauerten Spielstunden bis Tage): 45 s Verkehr je
+  Tick, eine Stadtfahrt dauert jetzt typisch 10–50 Spielminuten (Ø 25). Ankunft wird im nächsten Kalender-Tick verarbeitet.
 - Darstellung: Inspektor (Taste C, s. u.) mit Stadtübersicht (Statistik, Altersbalken, Bildung). HUD zeigt Arbeitslose/Pendler.
   Fußgänger (Platzhalter-Fahrten, Park, Laden, Haustür) zeichnet `PeopleView` (s. „Fußgänger“).
 - Haushaltsart `Household.Kind` (Single/Paar/Familie/Alleinerziehend/Senioren/sonstige) wird aus dem Alter der
@@ -317,19 +359,15 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `InVehicle` (unsichtbar), `Walk(from, fromPoint, to, toPoint, start, end)` (Fußweg über die Gehwege, Place.None = Punkt).
   **Verbunden** über `TransitPedestrians` (Simulation/People, liest nur `CitizenSystem.RideOf`/`TransitSystem`; `PeopleView`
   nimmt sie, wenn `TransitHook` null ist): Fahrgast wartet → zuerst Fußweg Tür → Haltestelle in **Verkehrszeit** ab
-  `Passenger.StartTime` (Gehweglänge ÷ `TransitRules.WalkSpeed` 1,3 m/s, 1 Tick = `TrafficSystem.Dt` 0,25 s → echtes
-  Gehtempo), dann Stehen auf dem Gehweg der Halteseite (`WaitPoint`: 0,6 m zum Bordstein, ±2,5 m gestreut, Blick zur Straße;
+  `Passenger.StartTime` bis `Passenger.ReadyTime` (dann steht er wirklich an der Haltestelle, s. „Zeitmodell“; Verkehrszeit →
+  Ticks über `SimulationWorld.TickTime`), dann Stehen auf dem Gehweg der Halteseite (`WaitPoint`: 0,6 m zum Bordstein, ±2,5 m gestreut, Blick zur Straße;
   `StopSide.Both` → Seite nach Id). Im Bus → unsichtbar. Nach dem Aussteigen Fußweg vom Gehweg des Ziel-Halts zum Ziel in den
-  letzten Ticks vor `PlannedArrivalTick` (Formel wie `CitizenSystem.OnRideEnded`: Luftlinie ÷ 1 500 m/Tick, + 3 außerhalb).
+  letzten Ticks vor `PlannedArrivalTick` (gleiche Formel `CitizenSystem.EgressTicks`: Gehtempo in Verkehrszeit, + 3 Ticks außerhalb).
   Die Fahrt entfernt das Bürgersystem beim Aussteigen – `TransitPedestrians.Observe` merkt sie sich je Frame. Statistische
   Fahrgäste (`TransitRealShare`) und unbeobachtete Fahrten: unsichtbar.
-  **Zeitbasis im Bürgersystem** (nur dokumentiert, nicht umgebaut): `TransitSystem.StartRide` lässt sofort warten (Fußweg zur
-  Haltestelle ohne Dauer; die Planung `TransitOption.AccessMeters`/`PerceivedSeconds` rechnet ihn aber in Verkehrszeit) – die
-  Darstellung zeigt ihn trotzdem in Verkehrszeit; wer einsteigt, bevor er sichtbar ankommt, verschwindet unterwegs. Dauer in
-  Spielticks (Zeitraffer) haben: Platzhalter-Fußwege (`CitizenSystem.StartTrip`: `dist / OtherMetersPerTick`), Fußweg vom
-  Ziel-Halt (`OnRideEnded`: `rest / OtherMetersPerTick`) und Parkwege (`TryLeisure`: `walk`). Für echtes Gehtempo müssten diese
-  drei Stellen in Verkehrszeit rechnen (z. B. Ankunft über `traffic.Time` + Strecke ÷ 1,3 m/s statt `ArriveTick`), bzw.
-  `StartRide` erst nach dem Zugangsweg in die Warteschlange stellen.
+  **Zeitbasis (umgebaut, s. „Zeitmodell“):** `StartRide` setzt `ReadyTime` = Start + Zugangsweg (Luftlinie × 1,25 ÷ 1,3 m/s),
+  vorher steigt der Fahrgast nicht ein; Platzhalter-Fußwege, Fußweg vom Ziel-Halt und Parkwege rechnen mit Gehtempo in
+  Verkehrszeit.
 - **Darstellung** `Game/People/PeopleView` (Begleiter am RoadTool): je Frame alle Bürger mit billiger Vorprüfung (Start/Ziel
   in Reichweite), dann Pose, Sichtkegel, bis `FarDistance` 520 m (Kamera höher → nichts), höchstens `MaxVisible` 3 000 (nächste
   zuerst); bis `NearDistance` 170 m volle Figur (Beine/Arme schwingen um Hüfte/Schulter, Wippen, Senioren gebeugt, Schatten),
@@ -342,9 +380,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   fehlt die Gruppe, Erwachsene skaliert.
 - **Inspektor:** Fußgänger anklickbar (`InspectorPicking`: Kugel um die zuletzt gezeichnete Körpermitte, Vorrang wie Fahrzeuge)
   → Bürger; Ring um die Person und Verfolgen (`PeopleView.TryGetPosition`).
-- **Zeitverzerrung:** 1 Tick = 6 Spielminuten = 0,1 s Echtzeit bei Tempo 1. Platzhalter-Fußwege dauern meist 1–2 Ticks →
-  Fußgänger laufen sichtbar im Zeitraffer (z. B. 600 m in 0,2 s). Deutlich länger sichtbar sind Park, Spaziergang, Laden, Tür.
-  Echt wirkende Gehgeschwindigkeit bräuchte Fußwege in Verkehrszeit (wie Autos) im Bürgersystem – offen.
+- **Gehtempo (Zeitmodell, früher „Zeitverzerrung“ mit 600 m in 0,2 s):** `PedestrianPlanner.WalkAtPace` geht mit 1,3 m/s
+  Verkehrszeit ab dem Start (nur schneller, wenn die Route länger ist als die geplante Zeit; danach Warten am Ziel) – Info-Test
+  misst Median 1,30 m/s. Rad/Sonstiges (> 900 m Luftlinie) ist unsichtbar (noch kein Rad). Spaziergang ≈ 1,1 m/s. In Echtzeit bei
+  Tempo 1 ≈ 30-fach (Zeitraffer der Verkehrszeit); Schrittfrequenz über `SimulationRunner.AnimationTimeScale` (max. 3×).
 - Leistung (Testprojekt, Info): Raster 13×13 Straßen (312 Segmente) → Gehwegnetz 17 ms, 500 Routen 75 ms (inkl. JIT).
   Unity noch nicht gestartet (Optik, Frame-Zeiten ungeprüft).
 
@@ -769,13 +808,14 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
   ab 50 % Ausgangslager, wenn Welt − Fracht ≥ 90 % des lokalen Preises, ab 90 % Füllung immer (bis 30 % herunter). Firmen
   dürfen bis 10 Tage Lohn überziehen, darüber kaufen sie nichts.
-- **Lieferverkehr:** eine Lieferung = eine Ladung. Anteil 0,35 × `TrafficSystem.Demand` als echter Lkw (`VehicleClass.Truck`,
+- **Lieferverkehr:** eine Lieferung = eine Ladung. Anteil 0,8 × `TrafficSystem.Demand` als echter Lkw (seit dem Zeitmodell; vorher 0,35) (`VehicleClass.Truck`,
   **negative Fahrt-Ids** → keine Kollision mit Bürgerfahrten), höchstens 15 % von `MaxVehicles`; Abfahrten über die Stunde
-  verteilt, bei fehlendem Platz an der Einfahrt bis 2 h erneut versucht, sonst Platzhalter (3 km/Tick, +3 Ticks außerhalb).
+  verteilt, bei fehlendem Platz an der Einfahrt bis 2 h (20 Versuche, 15 min Verkehrszeit) erneut versucht, sonst Platzhalter
+  (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s Verkehrszeit, +3 Ticks außerhalb).
   Ankunft über `TripEnded` bucht ins Ziellager (auch bei Abbruch; Sicherheitsnetz 3 Tage). Transport = 12 € + 0,12 €/Verkehrs-
   sekunde (geschätzt beim Abschicken, beim Lkw mit echter Fahrzeit nachberechnet → **Stau kostet Geld**). `VehicleView` zeigt
-  Lkw mit den Katalogmodellen `AssetCatalog.Trucks`. Wegen der Zeitverzerrung (1 Stunde = 2,5 s Verkehr) scheitern in dichten
-  Städten viele Lkw-Starts am Platz → Platzhalter (Statistik `TruckFailedYesterday`).
+  Lkw mit den Katalogmodellen `AssetCatalog.Trucks`. Früher (Zeitverzerrung, 1 Stunde = 2,5 s Verkehr) scheiterten viele
+  Lkw-Starts am Platz; seit dem Zeitmodell (1 Stunde = 7,5 min Verkehr) ~4 % (Statistik `TruckFailedYesterday`).
 - **Haushalte** (Hook `CitizenSystem.Purchase`, markiert in `Arrive`): Einkauf deckt 3 Tage × (0,5 + 0,5 × Personen);
   Grundbedarf (Lebensmittel) immer, Komfort (Kleidung, Möbel) ab 110 €/Tag Einkommen + Zufriedenheit 0,45, Luxus
   (Elektronik, Fahrzeuge) ab 200 € + 0,55; Budget Grundbedarf 90 %, Rest 50 % des Einkommens; Ladenpreis = lokal × 1,45.
@@ -816,7 +856,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   „Firma“ (`InspectorWindow.Goods.cs`: Gewinn gestern/heute, Marge, Produktivität + Zustand, Betrieb/Rolle, Vorkommen,
   Strom/Wasser, Kasse, Gewinnrechnung, Eingangslager/Regale und Ausgangslager als Balken, laufende Lieferungen mit
   anklickbarem Lkw); Lkw zeigen „Ladung“ (Gut, Menge, Art, Von/Nach anklickbar, Wert, Transport).
-- **Leistung** (Testprojekt, Info): ~190 Firmen, ~15 000 Bürger ≈ 4 ms/Tick für alle Systeme; Warensystem allein ≈ 2 ms je Spieltag.
+- **Leistung** (Testprojekt, Info): ~190 Firmen, ~15 000 Bürger ≈ 4 ms/Tick für alle Systeme (vor dem Zeitmodell; seitdem
+  ≈ 10 ms je Kalender-Tick inkl. 180 Verkehrsschritten); Warensystem allein ≈ 2 ms je Spieltag.
 - Später: Baustoffe für den Bau, Brennstoffe
   für Kraftwerke, Lagerhallen/Güterbahnhof/Hafen, Verträge statt Spotmarkt, Zölle/Subventionen, Löhne nach Gewinn, Ladenwahl
   nach Preis/Sortiment, Abfahrt-Puffer für Lkw, Spieler-Spezialisierung über `Restructure`.
@@ -940,8 +981,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   schnelle Platzhalterwelt ohne Weltkarte (angehalten, `AwaitingNewGame`), das Fenster öffnet sich und lässt sich erst nach dem
   Gründen schließen („Schnellstart“ = beste Region ohne Vorlieben). Mit Spielständen startet das Spiel wie bisher mit der
   Standardwelt; Spielmenü (Esc) → „Neues Spiel einrichten …“. Optik ungetestet (Unity nicht gestartet).
-- **Spielstand:** Weltabschnitt **v2** = v1 + `FreeLandShare` + Stadtname der Einstellungen; Abschnitt „realm“ (s. o.).
-  **Migration (Entscheidung): alte Stände behalten ihr Spieler-Land.** v1 lädt mit `FreeLandShare = 0` → exakt die alte Welt
+- **Spielstand:** Weltabschnitt **v3** = v2 (Zeitmodell: Verkehrsschritt) + `FreeLandShare` + Stadtname der Einstellungen; Abschnitt „realm“ (s. o.).
+  **Migration (Entscheidung): alte Stände behalten ihr Spieler-Land.** v1/v2 laden mit `FreeLandShare = 0` → exakt die alte Welt
   (alle Regionen NPC, Spieler = Land der Startregion), weil Länder-Volkswirtschaften („planet“) und Handel („trade“) nach
   Länder-Ids gespeichert sind – eine neu verteilte Welt würde nicht mehr zu Verträgen, Beziehungen und Lagern passen.
   Fehlt „realm“, heißt die Stadt „Neustadt“ (wie der alte Platzhalter).
@@ -1062,7 +1103,7 @@ Low Poly City Objects (Guddies), Road props for games, Nature Pack (Downtown Gam
 Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL wird entfernt (Unity-6-inkompatibel).
 
 ## Verkehr
-- `TrafficSystem` (1 Tick = 0,25 s Fahrzeit, entkoppelt von der Kalenderzeit): `LaneGraph` (Spuren + Abbiegebeziehungen,
+- `TrafficSystem` (`ISubstepSystem`: 1 Verkehrsschritt = 0,25 s Fahrzeit, 180 je Kalender-Tick, s. „Zeitmodell“): `LaneGraph` (Spuren + Abbiegebeziehungen,
   links abbiegen von linken Spuren …), `Pathfinder` (A* über gerichtete Segmente), IDM-Fahrzeugfolge, Spurwechsel,
   `JunctionController` (Auto-Vorfahrt, rechts vor links, Schilder, Ampelphasen), `TrafficRules` (Spieler-Regeln).
 - Fahrten: Bürgerfahrten aus Gebäuden (s. Bürger G2) und Durchgangsverkehr zwischen **Außenanschlüssen**
@@ -1100,11 +1141,13 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   + 0,2 gesellig − 0,15 sparsam − 0,3 naturverbunden (je Abweichung von 0,5) + 0,5 Stau − 0,7 Bus voll − 0,5 verspätet + 0,3 gute
   Fahrt) / (Temperatur + 0,15)); t_Fuß/Rad = 1,25 × Luftlinie / 2,2 m/s; t_Bus,gefühlt = 1,3 × Fußwege/1,3 m/s + 1,5 × halber Takt
   + Fahrzeit + 120 s je Umstieg. Ohne Linien/Erinnerungen ist alles exakt wie vorher. **Skalierung wie beim Auto:**
-  `TransitRealShare` 35 % × Demand fahren als einzelne Fahrgäste (warten an der Haltestelle, steigen ein – Kapazität 60 –, fahren,
-  steigen aus, Rest zu Fuß), der Rest statistisch (Fahrplanzeit auf der Spieluhr, zählt als Fahrgast und zahlt, belegt keinen
-  Platz). Grund ist die Zeitverzerrung (ein Spieltag = 60 s Verkehrszeit), nicht die Rechenzeit. Volle Busse lassen stehen
+  `TransitRealShare` (seit dem Zeitmodell 100 %, vorher 35 %) × Demand fahren als einzelne Fahrgäste (gehen zur Haltestelle,
+  warten, steigen ein – Kapazität 60 –, fahren, steigen aus, Rest zu Fuß), der Rest statistisch (Fahrplanzeit in Ticks, zählt als
+  Fahrgast und zahlt, belegt keinen Platz). Früher Notlösung gegen die Zeitverzerrung (ein Spieltag = 60 s Verkehrszeit), jetzt
+  3 h Verkehrszeit je Tag → nur noch Stellschraube. Wartende werden jeden Tick geprüft, Busse auch zwischen den Ticks eingesetzt
+  (`TransitSystem.Substep`). Volle Busse lassen stehen
   (nach 2 vollen gibt man auf), Geduld max(150 s, 2,5 × Takt); Ergebnis → Erinnerungen `BusFull`/`BusLate`/`BusRide` →
-  Mobilitäts-Bedürfnis (−0,15/−0,1/+0,1) und nächste Wahl. Sicherheitsnetz 5 Tage.
+  Mobilitäts-Bedürfnis (−0,15/−0,1/+0,1) und nächste Wahl. Sicherheitsnetz 1 Tag (vorher 5). Takt/Umlauf im Fenster in Spielminuten.
 - **Kasse:** `BudgetCategory.TransitFares` („Fahrgeld ÖPNV“, 1,50 € je Einstieg, über `EconomySystem.Earn` alle 5 Ticks),
   `TransitConstruction` („Bau ÖPNV“); Unterhalt als `IUpkeepSource` „ÖPNV“ (Depots + 420 € je Bus im Einsatz + Haltestellen).
 - **Abfrage-API:** Linie `Stops/VisitStops/Legs`, `BusesOf`, `PassengersToday/Yesterday/Total`, `AverageLoad`, `Punctuality`,
@@ -1121,7 +1164,8 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   keinen ÖPNV-Eintrag. Im Editor noch nicht visuell abgenommen.
 - **Medien:** Schlagzeilen-Themen `NewBusLine`, `BusOverloaded` (≥ 20 stehen gelassen am Tag), `BusLate` (Pünktlichkeit < 60 %),
   erkannt in `MediaSystem.DetectTransit` (liest `world.Transit`; ohne Medien gebaute Linien sind keine Neuigkeit).
-- Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme.
+- Leistung (Testprojekt, Info): 10 Linien, 40 Busse, ~10 500 Bürger ≈ 4 ms/Tick für alle Systeme (vor dem Zeitmodell; seitdem
+  ≈ 11,6 ms je Kalender-Tick inkl. 180 Verkehrsschritten).
 - Später: Busspuren bevorzugen/Buchten, Tram/U-/S-Bahn, Taxi, Fahrpreis/Abo einstellbar, Linien bearbeiten im Werkzeug
   (Halt einfügen per Klick), Fahrplan mit Abfahrtszeiten statt Verteilung, Depotzuordnung je Linie (sichtbare Wartende: ✅ über `TransitPedestrians`, s. „Fußgänger“).
 
@@ -1154,7 +1198,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
   Reihenfolge je Spur, Stau-Index je Spur) – nur so laufen geladene Welten bitgleich weiter; Bürger, Lkw-Ladungen und
   Busse behalten ihr Fahrzeug, niemand geht verloren.
 - Determinismus-Test: Welt A spielt, speichert, B lädt; A und B laufen weiter (auch mit gleichen Spieleraktionen,
-  Speichern mitten im Tag, nach Bau ohne Tick, Handels-Command in der Warteschlange) und müssen je Abschnitt bitgleich sein
+  Speichern mitten im Tag und mitten im Tick zwischen zwei Verkehrsschritten, nach Bau ohne Tick, Handels-Command in der Warteschlange) und müssen je Abschnitt bitgleich sein
   (`SaveGame.SectionHashes`/`StateHash` = FNV über die Abschnittsbytes) plus unabhängige Beobachtungen.
 - Leistung (Testprojekt, Info): 15 000 Bürger speichern ≈ 0,1 s, laden ≈ 0,17 s (inkl. Welt erzeugen), Datei ≈ 2,8 MB.
 - Unity: `SimulationRunner.ReplaceWorld`/`NewGame` + Event `WorldReplaced` (Views lösen alte Abos, verwerfen Caches/Objekte,
@@ -1192,7 +1236,7 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
      Zuzug nur über Außenanschlüsse, Lieferverkehr (G5), Zufriedenheit (G6)
      ✅ Sichtbare Fußgänger: Gehwegnetz + Routen (Querung an Kreuzungen, Parkweg), Interpolation über die Fahrzeit,
      Park/Spaziergang/Laden/Haustür, Instancing mit LOD, Platzhalter-Figuren + eigene Modelle (Models/People), anklickbar
-     (im Editor noch nicht visuell abgenommen). Später: Fußwege in Verkehrszeit (echtes Gehtempo), Abkürzungen durch Parks,
+     (im Editor noch nicht visuell abgenommen). ✅ Fußwege in Verkehrszeit (echtes Gehtempo, s. „Zeitmodell“). Später: Abkürzungen durch Parks,
      freie Fußwege/Plätze, Ampelphasen an Zebrastreifen, inkrementeller Gehweg-Neubau (✅ ÖPNV verbunden: Wartende, Fußwege zur/von der Haltestelle)
    - ✅ G3 Strom & Wasser: Kraftwerke/Pumpe/Wasserturm, Netze (selbst verlegt), Bilanz je Netz,
      Versorgungsstatus, Verlassen bei langem Ausfall, Info-Ansicht, Kosten/Unterhalt über die Stadtkasse.
@@ -1225,6 +1269,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
      Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
      bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
+   - ✅ Zeitmodell: Kalender 6 min/Tick + 180 Verkehrsschritte (Zeitdehnung 8), Fußwege/Platzhalter in Verkehrszeit,
+     Fahrgäste gehen erst zur Haltestelle, Tempo 1/2/3 = 6/3/1,5 min je Spieltag mit Rechenzeit-Budget, Speichern mitten im Tick
+     (im Editor noch nicht visuell abgenommen). Später: Abfahrten innerhalb des Ticks verteilen, CarShare neu abstimmen, Rad-Darstellung
    - ✅ Speichern & Laden: versioniertes Binärformat mit Abschnitten/Migrationen, alle Systeme `ISaveable`, Determinismus
      nach dem Laden, Spielmenü (Esc) mit Autosave/Schnellspeichern. Später: Cloud/Multiplayer-Stände, Vorschaubild, Replays aus Commands
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken

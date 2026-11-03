@@ -345,10 +345,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.NotNull(SaveGame.Capture(b).Find("realm"));
         }
 
-        [Fact]
-        public void SaveLoad_OldSave_KeepsOldPoliticalModel()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        public void SaveLoad_OldSave_KeepsOldPoliticalModel(int oldVersion)
         {
-            // alter Stand (Weltabschnitt v1, ohne „realm“): Welt im alten Modell, Spieler-Land = NPC-Land der Startregion
+            // alter Stand (Weltabschnitt v1/v2 ohne freies Land, ohne „realm“): Welt im alten Modell, Spieler-Land = NPC-Land der Startregion
             var settings = new WorldSettings
             {
                 GenerateWorld = true, WorldSeed = 31, Planet = new PlanetSettings { Width = 180, Height = 90, TargetRegions = 120, TargetCountries = 16, FreeLandShare = 0f },
@@ -358,8 +360,9 @@ namespace CityBuilder.Simulation.Tests
             for (int i = 0; i < SimulationClock.TicksPerDay * 2; i++) old.Step();
             var c = SaveGame.Capture(old, "alt");
             var ws = c.Find(SaveGame.WorldSectionId);
-            // v1 = v2 ohne die angehängten Felder (Float freies Land + String Stadtname = 4 + 1 Byte bei null)
-            c.Set(SaveGame.WorldSectionId, 1, ws.Data.Take(ws.Data.Length - 5).ToArray());
+            // v3 hängt Float freies Land + String Stadtname an (4 + 1 Byte bei null), v2 davor den Verkehrsschritt (Int, auf der Tick-Grenze 0)
+            int cut = oldVersion == 2 ? 5 : 9;
+            c.Set(SaveGame.WorldSectionId, oldVersion, ws.Data.Take(ws.Data.Length - cut).ToArray());
             Assert.True(c.Remove("realm"));
             var loaded = SaveGame.Restore(c);
             Assert.Equal(0, loaded.Planet.FreeRegionCount);

@@ -110,7 +110,7 @@ namespace CityBuilder.Game.Persistence
             var w = Runner?.World;
             if (w == null) return;
             int min = AutosaveMinutes;
-            nextAutosaveTick = min <= 0 ? -1 : w.Clock.Tick + Math.Max(1, min / 6); // 1 Tick = 6 Spielminuten
+            nextAutosaveTick = min <= 0 ? -1 : w.Clock.Tick + Math.Max(1, min / Simulation.Core.TimeModel.GameMinutesPerTick); // Zeitmodell: 1 Tick = 6 Spielminuten
         }
 
         // ------------------------------------------------------------ Tasten, Autosave
