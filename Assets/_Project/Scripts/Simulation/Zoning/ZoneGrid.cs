@@ -45,6 +45,10 @@ namespace CityBuilder.Simulation.Zoning
     {
         public const float CellSize = 8f;
         public const int Depth = 4;
+        /// <summary>Zellmitten näher als das am Straßenrand (Gehweg-Außenkante) sind ungültig.</summary>
+        public const float RoadClearance = CellSize * 0.45f;
+        /// <summary>Mindestabstand der Zellmitten verschiedener Straßen; die ältere Straße (kleinere Id) gewinnt.</summary>
+        public const float CellSpacing = CellSize * 0.85f;
         const float Bucket = 16f;
 
         readonly RoadNetwork network;
@@ -132,10 +136,10 @@ namespace CityBuilder.Simulation.Zoning
         {
             if (ground.IsWater(center)) return false;
             if (MathF.Abs(height - roadHeight) > 4f) return false;       // zu steil zur Straße
-            if (network.FindNearestSegment(center, CellSize * 0.45f) != null) return false; // auf/an einer Straße
+            if (network.FindNearestSegment(center, RoadClearance) != null) return false; // auf/an einer Straße
             // Überlappung mit bereits vergebenen Zellen anderer Straßen
             foreach (var (b, c, r) in Near(center, CellSize * 0.9f))
-                if (Vector2.Distance(b[c, r].Center, center) < CellSize * 0.85f) return false;
+                if (Vector2.Distance(b[c, r].Center, center) < CellSpacing) return false;
             return true;
         }
 

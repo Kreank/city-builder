@@ -106,6 +106,26 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Abtastung `SampledCurve` (Endpunkte nach Bogenlänge, nicht nach t). `SampledCurve.OffsetAt` hält Innenkanten
   enger Kurven frei von Selbstschnitt (enge Zone → Fächerpunkt). Grenze: Haarnadeln mit Schenkeln kürzer als die
   Straßenbreite überdecken sich physisch.
+- **Bauhilfe Parallelabstand** (`Simulation/Roads/ParallelGuides`, getestet in `ParallelGuideTests`; Anzeige
+  `RoadGuidesView`, Einrasten `RoadTool`): Das Zonenraster beginnt an der **Gehweg-Außenkante** (`RoadType.HalfWidth`),
+  Reihen à 8 m. Bei nahen Straßen gewinnt die **ältere** (kleinere Segment-Id, volle Reihen), die neuere bekommt nur
+  Reihen, deren Zellmitten ≥ `ZoneGrid.CellSpacing` (6,8 m) von fremden Zellen und > `ZoneGrid.RoadClearance` (3,6 m) vom
+  Straßenrand liegen (bis 1,2 m Überlappung wird geduldet, darüber fällt die Reihe weg – Rest bleibt ungenutzt).
+  **Optimaler Achsabstand** = halbe Breite A + halbe Breite B + (4 + n) × 8 m, n = Reihen der neuen Straße (F9: 4 → 3 →
+  2 → 1 → aus; Standard 4 = „Rücken an Rücken“ 64 m). Jedes Vielfache von 8 m ist lückenlos, Stufen unter 4 + 1 sind
+  sinnlos, weil die ältere Straße immer zuerst 4 Reihen nimmt (eine „1 Reihe je Seite“-Bebauung gibt das Raster nicht her).
+  Beispiele (4 + 4): city_2↔city_2 77 m, city_4↔city_4 84 m, city_4↔city_2 80,5 m, Einbahn 1-spurig↔selbst 74 m,
+  Tram↔selbst 83,4 m. `Evaluate` bildet die Raster-Regeln nach (Reihen je Straße, ungenutzt, Überlappung), `Describe`
+  liefert „Abstand 77,0 m · optimal (4 + 4 Reihen)“ bzw. „zu eng: X m Überlappung“/„X m Lücke“.
+  Werkzeug (gerade/Kurve, Stadtstraßen): gestrichelte Parallelen beidseits der bis zu 3 nächsten ebenerdigen Stadtstraßen
+  (gerade auch 80 m über die Enden hinaus), deren Zonentiefe als zarte Fläche mit Reihenlinien, die Vorschau zeigt ihre
+  eigene Zonentiefe beidseitig (grün). Mit Einrasten (G, Strg hebt auf) rasten Start, Kontrollpunkt und Ende im Umkreis
+  6 m auf die Linien ein; gerade Straßen von einer geraden Hilfslinie aus werden bis 8° Abweichung exakt parallel
+  (Länge 8-m-Raster), Kurven zwischen zwei Punkten derselben gekrümmten Hilfslinie bekommen einen ausgeglichenen
+  Kontrollpunkt (`FitParallelControl`, 90°-Bogen mit 77 m Abstand < 1 m Abweichung). Abstand + Bewertung stehen in
+  `RoadTool.Guide.Info` (Hinweiszeile + Beschriftung). **Blockraster (F10):** Länge gerader Straßen rastet auf
+  `BlockLength` = Zellen × 8 m + 2 × (halbe Breite + 1 m) ein (Kreuzungsfläche wird vom Raster ausgespart), Querlinien
+  zeigen die Stellen; gilt, wenn der Start eine Kreuzung ist/wird. An Blockecken nimmt die ältere Straße die Eckzellen.
 
 ## Gelände
 - `TerrainMap` (Simulation, 4-m-Raster): erzeugt (Hügel bis ~90 m, Fluss, Wasserspiegel 0) oder flach (Tests).
