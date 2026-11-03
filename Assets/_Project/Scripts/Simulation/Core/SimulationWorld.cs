@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Environment;
+using CityBuilder.Simulation.Goods;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
@@ -119,6 +120,12 @@ namespace CityBuilder.Simulation.Core
             CitizenServiceBinding.Connect(world.Citizens, world.Services);
             // --- Ende G4
 
+            // --- G5 Warenketten (nach Diensten, vor der Stadtkasse: Tagesgewinne stehen fest, wenn die Kasse abrechnet)
+            world.Goods = new GoodsSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
+            world.AddSystem(world.Goods);
+            GoodsBinding.Connect(world.Goods, world.City, world.Citizens, world.Utilities);
+            // --- Ende G5
+
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
             world.Roads.Budget = world.Economy;
@@ -129,6 +136,7 @@ namespace CityBuilder.Simulation.Core
             world.Economy.RegisterUpkeep(world.Services);   // G4: Unterhalt Dienste
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
+            world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
             return world;
         }
 
@@ -143,6 +151,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Dienste (G4): Polizei, Feuerwehr, Gesundheit, Schulen, Bibliothek, Parks, Müll. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceSystem Services { get; private set; }
+
+        /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public GoodsSystem Goods { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }

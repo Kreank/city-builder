@@ -93,6 +93,10 @@ namespace CityBuilder.Simulation.Zoning
         public Func<ZoneType, float> DemandModifier { get; set; }
         // --- Ende Stadtkasse
 
+        // --- G5 Warenketten (Hook): Zu-/Abschlag je Zonenart auf die Nachfrage (vor dem Steuerfaktor). null = 0. Gesetzt in GoodsBinding.
+        public Func<ZoneType, float> BusinessDemand { get; set; }
+        // --- Ende G5
+
         public CitySystem(RoadNetwork network, TerrainMap terrain, Vector2 origin, float sizeMeters, int seed = 1)
         {
             this.network = network;
@@ -229,6 +233,10 @@ namespace CityBuilder.Simulation.Zoning
             Demand[ZoneType.Office] = Need(population * 0.07f - 10f, officeJobs) + joblessPull * educatedShare;
             Demand[ZoneType.Industry] = Need(population * 0.14f + 20f, industryJobs) + joblessPull * (1f - educatedShare);
             Demand[ZoneType.Mixed] = (res + Demand[ZoneType.Retail]) * 0.5f;
+            // --- G5 Warenketten (Hook): Gewinn/Verlust der Firmen, Importanteil und leere Läden verschieben die Nachfrage (additiv)
+            if (BusinessDemand != null)
+                foreach (var z in Zones.All) Demand[z] = Demand[z] + BusinessDemand(z);
+            // --- Ende G5
             // --- Stadtkasse: hohe Steuern dämpfen die Nachfrage (Standardsatz = Faktor 1)
             if (DemandModifier != null)
                 foreach (var z in Zones.All) Demand[z] = Demand[z] * DemandModifier(z);

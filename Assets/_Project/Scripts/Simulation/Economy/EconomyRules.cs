@@ -30,6 +30,11 @@ namespace CityBuilder.Simulation.Economy
         public const double CommercialJobTaxBase = 45.0;
         public const double OfficeJobTaxBase = 60.0;
         public const double IndustryJobTaxBase = 40.0;
+        /// <summary>
+        /// G5: Gewerbesteuer aus dem Gewinn = Tagesgewinn × Faktor × Satz (10 % → 25 % des Gewinns; Verlust → 0).
+        /// Der Faktor deckt vorerst auch den Lohnsteueranteil ab, den die alte Job-Pauschale enthielt.
+        /// </summary>
+        public const double ProfitTaxMultiplier = 2.5;
 
         /// <summary>Nachfrage-Bonus je Prozentpunkt unter dem Standardsatz (0 % → ×1,2).</summary>
         public const float DemandBonusPerPoint = 0.02f;

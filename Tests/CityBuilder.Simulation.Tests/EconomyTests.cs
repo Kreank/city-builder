@@ -54,12 +54,14 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(week.Amount(BudgetCategory.ResidentialTax) > 0, "Grundsteuer erwartet");
             Assert.True(week.Amount(BudgetCategory.IndustryTax) > 0, "Gewerbesteuer Industrie erwartet");
 
-            // Formel: bewohnte Haushalte × 40 € × Satz, besetzte Jobs × Basis × Satz
+            // Formel: bewohnte Haushalte × 40 € × Satz; Gewerbesteuer seit G5 aus dem Gewinn der Firma
+            // (Tagesgewinn × Faktor × Satz, Verlust → 0) statt besetzte Jobs × Basis × Satz
             int households = w.City.Buildings.Where(b => b.IsConstructed).Sum(b => b.OccupiedHouseholds);
-            int industryWorkers = w.City.Buildings.Where(b => b.IsConstructed && b.Zone == ZoneType.Industry).Sum(b => b.Workers);
+            double industryProfitTax = w.City.Buildings.Where(b => b.IsConstructed && b.Zone == ZoneType.Industry)
+                .Sum(b => System.Math.Max(0, w.Goods.TaxableProfit(b)) * EconomyRules.ProfitTaxMultiplier * 0.10);
             var day = e.EstimateDay();
             Assert.Equal(households * EconomyRules.HouseholdTaxBase * 0.10, day.Amount(BudgetCategory.ResidentialTax), 2);
-            Assert.Equal(industryWorkers * EconomyRules.IndustryJobTaxBase * 0.10, day.Amount(BudgetCategory.IndustryTax), 2);
+            Assert.Equal(industryProfitTax, day.Amount(BudgetCategory.IndustryTax), 2);
 
             // Höherer Satz → mehr Einnahmen bei gleicher Belegung
             e.SetTaxRate(TaxKind.Residential, 0.20f);
