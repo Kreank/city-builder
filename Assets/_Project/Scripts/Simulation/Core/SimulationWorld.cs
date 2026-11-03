@@ -247,6 +247,16 @@ namespace CityBuilder.Simulation.Core
             world.Gateways.Connect();
             if (newGame && world.Settings.PrebuiltConnections) world.Gateways.Generate();
             // --- Ende Gateways
+
+            // --- Eigene Assets 2 (agent/models2): Energie erweitert (Abfluss aus dem Klima, Biogas-Rohstoff aus den Bauernhöfen)
+            // und Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung im Verkehr; Standard aus, das Spiel schaltet ein)
+            world.Utilities.Climate = world.Climate;
+            var goods = world.Goods;
+            world.Utilities.FarmSources = () => CityBuilder.Simulation.Goods.FarmFeedstock.Sources(goods);
+            world.ServiceVehicles = new ServiceVehicleSystem(world.Services, world.City, world.Traffic, world.Clock, world.Citizens, seed);
+            world.AddSystem(world.ServiceVehicles);
+            world.Economy.RegisterUpkeep(world.ServiceVehicles);
+            // --- Ende Eigene Assets 2
             return world;
         }
 
@@ -289,6 +299,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Außenanbindungen (Autobahn, Bahn, Wasser, Luft) am Kartenrand. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Gateways.GatewaySystem Gateways { get; private set; }
+
+        /// <summary>Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public ServiceVehicleSystem ServiceVehicles { get; private set; }
 
         // --- Speichern & Laden
         /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>

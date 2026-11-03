@@ -57,6 +57,7 @@ namespace CityBuilder.Simulation.Tests
                 settings.Planet = new World.PlanetSettings { Width = 96, Height = 48, TargetRegions = 60, TargetCountries = 8 };
             }
             var w = SimulationWorld.CreateDefault(settings, seed);
+            w.ServiceVehicles.Enabled = true; // Eigene Assets 2: Dienstfahrzeuge im Determinismus-Test
             // Hauptachse bis zum Kartenrand (Außenanschluss) + Querstraßen
             TryRoad(w, new Vector2(-500, 0), new Vector2(1020, 0), RoadCatalog.CityFourLane);
             TryRoad(w, new Vector2(-500, 160), new Vector2(500, 160));
@@ -91,6 +92,12 @@ namespace CityBuilder.Simulation.Tests
             {
                 var hv = w.Utilities.PlanLine(UtilityCatalog.HighVoltageLine, new Vector2(700, -138), new Vector2(700, -220));
                 if (hv.IsValid) w.Utilities.BuildLine(hv);
+                // Eigene Assets 2: Batteriespeicher an der Hochspannung (Ladestand im Determinismus-Test)
+                if (w.Utilities.TryBuildFacility(UtilityCatalog.BatteryStorage, new Vector2(760, -230)) != null)
+                {
+                    var bat = w.Utilities.PlanLine(UtilityCatalog.HighVoltageLine, new Vector2(744, -230), new Vector2(712, -230));
+                    if (bat.IsValid) w.Utilities.BuildLine(bat);
+                }
             }
             w.Utilities.BuildAlongRoads(w.Utilities.PlanAlongRoads(UtilityCatalog.UndergroundCable));
             w.Services.TryBuild(ServiceCatalog.PoliceStation, new Vector2(-100, -40));

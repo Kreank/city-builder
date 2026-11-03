@@ -27,6 +27,29 @@ namespace CityBuilder.Simulation.Utilities
         public bool IsSubstation => Type.IsSubstation;
         // --- Ende
 
+        // --- Energie erweitert (gespeichert ab utilities v3)
+        /// <summary>
+        /// Nennleistung dieses Bauwerks (kW): Katalogwert, bei Wasserkraft je Standort aus Abfluss und Fallhöhe berechnet
+        /// (<see cref="UtilitySystem.EvaluateHydroSite"/>). Speicher: Lade-/Entladeleistung.
+        /// </summary>
+        public float Rated { get; internal set; }
+        /// <summary>Batteriespeicher: gespeicherte Energie (kWh, 0 … <see cref="UtilityFacilityType.StorageKwh"/>).</summary>
+        public float StoredKwh { get; internal set; }
+        /// <summary>Batteriespeicher: im letzten Durchlauf geladen (kW, aus dem Netz) – Anzeige.</summary>
+        public float Charging { get; internal set; }
+        /// <summary>Wasserkraft: mittlerer Abfluss des Flusses am Standort (m³/s) und nutzbare Fallhöhe (m).</summary>
+        public float SiteFlow { get; internal set; }
+        public float SiteHead { get; internal set; }
+        /// <summary>Anteil 0..1 der Nennleistung im letzten Durchlauf (Wind, Abfluss, Rohstoff; ohne Störfall).</summary>
+        public float Availability { get; internal set; } = 1f;
+        /// <summary>Biogas: genutzte Rohstoffbasis (Beschäftigte der Bauernhöfe im Umkreis, die diese Anlage beliefern).</summary>
+        public float FeedWorkers { get; internal set; }
+        public bool IsStorage => Type.IsStorage;
+        public bool IsGenerator => Type.IsGenerator;
+        /// <summary>Ladestand 0..1 eines Speichers.</summary>
+        public float StateOfCharge => Type.StorageKwh > 0f ? StoredKwh / Type.StorageKwh : 0f;
+        // --- Ende Energie erweitert
+
         public UtilityKind Kind => Type.Kind;
         public Vector2 Side => new Vector2(-Front.Y, Front.X);
         public float Radius => MathF.Sqrt(Type.Width * Type.Width + Type.Depth * Type.Depth) * 0.5f;
@@ -139,9 +162,17 @@ namespace CityBuilder.Simulation.Utilities
         public int Buildings { get; internal set; }
         public int SuppliedBuildings { get; internal set; }
         public int Lines { get; internal set; }
+        // --- Energie erweitert: Batteriespeicher im Netz (kW im letzten Durchlauf; gespeichert ab utilities v3)
+        /// <summary>Von Speichern in dieses Netz abgegeben (kW, in <see cref="Generation"/> enthalten).</summary>
+        public float StorageDischarge { get; internal set; }
+        /// <summary>Von Speichern aus diesem Netz aufgenommen (kW).</summary>
+        public float StorageCharge { get; internal set; }
+        /// <summary>Speicher im Netz.</summary>
+        public int Storages { get; internal set; }
+        // --- Ende Energie erweitert
 
         /// <summary>Gibt es eine Quelle (Erzeuger oder Umspannwerk mit Hochspannung)?</summary>
-        public bool HasSource => Facilities > 0 || Imported > 0f || TransformerCapacity > 0f;
+        public bool HasSource => Facilities > 0 || Imported > 0f || TransformerCapacity > 0f || StorageDischarge > 0f; // Energie erweitert: Speicher
         public bool HasShortage => Demand > Production + 1e-3f;
         /// <summary>Deckungsgrad 0..1 (1 = alles versorgt).</summary>
         public float Coverage => Demand <= 0f ? 1f : MathF.Min(1f, Production / Demand);
