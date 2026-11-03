@@ -76,7 +76,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Bot-Reiche und Spieler sollen dieselben Schnittstellen nutzen (Handel, Verträge).
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, People)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -537,8 +537,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **`MediaSystem`** (`world.Media`, nach den Diensten): erkennt Ereignisse aus echten Daten – Stau (≥ 6 stehende Fahrzeuge je
   Segment), Strom-/Wasser-/Abwasserausfall (≥ 3 Gebäude), Steuersatz rauf/runter, Eröffnung Schule/Gesundheit/Park/Polizei/
   Feuerwehr/Medium, Atomkraftwerk gebaut/Störfall, Trinkwasser < 80 %, Zufriedenheit ± 4 Punkte zum Vortag, Einwohnermarken,
-  Arbeitslosigkeit ≥ 12 %. Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
-  {Einwohner} {Prozent} {Medium}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
+  Arbeitslosigkeit ≥ 12 %, Handel (Vertrag, Embargo, Zollerhöhung über `Report`, s. Etappe 8). Vorlagen in `Services/Content/Headlines.cs` (Platzhalter {Straße} {Anzahl} {Steuer} {Satz} {Name}
+  {Einwohner} {Prozent} {Medium} {Land}, Ton je Thema, Medienhäuser „Stadt-Kurier“, „Radio Welle 98“, „Stadt-TV 7“).
   **Ohne Medien (bzw. Reichweite < 1 %) keine Schlagzeilen.** Sperrfrist 2 Tage je Thema/Bezug, max. 2 je Durchlauf,
   `Recent` (max. 40, neueste zuerst), `Published`, `CurrentTone` (2 Tage gewichtet). HUD: `Game/Services/MediaAlerts` →
   `HudMessages` (schlechte Nachrichten als Warnung). Linke Leiste Knopf „Medien-Reichweite“.
@@ -713,7 +713,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Markt je Gut:** Bestand = Ausgangs- + Eingangslager aller Firmen; Zielbestand = 3 Tage Bedarf (Eingänge der Belegschaft +
   Haushaltswünsche, geglättet 0,3). Zielpreis = Grund × clamp(1 + 0,6 × (1 − (Bestand+1)/(Ziel+1)), 0,5, 1,8); lokaler Preis
   läuft je Tag 25 % dorthin und bleibt im **Paritätsband** Welt × [0,9 … 1,07] (Export- bzw. Importparität). Weltmarkt =
-  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage).
+  Grund × (1 ± 10 % geglättetes Hash-Rauschen, Periode 15 Tage); mit Weltkarte stattdessen der Weltpreis der Länder (Etappe 8).
 - **Handel:** Abnehmer bestellen bei Eingang + unterwegs < 50 % (bis 3 Ladungen/Stunde): günstigster Anbieter im selben
   Netzteil (lokaler Preis + Lkw-Kosten/Menge) gegen Import (Welt × 1,08 Fracht + Lkw ab nächstem Außenanschluss). Ohne jeden
   Außenanschluss: **Umland** (Fracht 15 %, Platzhalter, 1,5 km) – wie beim Zuzug ist der Start ohne Anschluss spielbar. Export
@@ -802,7 +802,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Kapazität je Kopf aus Profil/Vorkommen, Ernte und Heizbedarf aus dem Klima der Hauptstadt, Vorleistungen (Erz+Energie+Holz →
   Industrie → Konsum/Technik; Tourismus braucht Lebensmittel/Energie) begrenzen die Produktion, Haushaltsbedarf je Kopf,
   Lager (Ziel 20, max. 120 Tage, Überschuss → `Overflow` = Exportpotenzial), Preis träge (±3 %/Tag je Lücke, 0,25–4 × Grundpreis;
-  Startpreis spiegelt Knappheit). `Balance(cat)` = Überschuss/Defizit je Tag für die spätere Handels-KI, `WorldPrice` =
+  Startpreis spiegelt Knappheit; seit Etappe 8 weltweit kalibriert, s. „Handel (Etappe 8)“). `Balance(cat)` = Überschuss/Defizit je Tag für die Handels-KI, `WorldPrice` =
   produktionsgewichtetes Mittel. Spieler-Land = Land der Startregion (`Planet.PlayerCountry`, `Country.IsPlayer`) – läuft
   vorerst ebenfalls aggregiert (der Rest des Landes neben der Stadt).
 - **Stadtkarte als Ausschnitt** (`SimulationWorld`-Konstruktor): `RegionMapping.TerrainFor` → `TerrainParams` (Relief
@@ -831,8 +831,87 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
 - Später: Startregion im Menü wählen (Weltkarte anklicken), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
-  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Handel zwischen Ländern
-  (Etappe 8 über `Balance`/`Price`), Stadt-Wirtschaft (G5) speist ins Spieler-Land, Wechsel in andere Städte (LOD detailliert).
+  Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
+  Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
+
+## Handel (Etappe 8)
+- `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
+  `TradeContract` (Bedingungen, Angebot, Vertrag, Lieferung, Gedächtnis), `TradeCommands`, `NationTrade` (Persönlichkeit, Zölle,
+  Vertrauen), `CityTradeDepot` (Grenzlager), `TradeRules` (alle Zahlen). Nur mit Weltkarte: `CreateDefault` legt `world.Trade` an,
+  sobald `world.Planet.Economy` existiert (läuft zuletzt; Tests ohne Welt bleiben unverändert). G5 kennt nur `Goods/ITradeGateway`.
+- **Güter ↔ Kategorien:** Agrar = Getreide, Vieh, Mehl, Lebensmittel; Holz = Holz, Bretter; Erze/Baustoffe = Erz, Sand, Zement,
+  Baustoffe; Energie = Kohle, Erdöl; Industrie = Stahl, Kunststoff, Glas; Konsum = Kleidung, Möbel; Technik = Elektronik, Fahrzeuge;
+  Tourismus ohne Gut. 1 Wareneinheit = Grundpreis Gut / Grundpreis Kategorie Kategorie-Einheiten (wertgleich).
+- **Preise:** Länderpreis je Gut = Grundpreis × (Kategoriepreis/Kategorie-Grundpreis des Landes) × (1 ± 6 % Hash je Land/Gut).
+  **Weltpreis** = Σ Länderpreis × w / Σ w, w = geglättetes Handelsvolumen (Kategorie-Einheiten/Tag, EMA 0,1) + 2 % der Produktion.
+  Die Stadt bekommt ihn über `GoodsSystem.WorldPriceSource` (begrenzt 0,5–2 × G5-Grundpreis) statt des Rauschens → Paritätsband,
+  Import/Export und Standortwahl reagieren auf Knappheit der Länder.
+- **Transport** (`TradeGeography`, einmal beim Start): Handelsort = Hauptstadt (Spieler: Mitte der Startregion); Landweg nur auf
+  derselben Landmasse (Großkreis × 1,35 × 0,03 €/t·km), Seeweg über den nächsten Küstenpunkt (Breitensuche über Land: Vor-/Nachlauf
+  × 0,03 + Großkreis Hafen–Hafen × 1,25 × 0,004 €/t·km + 2 × 4 €/t Umschlag) – der billigere gewinnt. Frachttonnen = max(Gewicht,
+  Volumen × 0,4). Lieferzeit = ⌈1 + Land/600 km + See/500 km (+2 Hafentage)⌉ Tage. Der Verkäufer trägt die Fernfracht (frei Grenze).
+- **Schnittstelle (Spieler = NPC):** `ProposeContractCommand` (Angebot „verkaufe“ / Nachfrage „kaufe“ an ein Land oder alle; auch
+  Handelsabkommen), `AcceptOfferCommand`, `RejectOfferCommand`, `WithdrawOfferCommand`, `CancelContractCommand`, `SetTariffCommand`.
+  `Submit` reiht ein (nächster Tick), `Execute` sofort (UI, KI); `CommandLog` für Replays. `ContractTerms`: Gut, Menge/Woche, Wochen
+  (1–52), Festpreis oder Weltpreis × Faktor, Strafanteil. Angebote gelten 7 Tage und werden **in der nächsten Nacht** beantwortet
+  (während des Handelstags gestellte erst in der übernächsten).
+- **Verträge:** Start am Folgetag (Spieler als Verkäufer: +6 Tage Vorlauf zum Sammeln), wöchentlicher Versand, Ankunft nach der
+  Lieferzeit, Bezahlung bei Ankunft (Preis am Versandtag). Fehlmenge → Strafe = Fehlmenge × Preis × Strafanteil an den Käufer,
+  Vertrauen des Käufers − (0,05 + 0,3 × Fehlquote), Beziehung − (4 + 12 × Fehlquote), Erinnerung „Vertragsbruch“; volle Lieferung:
+  Vertrauen +0,01, Beziehung +0,4. Kündigung: Gebühr = min(4, Restwochen) × Wochenwert × Strafanteil × 0,5, Vertrauen −0,1,
+  Beziehung −6; Ware unterwegs kommt noch an. Handelsabkommen: beide Zölle 0 für die Laufzeit (26 Wochen), Beziehung +0,5/Woche.
+- **NPC-Seite:** Lager in Kategorie-Einheiten (`NationEconomy.Stock`); Versand nur über einer Reserve von 3 + 12 × (1 − Verlässlichkeit)
+  Tagen Bedarf, unter 10 Tagen Reichweite bricht ein Land mit Wahrscheinlichkeit 0,5 × (1 − Verlässlichkeit) bewusst.
+- **Stadt (`CityTradeDepot`, Vertragspartei = Stadtkasse):** Importware landet im Grenzlager (Kasse zahlt „Handel: Einkauf“), Firmen
+  beziehen sie wie einen Import per Lkw ab Außenanschluss zu Vertragspreis + Zoll gegen das Lieferland („Handel: Verkauf“ + „Zölle“),
+  wenn das höchstens 5 % teurer ist als lokal/Weltmarkt. Exportverträge: Firmen liefern vor dem Weltmarkt-Export bis 10 % Restfüllung,
+  wenn Vertragspreis − Lkw ≥ 90 % lokal (volle Lager immer), Kasse zahlt den Vertragspreis; am Versandtag geht die Ware aus dem
+  Grenzlager, Fernfracht zahlt die Kasse, das Käuferland zahlt bei Ankunft. Importware 14 Tage nach der letzten Ankunft bzw.
+  Exportware ohne Vertrag geht zu 85 % des Weltpreises weg. **Grundzoll** des Spielers verteuert Weltmarkt-Importe der Firmen (Teil
+  des Einkaufswerts) und geht an die Kasse. Neue Kassen-Kategorien (hinten angefügt): Zölle, Handel: Verkauf, Vertragsstrafen
+  (erhalten) | Handel: Einkauf (inkl. Fracht), Vertragsstrafen (gezahlt); `EconomySystem.Post(cat, betrag)`.
+- **Beziehungen/Politik:** Beziehung je Länderpaar −100..100, Start 10 ± 25 (Hash), Nachbarn −8; Drift 2 %/Woche zum Startwert;
+  Zoll von A gegen B über 10 % kostet je Woche (Satz − 0,1) × 10 Punkte; unter −50 Embargo (keine Annahme, Verträge werden gekündigt).
+  Zölle: `TariffSchedule` je Land (Grundzoll + Satz je Lieferland), NPC-Grundzoll = Protektionismus × 20 %; Vergeltung: liegt der Zoll
+  eines Landes gegen n mehr als 5 Punkte über dem Satz von n, hebt ein protektionistisches n (≥ 0,3) wöchentlich um 2 Punkte nach,
+  ohne Grund zurück zum Grundzoll. Vertrauen je gerichtetem Paar 0..1 (Start 0,6, Drift 1 %/Woche), Gedächtnis 12 Einträge je Land.
+- **NPC = Utility AI** (`TradeSystem.Ai.cs`, keine Sprach-KI): Persönlichkeit (Risiko, Protektionismus, Verlässlichkeit,
+  Geschäftssinn; Hash + Profil). Lagebild täglich: Reichweite = Lager/Bedarf, Netto = Saldo ± Verträge; Defizit = 0,6 × (20 −
+  Reichweite)/20 + 0,8 × (−Netto/Bedarf); Überschuss = (0,6 × (Reichweite − 35)/60 + 0,8 × Netto/Bedarf) × (1 + 0,3 Primär-/0,15
+  Sekundärstärke). **Bewertung** eines Angebots = Summe von Bausteinen (Preis gegen Inlandspreis inkl. Zoll/Fracht × Geschäftssinn,
+  Bedarf, Menge gegen Bedarf/Lieferfähigkeit, Schutz eigener Stärken, eigener Bedarf beim Verkauf, Überschuss, Strafe, Beziehung,
+  Vertrauen, Festpreis-Laufzeit) + 0,1 → Annahme mit 1/(1 + e^(−U/T)), T = 0,08 + 0,15 × Risiko; **Grund** = stärkster Gegen- bzw.
+  Fürgrund („zu teuer: höchstens …“, „Preis zu niedrig: mindestens …“, „Menge zu groß“, „Bedarf gedeckt“, „kein Vertrauen nach
+  Vertragsbruch“ …). **Wochenentscheidung** (je Land jeden 7. Tag, gestaffelt): Softmax (T = 0,05 + 0,2 × Risiko) über Nichtstun
+  (0,15), Kaufen je Defizit-Kategorie, Verkaufen je Überschuss-Kategorie, Handelsabkommen (Partner mit Beziehung ≥ 25 und laufendem
+  Vertrag); Partner per Softmax (Überschuss/Defizit, Beziehung, Vertrauen, Preisvorteil, Lieferzeit), Menge aus Bedarf und
+  Lieferfähigkeit (beim Spieler aus Importen/Kapazität der Stadt), Laufzeit 4 + 8 × (1 − Risiko) ± 2 Wochen, Preis zwischen
+  Untergrenze Verkäufer × 1,04 und Obergrenze Käufer nach Geschäftssinn, Weltpreis-Kopplung mit Wahrscheinlichkeit 0,7 × Risiko.
+  Höchstens 2 Angebote je Entscheidung, 3 offene je Land, 6 offene an den Spieler (1 je Land).
+- **UI:** `Game/UI/Windows/TradeWindow` (mittig, **F11**, Münz-Knopf in der oberen Leiste, „Handel“ beim Land in der Weltkarte):
+  Länder (Beziehung, Stärken, Persönlichkeit, Vertrauen in uns, Handelsweg, Zölle, Lage je Kategorie, Gedächtnis, Abkommen anbieten),
+  Weltpreise mit Wochentrend + lokalem Preis + Grenzlager, Angebote (annehmen/ablehnen, eigene mit Antwort/Begründung, neues Angebot
+  mit Vorschau der NPC-Einschätzung über `PreviewOffer` + `Evaluate`), Verträge (Lieferstatus, unterwegs, Grenzlager, Kündigen),
+  Zölle (Grundzoll, Satz je Land, Handelsbuchungen der Kasse). Aktionen per `Execute` (wirkt auch bei Pause). Optik ungetestet.
+- **Leistung** (Testprojekt): 36 Länder, 1 Jahr Länder + Handel ≈ 120 ms (≈ 0,33 ms/Tag, seit der Kalibrierung mehr Verträge),
+  Handel allein ≈ 60 ms/Jahr, Wege 8 ms.
+- **Kalibrierung der Länder-Volkswirtschaften** (`WorldEconomy.Calibrate`, `NationEconomy.TickDay`): Vorher war die Welt global knapp
+  (Produktion/Bedarf Industrie 0,43, Technik 0,00). Ursachen: (1) Vorleistungen nach Reihenfolge – Konsum nahm alle Industriegüter,
+  Technik bekam nichts; jetzt bekommt jeder Abnehmer seinen Anteil (Lager / noch offener Bedarf aller späteren Abnehmer).
+  (2) Kapazitäten je Kopf passten nicht zum Bedarf inkl. Vorleistungen (überschlagen: Industrie ~0,19 statt ~0,35 je Kopf, Energie ~0,5 statt
+  ~1,1). Jetzt wird beim Erzeugen je Kategorie weltweit skaliert, rückwärts durch die Kette (Endprodukte gegen Haushalte, Industrie
+  gegen Haushalte + Vorleistungen, dann Rohstoffe; Heizen/Kühlen, Ernte und Tourismus-Saison im Jahresmittel): Σ Kapazität =
+  Σ Bedarf × 1,04 (Lebensmittel 1,12 wegen 0,5 %/Tag Verderb). Länderunterschiede bleiben relativ. Ergebnis (Seeds 2024/7):
+  Welt-Produktion/Bedarf je Kategorie 0,90–1,09; Länder mit Primärstärke haben 1,16–1,64 × Kapazität ihres Bedarfs (übrige 0,9–1,6).
+  Ein Jahr ohne Handel: Lagerlücke (Wert unter 20 Tagen Reichweite) wächst von 544 auf 607 G€; mit Handel Tag 365 269 G€,
+  Summe Tag 60–365 36 % kleiner.
+- **Medien** (`TradeMedia.Connect` in `CreateDefault`, Event `TradeSystem.News`): Schlagzeilen-Themen `TradeDeal` („Handelsvertrag
+  mit {Land}“ bei jedem Vertrag/Abkommen des Spielers), `Embargo` (Beziehung zum Spieler fällt unter −50), `TariffRaise` (ein Land
+  erhöht seinen Zoll gegen uns); neuer Platzhalter {Land}. Nur mit Medienhaus sichtbar, Sperrfristen wie üblich.
+- **Später (Stufe 2+):** Regierungen/Bündnisse (Zollunion, gemeinsame Außenzölle, Sanktionen, Abstimmungen), Diplomatie-Aktionen
+  (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße, Tourismus als
+  Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
+  Städten (Etappe 7), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
@@ -998,4 +1077,9 @@ Street Vehicles Pack Autobus Tram (Vladislav Simakov). Colorful City: Editor-DLL
 6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
+   - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
+     Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
+     Persönlichkeit/Gedächtnis, Beziehungen, Vertrauen, Zölle, Handelsabkommen, Stadtkasse (Zölle, Strafen, Vertragshandel),
+     Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
+     Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port

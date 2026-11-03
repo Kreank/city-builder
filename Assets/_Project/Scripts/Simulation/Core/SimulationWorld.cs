@@ -201,6 +201,17 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
             world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
+
+            // --- Etappe 8 Handel zwischen Ländern (nur mit Weltkarte): Weltpreis aus den Ländern, Verträge über das Grenzlager,
+            // Zölle/Strafen in der Stadtkasse; läuft nach dem WorldSystem (Länder sind schon einen Tag weiter)
+            if (world.Planet?.Economy != null)
+            {
+                world.Trade = new Trade.TradeSystem(world.Planet, world.Clock, unchecked(seed * 31 + world.Settings.WorldSeed));
+                world.Trade.AttachCity(world.Goods, world.Economy);
+                world.AddSystem(world.Trade);
+                if (world.Media != null) CityBuilder.Simulation.Trade.TradeMedia.Connect(world.Trade, world.Media); // Schlagzeilen zum Handel
+            }
+            // --- Ende Etappe 8
             return world;
         }
 
@@ -229,6 +240,9 @@ namespace CityBuilder.Simulation.Core
         public GoodsSystem Goods { get; private set; }
         /// <summary>ÖPNV: Haltestellen, Buslinien, Depots, Busse (Fahrgäste aus dem Bürgersystem). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Transit.TransitSystem Transit { get; private set; }
+
+        /// <summary>Etappe 8: Handel zwischen Ländern (null ohne Weltkarte). Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Trade.TradeSystem Trade { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }
