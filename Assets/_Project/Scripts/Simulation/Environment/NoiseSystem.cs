@@ -38,6 +38,7 @@ namespace CityBuilder.Simulation.Environment
                     else noise.StampRadialMax(p, type.NoiseRadius, level);
                 }
             }
+            world.Rail?.StampNoise(noise); // --- Bahn: Gleise (Züge) machen Lärm, Tunnel nicht
         }
 
         // --- Eigene Assets: wie GridLayer.StampRadialMax (gleicher Abfall), aber je Zelle mit der Dämpfung durch Wände

@@ -33,6 +33,7 @@ namespace CityBuilder.Simulation.Rail
             c.RailCancel = CancelRide;
             c.IsRailArrivalNode = IsArrivalNode;
             c.RailStationOfNode = StationOfArrivalNode;
+            c.RailArrivalNodeFor = ArrivalNodeFor;
         }
 
         // ------------------------------------------------------------ Angebot

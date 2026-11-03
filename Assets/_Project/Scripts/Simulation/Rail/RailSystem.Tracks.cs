@@ -309,6 +309,27 @@ namespace CityBuilder.Simulation.Rail
             return result;
         }
 
+        /// <summary>
+        /// Lärm der Gleise (vom <see cref="Environment.NoiseSystem"/> stündlich): Gleistyp-Lärm × 0,75 („Schienenbonus“: Züge fahren
+        /// im Takt, Straßen dauernd), Gleise ohne Zugverkehr (keine Hauptstrecke) leiser; Tunnel still, Trog gedämpft.
+        /// </summary>
+        public void StampNoise(GridLayer noise)
+        {
+            if (Tracks.SegmentCount == 0) return;
+            float step = noise.CellSize * 0.5f;
+            float activity = HasMainline ? 0.75f : 0.3f;
+            foreach (var s in Tracks.Segments)
+            {
+                int samples = Math.Max(2, (int)MathF.Ceiling(s.Length / step) + 1);
+                for (int i = 0; i < samples; i++)
+                {
+                    float t = i / (float)(samples - 1);
+                    float level = s.IsCoveredAt(t) ? 0f : s.ElevationAt(t) < -0.3f ? s.Type.NoiseLevel * 0.5f : s.Type.NoiseLevel;
+                    if (level > 0f) noise.StampRadialMax(s.Evaluate(t), s.Type.NoiseRadius, level * activity);
+                }
+            }
+        }
+
         /// <summary>Liegt ein ebenerdiges Gleis (± Rand) an diesem Punkt?</summary>
         public bool TrackAt(Vector2 p, float margin = 0f)
         {

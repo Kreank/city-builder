@@ -22,6 +22,8 @@ namespace CityBuilder.Simulation.Citizens
         public Func<int, bool> IsRailArrivalNode { get; set; }
         /// <summary>Bahnhof zu einem Ankunftsknoten (für erzwungene Bahnfahrten).</summary>
         public Func<int, int> RailStationOfNode { get; set; }
+        /// <summary>Netzteil ohne Straßen-Außenanschluss → Ankunftsknoten eines Bahnhofs darin (Ein-/Auspendler per Bahn), null = keiner.</summary>
+        public Func<int, Roads.RoadNode> RailArrivalNodeFor { get; set; }
 
         /// <summary>Sicherheitsnetz: Bahnfahrt ohne Rückmeldung gilt nach 1 Tag als beendet.</summary>
         const long RailTripTimeout = Core.SimulationClock.TicksPerDay;
@@ -53,8 +55,10 @@ namespace CityBuilder.Simulation.Citizens
             if (RailOfferFor == null || RailStart == null) return false;
             bool outbound = destination.IsOutside;
             int forcedStation = 0;
-            if (!outbound && c.Location.IsOutside && IsRailArrivalNode != null && IsRailArrivalNode(c.Location.ConnectionNodeId))
-                forcedStation = RailStationOfNode?.Invoke(c.Location.ConnectionNodeId) ?? 0;
+            // Ort „außerhalb“ am Bahnhof (Zuzügler, Pendler ohne Straßenanschluss): diese Fahrt geht immer mit dem Zug
+            int outsideNode = outbound ? destination.ConnectionNodeId : c.Location.ConnectionNodeId;
+            if (IsRailArrivalNode != null && IsRailArrivalNode(outsideNode))
+                forcedStation = RailStationOfNode?.Invoke(outsideNode) ?? 0;
             var cityPoint = outbound ? from : to;
             var offer = RailOfferFor(cityPoint, outbound, forcedStation);
             if (!offer.Valid) return false;

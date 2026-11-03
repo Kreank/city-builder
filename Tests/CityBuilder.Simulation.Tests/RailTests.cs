@@ -425,6 +425,10 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(rail.PassengersTotal > 3, "Fahrgäste steigen am Bahnhof aus");
             Assert.True(rail.FaresTotal > RailRules.IntercityStopFee);
             Assert.All(w.Highways(), g => Assert.Equal(0, g.TotalMoveIns));
+            // Ohne Jobs in der Stadt pendeln Einwohner per Bahn hinaus (Bahnhof = einziger Anschluss)
+            output.WriteLine($"Auspendler {w.Citizens.Stats.CommutersOut}, eingestiegen gesamt {st.TotalPassengers}");
+            Assert.True(w.Citizens.Stats.CommutersOut > 0, "Auspendler über den Bahnhof");
+            Assert.True(rail.Stations[0].BoardedYesterday + rail.Stations[0].BoardedToday > 0, "Pendler steigen in den Fernzug");
         }
 
         // ------------------------------------------------------------ Güter
@@ -449,6 +453,48 @@ namespace CityBuilder.Simulation.Tests
             Assert.Single(fr.Stops(rail));
             Assert.Empty(ic.Stops(rail));
             Assert.Same(rail.GatewayOf(true), w.Gateways.OfNode(st.AccessNodeId));
+        }
+
+        [Fact]
+        public void FreightStation_FirmImportsByRail_CheaperThanTruck_LoadsCounted()
+        {
+            var w = SimulationWorld.CreateDefault(Settings(terrain: false, world: true, worldSeed: 99));
+            Assert.NotNull(w.Trade);
+            var rail = w.Rail;
+            var st = BuildConnectedStation(w, StationCatalog.Freight, FarFraction(w), connectToHighway: false);
+            var side = new Vector2(-st.Front.Y, st.Front.X);
+            var front = st.FrontMid + st.Front * 7.5f;
+            Road(w, front, front + st.Front * 260f);
+            w.City.Paint(front + st.Front * 130f + side * 25f, 60f, ZoneType.Industry);
+            w.City.Population.Residents = 3000;
+            w.City.Population.WorkingAge = 1800;
+            for (int i = 0; i < 60; i++) w.City.ForceTick();
+            w.Step();
+            Assert.True(st.InService);
+            var firms = w.Goods.Firms.Where(f => f.Zone == ZoneType.Industry).ToList();
+            Assert.NotEmpty(firms);
+            foreach (var b in w.City.Buildings) b.Workers = b.Jobs;
+            Assert.True(w.Goods.Restructure(firms[0], Goods.RecipeCatalog.Get("mill")));
+            var grain = Goods.GoodsCatalog.Grain;
+            var mill = firms[0];
+            mill.InputStock[grain.Index] = 0f;
+            mill.Incoming[grain.Index] = 0f;
+            w.Goods.Market(grain).LocalPrice = w.Goods.Market(grain).WorldPrice * 1.6f; // Import lohnt
+            int before = w.Goods.Shipments.Count;
+            w.Goods.ForceStep();
+            var imports = w.Goods.Shipments.Skip(before).Where(s => s.Kind == Goods.ShipmentKind.Import && s.Good == grain && s.ToBuildingId == mill.BuildingId).ToList();
+            Assert.NotEmpty(imports);
+            Assert.All(imports, s => Assert.Equal(st.AccessNodeId, s.ConnectionNodeId));
+            foreach (var s in imports)
+            {
+                double road = s.Value * Goods.GoodsRules.WorldFreightShare + s.TruckEstimate;
+                output.WriteLine($"Import {s.Amount:0.0} {s.Good.Name}: Wert {s.Value:0} €, Fracht Bahn {s.TransportCost:0.00} € (per Lkw über die Autobahn wären es ≥ {road:0.00} €)");
+                Assert.True(s.TransportCost < road, "Bahnfracht billiger");
+            }
+            w.Step();
+            Assert.True(st.LoadsToday >= imports.Count, $"Umschlag {st.LoadsToday}");
+            Assert.True(st.PendingLoads > 0);
+            Assert.True(rail.GatewayOf(true).Today.Imports + rail.GatewayOf(false).Today.Imports >= 0);
         }
 
         // ------------------------------------------------------------ Speichern & Laden

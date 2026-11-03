@@ -607,6 +607,7 @@ namespace CityBuilder.Simulation.Citizens
                 float d = Vector2.Distance(from, n.Position);
                 if (d < bestD) { bestD = d; best = n; }
             }
+            if (best == null && RailArrivalNodeFor != null) best = RailArrivalNodeFor(comp); // --- Bahn: Pendeln nur per Bahn (Bahnhof im Netzteil)
             return best;
         }
 
