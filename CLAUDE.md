@@ -57,6 +57,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   NPC-Länder = Spiel-KI (Utility AI wie bei Bürgern, keine Sprach-KI zur Laufzeit).
 - Alles deterministisch (geseedeter RNG), Commands für Spieleraktionen (Multiplayer/Replays).
 
+## Entscheidung: Netze werden selbst verlegt (2026-11-03, Spieler)
+- **Straßen führen keine Leitungen/Rohre mehr automatisch mit** (löst die bisherige G3-Regel „Stadtstraßen tragen mit“
+  ab – Umbau steht an). Der Spieler verlegt **Wasserrohre, Abwasserkanäle** (unterirdisch, Einrasten entlang von Straßen)
+  und **Strom** (Hochspannung vom Kraftwerk → Umspannwerk → Ortsnetz entlang der Straßen) selbst.
+- Ein Gebäude ist angeschlossen, wenn eine passende Leitung/ein Rohr in Reichweite seiner Vorderseite liegt; es
+  bekommt einen **sichtbaren Hausanschluss**. Anschlusslogik als gemeinsamer Baustein für alle Netzarten.
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.
