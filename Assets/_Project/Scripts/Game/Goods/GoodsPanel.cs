@@ -36,7 +36,7 @@ namespace CityBuilder.Game.Goods
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.f5Key.wasPressedThisFrame) visible = !visible; // F3 = Rohstoff-Ansicht (Welt)
         }
 

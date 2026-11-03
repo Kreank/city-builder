@@ -123,6 +123,10 @@ namespace CityBuilder.Game.Roads
             previewRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             previewRenderer.enabled = false;
 
+            // --- Speichern & Laden: neue Welt → laufenden Bau abbrechen, Auswahl/Vorlage verwerfen
+            runner.WorldReplaced += () => { Cancel(); ClearSelection(); currentTemplate = null; templatePlannedVersion = -1; };
+            // --- Ende Speichern & Laden
+
             // Zugehörige Anzeigen hängen am Werkzeug – so muss die Szene nicht neu erzeugt werden.
             Ensure<RoadGuidesView>().Init(this, previewMaterial);
             Ensure<TrafficPanel>().Init(this, previewMaterial);
@@ -289,7 +293,7 @@ namespace CityBuilder.Game.Roads
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             var mouse = Mouse.current;
             if (mouse == null) return;
 
@@ -363,7 +367,13 @@ namespace CityBuilder.Game.Roads
             if (kb.pageDownKey.wasPressedThisFrame) ChangeHeight(-HeightStep);
             if (kb.commaKey.wasPressedThisFrame) RotateTemplate(-15f);
             if (kb.periodKey.wasPressedThisFrame) RotateTemplate(15f);
-            if (kb.escapeKey.wasPressedThisFrame) { Cancel(); ClearSelection(); }
+            if (kb.escapeKey.wasPressedThisFrame)
+            {
+                // Spielmenü (Esc) nur, wenn hier nichts abzubrechen war
+                if (step != Step.Start || SelectedNode != null || SelectedSegment != null) GameKeyboard.ConsumeEscape();
+                Cancel();
+                ClearSelection();
+            }
         }
 
         void CycleType(int dir)

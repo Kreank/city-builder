@@ -17,7 +17,11 @@ namespace CityBuilder.Game.Citizens
         int lastDay = -1;
         int lastBorn, lastWeddings;
 
-        public void Init(SimulationRunner r) => runner = r;
+        public void Init(SimulationRunner r)
+        {
+            runner = r;
+            r.WorldReplaced += () => lastDay = -1; // Speichern & Laden: Zähler der neuen Welt als Ausgangswert nehmen
+        }
 
         void Update()
         {

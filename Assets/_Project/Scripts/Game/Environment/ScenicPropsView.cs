@@ -41,8 +41,25 @@ namespace CityBuilder.Game.Environment
             var catalog = AssetCatalog.Instance;
             if (runner == null || catalog == null) { enabled = false; return; }
             if (AssetCatalog.Has(catalog.Trees)) ScatterTrees();
-            runner.World.Roads.SegmentAdded += ClearTreesAround;
+            boundRoads = runner.World.Roads;
+            boundRoads.SegmentAdded += ClearTreesAround;
+            runner.WorldReplaced += OnWorldReplaced; // Speichern & Laden
         }
+
+        // --- Speichern & Laden: neue Welt → Bäume neu verteilen (anderes Gelände/Waldraster), Laternen neu
+        CityBuilder.Simulation.Roads.RoadNetwork boundRoads;
+
+        void OnWorldReplaced()
+        {
+            if (boundRoads != null) boundRoads.SegmentAdded -= ClearTreesAround;
+            boundRoads = runner.World.Roads;
+            boundRoads.SegmentAdded += ClearTreesAround;
+            roadsVersion = terrainVersion = woodVersion = -1;
+            treeList = null;
+            if (AssetCatalog.Has(AssetCatalog.Instance.Trees)) ScatterTrees();
+            treesDirty = true;
+        }
+        // --- Ende Speichern & Laden
 
         // ------------------------------------------------------------ Bäume
 

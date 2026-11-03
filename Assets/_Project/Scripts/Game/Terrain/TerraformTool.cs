@@ -53,6 +53,7 @@ namespace CityBuilder.Game.Terrain
         public void Init(RoadTool roadTool, Material previewBase)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => painting = false; // Speichern & Laden
             if (previewBase != null) ringMaterial = new Material(previewBase) { name = "TerraformBrush", color = Color.white };
         }
 
@@ -89,10 +90,10 @@ namespace CityBuilder.Game.Terrain
         void LateUpdate()
         {
             if (tool == null || tool.Runner == null || tool.Runner.World == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             var mouse = Mouse.current;
 
-            if (kb != null && kb.lKey.wasPressedThisFrame)
+            if (kb != null && kb.lKey.wasPressedThisFrame && !kb.ctrlKey.isPressed) // Strg+L = Schnellladen
                 tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Terraform);
 
             if (!Active || mouse == null)

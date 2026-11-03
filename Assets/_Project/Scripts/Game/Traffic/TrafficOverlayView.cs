@@ -24,6 +24,13 @@ namespace CityBuilder.Game.Traffic
         {
             runner = r;
             lineMaterial = new Material(transparent) { color = Color.white, name = "TrafficOverlay" };
+            r.WorldReplaced += () =>
+            {
+                // Speichern & Laden: Linien gehören zu Segment-Ids der alten Welt
+                foreach (var l in lines.Values) if (l != null) Destroy(l.gameObject);
+                lines.Clear();
+                networkVersion = -1;
+            };
         }
 
         void Start()
@@ -46,7 +53,7 @@ namespace CityBuilder.Game.Traffic
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.vKey.wasPressedThisFrame) Toggle();
             if (!Visible || runner == null || runner.World == null) return;
 

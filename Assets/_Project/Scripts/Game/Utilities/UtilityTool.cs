@@ -49,6 +49,7 @@ namespace CityBuilder.Game.Utilities
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => placingLine = false; // Speichern & Laden
             okMaterial = new Material(transparent) { name = "UtilityPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
             badMaterial = new Material(transparent) { name = "UtilityPreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
         }
@@ -100,13 +101,17 @@ namespace CityBuilder.Game.Utilities
         void Update()
         {
             if (tool == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.jKey.wasPressedThisFrame) tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Utility);
             if (!Active) return;
             if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
             if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
-            if (kb.escapeKey.wasPressedThisFrame) placingLine = false;
+            if (kb.escapeKey.wasPressedThisFrame)
+            {
+                if (placingLine) GameKeyboard.ConsumeEscape(); // Spielmenü nur ohne laufende Leitung
+                placingLine = false;
+            }
             var mouse = Mouse.current;
             if (mouse != null && mouse.rightButton.wasPressedThisFrame) placingLine = false;
         }

@@ -72,6 +72,7 @@ namespace CityBuilder.Game.Inspect
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += ClearSelection; // Speichern & Laden: Auswahl zeigt in die alte Welt
             buildingView = GetComponent<BuildingView>();
             primary = new Marker(transform, NewMaterial(transparent, PrimaryColor, "InspectPrimary"), true);
             home = new Marker(transform, NewMaterial(transparent, HomeColor, "InspectHome"), false);
@@ -159,7 +160,7 @@ namespace CityBuilder.Game.Inspect
             }
             var world = World;
             var mouse = Mouse.current;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (mouse != null)
             {
                 var screen = mouse.position.ReadValue();

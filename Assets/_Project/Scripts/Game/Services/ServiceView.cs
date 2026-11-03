@@ -25,6 +25,13 @@ namespace CityBuilder.Game.Services
         {
             runner = r;
             baseMaterial = lit;
+            r.WorldReplaced += () =>
+            {
+                // Speichern & Laden: Objekte gehören zu Ids der alten Welt
+                foreach (var o in objects.Values) if (o != null) Destroy(o);
+                objects.Clear();
+                builtVersion = garbageVersion = garbageCity = -1;
+            };
         }
 
         void Start()

@@ -28,14 +28,48 @@ namespace CityBuilder.Game.Roads
         void Start()
         {
             materials = new RoadMaterials(roadMaterial);
+            BindWorld();
+            runner.WorldReplaced += OnWorldReplaced; // Speichern & Laden
+        }
+
+        CityBuilder.Simulation.Environment.TerrainMap terrain;
+
+        void BindWorld()
+        {
             network = runner.World.Roads;
             network.SegmentAdded += OnSegmentAdded;
             network.SegmentRemoved += OnSegmentRemoved;
             network.NodeRemoved += OnNodeRemoved;
 
             foreach (var s in network.Segments) OnSegmentAdded(s);
-            runner.World.Terrain.Changed += HandleTerrainChanged;
+            terrain = runner.World.Terrain;
+            terrain.Changed += HandleTerrainChanged;
         }
+
+        // --- Speichern & Laden: neue Welt → alte Abos lösen, alle Meshes verwerfen, neu aufbauen
+        void OnWorldReplaced()
+        {
+            UnbindWorld();
+            foreach (var mf in segmentObjects.Values) DestroyMeshObject(mf);
+            foreach (var mf in nodeObjects.Values) DestroyMeshObject(mf);
+            segmentObjects.Clear();
+            nodeObjects.Clear();
+            dirtySegments.Clear();
+            dirtyNodes.Clear();
+            BindWorld();
+        }
+
+        void UnbindWorld()
+        {
+            if (terrain != null) terrain.Changed -= HandleTerrainChanged;
+            if (network != null)
+            {
+                network.SegmentAdded -= OnSegmentAdded;
+                network.SegmentRemoved -= OnSegmentRemoved;
+                network.NodeRemoved -= OnNodeRemoved;
+            }
+        }
+        // --- Ende Speichern & Laden
 
         /// <summary>Gelände geändert → Brücken/Tröge in dem Bereich neu bauen (Pfeilerlänge, Trogwände).</summary>
         void HandleTerrainChanged(System.Numerics.Vector2 min, System.Numerics.Vector2 max)
@@ -53,13 +87,8 @@ namespace CityBuilder.Game.Roads
 
         void OnDestroy()
         {
-            if (runner != null && runner.World != null) runner.World.Terrain.Changed -= HandleTerrainChanged;
-            if (network != null)
-            {
-                network.SegmentAdded -= OnSegmentAdded;
-                network.SegmentRemoved -= OnSegmentRemoved;
-                network.NodeRemoved -= OnNodeRemoved;
-            }
+            if (runner != null) runner.WorldReplaced -= OnWorldReplaced;
+            UnbindWorld();
             materials?.Destroy();
         }
 

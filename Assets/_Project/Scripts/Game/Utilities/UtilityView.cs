@@ -31,6 +31,16 @@ namespace CityBuilder.Game.Utilities
             runner = r;
             baseMaterial = lit;
             ground = groundView;
+            r.WorldReplaced += () =>
+            {
+                // Speichern & Laden: Objekte gehören zu Ids der alten Welt
+                foreach (var o in facilityObjects.Values) if (o != null) Destroy(o);
+                foreach (var o in lineObjects.Values) if (o != null) Destroy(o);
+                facilityObjects.Clear();
+                lineObjects.Clear();
+                lineRevisions.Clear();
+                builtVersion = -1;
+            };
         }
 
         void Start()

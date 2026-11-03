@@ -38,6 +38,7 @@ namespace CityBuilder.Game.Zoning
         {
             runner = r;
             material = new Material(transparent) { color = Color.white, name = "Zones" };
+            r.WorldReplaced += () => gridVersion = zoneVersion = cityVersion = -1; // Speichern & Laden: neu aufbauen
         }
 
         void Start()

@@ -47,6 +47,7 @@ namespace CityBuilder.Game.Services
         public void Init(SimulationRunner r, Material lit, Material transparent)
         {
             runner = r;
+            r.WorldReplaced += () => shownCoverage = shownCity = shownStructure = -1; // Speichern & Laden: neu aufbauen
             for (int i = 0; i < Buckets; i++)
             {
                 var c = CoverageColor(i / (float)(Buckets - 1));
@@ -90,7 +91,7 @@ namespace CityBuilder.Game.Services
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.digit4Key.wasPressedThisFrame && kb.shiftKey.isPressed) Cycle();
         }
 

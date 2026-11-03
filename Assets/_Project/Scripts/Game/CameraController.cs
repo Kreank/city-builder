@@ -42,13 +42,13 @@ namespace CityBuilder.Game
 
         void LateUpdate()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             var mouse = Mouse.current;
             float dt = Time.unscaledDeltaTime;
 
             // Verschieben (in Blickrichtung, unabhängig vom Neigungswinkel)
             Vector2 move = Vector2.zero;
-            if (kb != null)
+            if (kb != null && !kb.ctrlKey.isPressed) // Strg+S/Strg+L = Speichern/Laden, keine Kamerafahrt
             {
                 if (kb.wKey.isPressed || kb.upArrowKey.isPressed) move.y += 1f;
                 if (kb.sKey.isPressed || kb.downArrowKey.isPressed) move.y -= 1f;

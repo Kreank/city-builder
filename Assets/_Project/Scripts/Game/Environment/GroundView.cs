@@ -66,6 +66,41 @@ namespace CityBuilder.Game.Environment
         void Start()
         {
             if (runner == null || original == null) { enabled = false; return; }
+            runner.WorldReplaced += OnWorldReplaced; // Speichern & Laden
+            BindWorld();
+        }
+
+        // --- Speichern & Laden: neue Welt → Abos lösen, Kacheln/Wasser verwerfen, alles neu aufbauen
+        void OnWorldReplaced()
+        {
+            UnbindWorld();
+            BindWorld();
+        }
+
+        void UnbindWorld()
+        {
+            if (terrain != null) terrain.Changed -= HandleTerrainChanged;
+            if (roads != null) { roads.SegmentAdded -= MarkHoles; roads.SegmentRemoved -= MarkHoles; }
+            if (chunkFilters != null)
+                foreach (var f in chunkFilters)
+                    if (f != null)
+                    {
+                        if (f.sharedMesh != null) Destroy(f.sharedMesh);
+                        Destroy(f.gameObject);
+                    }
+            if (water != null) Destroy(water);
+            water = null;
+            chunkFilters = null;
+            chunkRenderers = null;
+            holes = null;
+            dirtyChunks.Clear();
+            dirtyHoleAreas.Clear();
+            appliedUnderground = false;
+        }
+        // --- Ende Speichern & Laden
+
+        void BindWorld()
+        {
             terrain = runner.World.Terrain;
             roads = runner.World.Roads;
             cells = terrain.Resolution - 1;
@@ -101,14 +136,15 @@ namespace CityBuilder.Game.Environment
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
 
-            roads.SegmentAdded += s => MarkHoles(s);
-            roads.SegmentRemoved += s => MarkHoles(s);
+            roads.SegmentAdded += MarkHoles;
+            roads.SegmentRemoved += MarkHoles;
             terrain.Changed += HandleTerrainChanged;
             foreach (var s in roads.Segments) MarkHoles(s);
         }
 
         void OnDestroy()
         {
+            if (runner != null) runner.WorldReplaced -= OnWorldReplaced;
             if (terrain != null) terrain.Changed -= HandleTerrainChanged;
             foreach (var m in new[] { transparentMaterial, waterMaterial, vertexColorMaterial }) if (m != null) Destroy(m);
             if (chunkFilters == null) return;

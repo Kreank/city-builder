@@ -122,11 +122,11 @@ namespace CityBuilder.Game.UI.Panels
             center = newCenter;
             right = Pick(WindowSlot.Right);
 
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
-                if (center != null) { center.Window.Close(); dirty = true; }
-                else if (right != null && right.Window.HandleEscape()) dirty = true;
+                if (center != null) { center.Window.Close(); dirty = true; GameKeyboard.ConsumeEscape(); }
+                else if (right != null && right.Window.HandleEscape()) { dirty = true; GameKeyboard.ConsumeEscape(); }
             }
 
             bool refresh = dirty || Time.unscaledTime >= nextRefresh;

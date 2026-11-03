@@ -36,13 +36,17 @@ namespace CityBuilder.Game.WorldMap
 
         public bool Visible { get => visible; set => visible = value; }
 
-        public void Init(RoadTool roadTool) => tool = roadTool;
+        public void Init(RoadTool roadTool)
+        {
+            tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => shownCountryVersion = -1; // Speichern & Laden: anderer Planet
+        }
 
         public Planet Planet => tool != null && tool.Runner != null && tool.Runner.World != null ? tool.Runner.World.Planet : null;
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null && kb.f4Key.wasPressedThisFrame) visible = !visible;
         }
 

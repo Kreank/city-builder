@@ -98,7 +98,7 @@ namespace CityBuilder.Game.Environment
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb != null)
             {
                 if (kb.nKey.wasPressedThisFrame) Toggle(Overlay.Noise);
