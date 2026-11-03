@@ -471,6 +471,7 @@ namespace CityBuilder.Game.Inspect
                             ui.FieldLink("Verkehrsmittel", $"Auto – {VehicleClasses.DisplayName(v.Class)} #{v.Id}", () => Go(SelectionKind.Vehicle, v.Id));
                         else ui.Field("Verkehrsmittel", "Auto (gleich am Ziel)");
                     }
+                    else if (c.Mode == TravelMode.Transit && world.Rail?.RideOf(c.Id) != null) CitizenRailFields(ui, world, c); // Bahn
                     else if (c.Mode == TravelMode.Transit) CitizenTransitFields(ui, world, c); // ÖPNV
                     else
                     {

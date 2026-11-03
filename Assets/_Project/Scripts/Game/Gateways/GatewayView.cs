@@ -68,12 +68,19 @@ namespace CityBuilder.Game.Gateways
                 string text = SignText(g);
                 labels.Add((SimConvert.ToWorld(p, h + 14f), text, WorldLabelStyle.Normal, true));
             }
+            // --- Bahn: liegt die Hauptstrecke, zeichnet RailView die Gleise – gestrichelte Trasse aus, Hinweis „Bahnhof setzen“
+            bool tracks = world.Rail != null && world.Rail.HasMainline;
+            if (railObject != null && railObject.activeSelf == tracks) railObject.SetActive(!tracks && gw.HasRailCorridor);
             if (gw.HasRailCorridor)
             {
                 // Hinweis nicht genau auf der Autobahn: etwas Richtung Ende verschoben
                 var at = SimVector2.Lerp(gw.RailStart, gw.RailEnd, 0.3f);
-                labels.Add((SimConvert.ToWorld(at, world.Terrain.HeightAt(at) + 6f), "Bahntrasse · Züge folgen (freigehalten)", WorldLabelStyle.Normal, true));
+                string railText = !tracks ? "Bahntrasse · Züge folgen (freigehalten)"
+                    : world.Rail.HasPassengerService ? null : "Fernbahn · Bahnhof an die Gleise setzen (Bahn, 7)";
+                if (railText != null)
+                    labels.Add((SimConvert.ToWorld(at, world.Terrain.HeightAt(at) + 9f), railText, WorldLabelStyle.Normal, true));
             }
+            // --- Ende Bahn
 
             // „Hier anschließen“ an den Zubringer-Enden, solange etwas fehlt
             string hint = gw.ConnectionHint;
@@ -110,7 +117,7 @@ namespace CityBuilder.Game.Gateways
                 case GatewayKind.Road:
                     return $"{g.Route} · Richtung {g.TargetName}";
                 case GatewayKind.Rail:
-                    return $"Bahn · Richtung {g.TargetName} (folgt)";
+                    return $"Bahn · Richtung {g.TargetName}" + (g.IsOperational ? "" : g.RailBuilt ? " (Bahnhof fehlt)" : " (folgt)"); // Bahn
                 case GatewayKind.Water:
                     return $"{g.Name} ({(g.Navigable ? "schiffbar, Hafen folgt" : "nicht schiffbar")})";
                 default:

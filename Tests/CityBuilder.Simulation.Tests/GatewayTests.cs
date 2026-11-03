@@ -326,7 +326,9 @@ namespace CityBuilder.Simulation.Tests
             var a = gw.RailStart; var b = gw.RailEnd;
             var dir = Vector2.Normalize(b - a);
             var normal = new Vector2(-dir.Y, dir.X);
-            var mid = a + (b - a) * 0.75f; // weg von der Autobahn
+            // weg von der Autobahn (Bahn: dort liegt jetzt die Rampe der Eisenbahnbrücke über die Autobahn)
+            var p1 = a + (b - a) * 0.2f; var p2 = a + (b - a) * 0.8f;
+            var mid = Vector2.Distance(p1, gw.Interchange) > Vector2.Distance(p2, gw.Interchange) ? p1 : p2;
             Road(w, mid - normal * 220f, mid + normal * 220f);
             w.City.Population.Residents = 3000;
             w.City.Population.WorkingAge = 1800;

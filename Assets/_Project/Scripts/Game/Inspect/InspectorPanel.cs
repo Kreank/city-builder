@@ -196,6 +196,10 @@ namespace CityBuilder.Game.Inspect
             var ray = tool.Camera.ScreenPointToRay(screen);
             var hit = InspectorPicking.Pick(ray, world, tool.Runner.TickAlpha,
                 b => buildingView != null ? buildingView.VisualHeight(b) : 8f);
+            // --- Bahn: Züge (Kugel um die Wagen) vor Gebäuden/Gelände
+            int train = Rail.RailView.Active != null ? Rail.RailView.Active.PickTrain(ray) : 0;
+            if (train != 0 && (hit.IsNone || hit.Kind == SelectionKind.Building || hit.Kind == SelectionKind.Gateway)) hit = new Selection(SelectionKind.Train, train);
+            // --- Ende Bahn
             if (hit.IsNone && tool.HasCursor)
             {
                 // Rückfall: Geländepunkt unter der Maus
@@ -206,6 +210,7 @@ namespace CityBuilder.Game.Inspect
                 else if (f != null) hit = new Selection(SelectionKind.Facility, f.Id);
                 else if (sf != null) hit = new Selection(SelectionKind.Service, sf.Id);
                 else if (world.Transit?.DepotAt(tool.Cursor) is var td && td != null) hit = new Selection(SelectionKind.TransitDepot, td.Id); // ÖPNV
+                else if (world.Rail?.StationAt(tool.Cursor, 1f) is var rs && rs != null) hit = new Selection(SelectionKind.Station, rs.Id); // Bahn
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -237,6 +242,12 @@ namespace CityBuilder.Game.Inspect
                 case SelectionKind.Gateway: // Außenanbindung
                     if (world.Gateways?.Get(selection.Id) == null) SetSelection(Selection.None);
                     break;
+                case SelectionKind.Train: // Bahn
+                    if (world.Rail?.GetTrain(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.Station: // Bahn
+                    if (world.Rail?.GetStation(selection.Id) == null) SetSelection(Selection.None);
+                    break;
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -262,7 +273,7 @@ namespace CityBuilder.Game.Inspect
             return null;
         }
 
-        public bool CanFollow => selection.Kind == SelectionKind.Vehicle || selection.Kind == SelectionKind.Citizen;
+        public bool CanFollow => selection.Kind == SelectionKind.Vehicle || selection.Kind == SelectionKind.Citizen || selection.Kind == SelectionKind.Train; // Bahn: Zug
 
         // ------------------------------------------------------------ Hervorhebung & Verfolgen
 
@@ -314,6 +325,15 @@ namespace CityBuilder.Game.Inspect
                         var p = InspectorPicking.GatewayPoint(world, g);
                         primary.Ring(new Vector3(p.x, p.y - 7f, p.z), 30f, width);
                     }
+                    break;
+                }
+                case SelectionKind.Train: // Bahn
+                    if (Rail.RailView.Active != null && Rail.RailView.Active.TryGetTrainPosition(selection.Id, out var tp)) primary.Ring(tp, 14f, width * 0.6f);
+                    break;
+                case SelectionKind.Station: // Bahn
+                {
+                    var st = world.Rail?.GetStation(selection.Id);
+                    if (st != null) primary.Rect(st.Footprint.Corners(), st.Height + 0.3f, st.Height + 12f, width);
                     break;
                 }
                 case SelectionKind.Vehicle:
@@ -402,6 +422,13 @@ namespace CityBuilder.Game.Inspect
                 {
                     var g = world.Gateways?.Get(selection.Id);
                     return g != null && g.HasLocation ? InspectorPicking.GatewayPoint(world, g) : (Vector3?)null;
+                }
+                case SelectionKind.Train: // Bahn
+                    return Rail.RailView.Active != null && Rail.RailView.Active.TryGetTrainPosition(selection.Id, out var tp) ? tp : (Vector3?)null;
+                case SelectionKind.Station: // Bahn
+                {
+                    var st = world.Rail?.GetStation(selection.Id);
+                    return st != null ? SimConvert.ToWorld(st.Position, st.Height) : (Vector3?)null;
                 }
                 default: return null;
             }

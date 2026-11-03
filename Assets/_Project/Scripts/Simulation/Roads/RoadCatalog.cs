@@ -65,6 +65,18 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Standard-Fahrbahn für Kreisverkehre.</summary>
         public static RoadType DefaultRoundabout => CityOneWay1;
 
+        // ---- Bahn (Stufe 2): Gleistypen – nur im Gleisnetz (world.Rail.Tracks), bewusst nicht in All (Straßen-Werkzeug)
+        /// <summary>Fernbahn-Hauptstrecke (vorgebaut, gehört der Welt): ein Gleis, 160 km/h, Schotterbett 5 m.</summary>
+        public static readonly RoadType RailMain = RoadType.Create("rail_main", "Fernbahngleis (Hauptstrecke)", RoadCategory.Rail)
+            .Shoulder(5f).Speed(160).Cost(90).Noise(0.6f, 90f).Build();
+
+        /// <summary>Gleis des Spielers (Bahnhofs-, Verbindungs-, Überholgleis): 120 km/h.</summary>
+        public static readonly RoadType RailTrack = RoadType.Create("rail_track", "Gleis", RoadCategory.Rail)
+            .Shoulder(5f).Speed(120).Cost(70).Noise(0.55f, 80f).Build();
+
+        public static readonly RoadType[] Rail = { RailMain, RailTrack };
+        // ---- Ende Bahn
+
         static Dictionary<string, RoadType> byId;
 
         public static RoadType Get(string id)
@@ -73,6 +85,7 @@ namespace CityBuilder.Simulation.Roads
             {
                 byId = new Dictionary<string, RoadType>();
                 foreach (var t in All) byId[t.Id] = t;
+                foreach (var t in Rail) byId[t.Id] = t; // Bahn: Gleisnetz speichert über denselben Abschnitts-Code
             }
             return byId.TryGetValue(id, out var type) ? type : null;
         }
