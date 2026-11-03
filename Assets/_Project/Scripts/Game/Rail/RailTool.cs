@@ -160,6 +160,10 @@ namespace CityBuilder.Game.Rail
                   (auto ? "" : $" · Bauhöhe {HeightOffset:+0;-0} m") + (plan.GradeSeparations > 0 ? $" · {plan.GradeSeparations} Kreuzungen über/unter" : "") +
                   (plan.Crossings.Count > 0 ? $" · {plan.Crossings.Count} Weichen/Kreuzungen" : "")
                 : RailSystem.ErrorText(plan.Error);
+            // --- Wasserstraße: Gleisbrücke über die Fahrrinne – lichte Höhe prüfen
+            var bridge = tool.Runner.World.Shipping != null ? tool.Runner.World.Shipping.CheckBridge(plan, rail: true) : default;
+            if (plan.IsValid && bridge.Text != null) info += " · " + bridge.Text.Replace("oder Klappbrücke (Hafen-Werkzeug 8)", "(Gleise haben keine Klappbrücke)");
+            // --- Ende Wasserstraße
             SetLabel(info, !plan.IsValid, SimConvert.ToWorld(cur, plan.HeightAt(1f) + 6f));
             if (!clicked || !plan.IsValid) return;
             var built = rail.BuildTrack(plan);

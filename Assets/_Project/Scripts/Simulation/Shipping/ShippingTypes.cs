@@ -82,8 +82,8 @@ namespace CityBuilder.Simulation.Shipping
         // --- Hafen
         /// <summary>Hafen rastet am Ufer ein: sucht Wasser im Umkreis (m).</summary>
         public const float HarborSnapRadius = 90f;
-        /// <summary>Kaimauer ragt so weit ins Wasser (m).</summary>
-        public const float QuayOverhang = 4f;
+        /// <summary>Kaimauer ragt mindestens so weit ins Wasser (m) – höchstens <see cref="MaxQuayReach"/> (aufgeschüttet).</summary>
+        public const float QuayOverhang = 4f, MaxQuayReach = 80f;
         /// <summary>Liegeplatz: Schiffsmitte so weit vor der Kaikante (+ halbe Breite des Schiffs).</summary>
         public const float BerthGap = 3f;
         /// <summary>Wendebecken/Anfahrpunkt vor der Kaimitte (m).</summary>
@@ -518,10 +518,6 @@ namespace CityBuilder.Simulation.Shipping
         /// <summary>Wartet gerade auf diese Klappbrücke (Straßenstück, 0 = keine).</summary>
         public int WaitingForBridge { get; internal set; }
 
-        /// <summary>Länge der gerichteten Fahrt (bei Hafenschiffen bis zum Liegeplatz verlängert).</summary>
-        public float RouteLength => Waterway != null ? Waterway.Length : 0f;
-        /// <summary>Strecke auf der Fahrrinne (Punktreihenfolge) zu einer Fahrt-Strecke.</summary>
-        public float WaterwayS(float s) => Forward ? s : RouteLength - s;
         public bool IsOnMap => State != ShipState.Waiting;
         public override string ToString() => $"{Class.DisplayName} #{Id}";
     }

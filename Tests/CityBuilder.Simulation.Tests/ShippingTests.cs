@@ -390,6 +390,75 @@ namespace CityBuilder.Simulation.Tests
             Assert.Null(sh.QueueCall(h));
         }
 
+        [Fact]
+        public void SeaHarbor_OnCoast_Coaster_SeaTradeRunsViaHarbor()
+        {
+            // Spiel-Standard: volle Erde, Seed 2024 (Startregion mit Küste und Fluss)
+            var s = Settings();
+            s.GenerateWorld = true;
+            s.WorldSeed = 2024;
+            var w = SimulationWorld.CreateDefault(s);
+            w.Economy.UnlimitedFunds = true;
+            w.Step();
+            var sh = w.Shipping;
+            Assert.NotNull(w.Trade);
+            Assert.Contains(w.Gateways.All, g => g.Kind == GatewayKind.Water && g.TargetKind == GatewayTargetKind.Sea);
+            // Küstenplatz mit tiefem Wasser vor dem Kai suchen (Seehafen für Küstenfrachter)
+            HarborPlan plan = null;
+            float half = w.Settings.SizeMeters * 0.5f - 120f;
+            for (float x = -half; x <= half && plan == null; x += 48f)
+                for (float y = -half; y <= half && plan == null; y += 48f)
+                {
+                    var p = new Vector2(x, y);
+                    if (w.Terrain.IsWater(p)) continue;
+                    var pl = sh.PlanHarbor(HarborCatalog.Cargo, p);
+                    if (pl.IsValid && pl.ShipClass == ShipCatalog.Coaster) plan = pl;
+                }
+            Assert.NotNull(plan);
+            var h = sh.BuildHarbor(plan);
+            var front = h.FrontMid + h.Front * 7.5f;
+            var rp = RoadBuilder.Plan(w.Roads, front - h.Side * 90f, 8f, null, front + h.Side * 90f, 8f, RoadCatalog.CityTwoLane,
+                w.Terrain.HeightAt(front - h.Side * 90f), w.Terrain.HeightAt(front + h.Side * 90f), RoadSegmentFlags.None, true);
+            Assert.True(rp.IsValid, rp.Error.ToString());
+            RoadBuilder.Build(w.Roads, rp);
+            w.Step();
+            output.WriteLine($"{h}: {h.ShipClass}, Rinnen {sh.WaterwaysOf(h).Count}, in Betrieb {h.InService} {h.BlockedReason}");
+            Assert.Equal(ShipCatalog.Coaster, h.ShipClass);
+            Assert.True(h.InService, h.BlockedReason);
+            Assert.All(sh.WaterwaysOf(h), x => Assert.True(x.Sea));
+            Assert.Contains(w.Gateways.All, g => g.Kind == GatewayKind.Water && g.TargetKind == GatewayTargetKind.Sea && g.IsOperational);
+            // Seehandel: Gut, dessen günstigstes Lieferland über See kommt → Import über den Hafen, Fracht 2,5 %
+            int comp = w.Citizens.Components.OfNode(h.AccessNodeId);
+            int seaGoods = 0, landGoods = 0;
+            foreach (var g in Goods.GoodsCatalog.All)
+            {
+                int partner = w.Gateways.SpotPartner(g, true);
+                if (partner < 0) continue;
+                var route = w.Trade.Geography.Route(w.Trade.PlayerId, partner);
+                var node = w.Goods.PreferredGateway(g, true, false, comp);
+                if (route.Mode == Trade.TransportMode.Sea)
+                {
+                    seaGoods++;
+                    Assert.NotNull(node);
+                    Assert.Equal(h.AccessNodeId, node.Id);
+                    Assert.Equal(ShippingRules.SeaFreightShare, w.Goods.FreightShareFor(node), 6);
+                    Assert.Contains(h.Name, w.Gateways.TradeRouteText(partner));
+                }
+                else
+                {
+                    landGoods++;
+                    Assert.True(node == null || node.Id != h.AccessNodeId, "Landweg nicht über den Hafen");
+                }
+            }
+            output.WriteLine($"Güter über See {seaGoods}, über Land {landGoods}");
+            Assert.True(seaGoods > 0, "mindestens ein Gut kommt über See");
+            // Anlauf eines Küstenfrachters
+            h.PendingLoads = 50;
+            var ship = sh.QueueCall(h);
+            Assert.NotNull(ship);
+            Assert.Equal(ShipCatalog.Coaster, ship.Class);
+        }
+
         // ------------------------------------------------------------ Speichern & Laden
 
         [Fact]

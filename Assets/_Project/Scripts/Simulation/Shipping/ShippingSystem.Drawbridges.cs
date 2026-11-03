@@ -29,6 +29,31 @@ namespace CityBuilder.Simulation.Shipping
             return null;
         }
 
+        /// <summary>Klappbrücke im Umkreis eines Punkts (Inspektor), null = keine.</summary>
+        public Drawbridge DrawbridgeNear(Vector2 p, float radius)
+        {
+            Drawbridge best = null;
+            float bestD = radius;
+            foreach (var d in drawbridges)
+            {
+                float dist = Vector2.Distance(d.Position, p);
+                if (dist < bestD) { bestD = dist; best = d; }
+            }
+            return best;
+        }
+
+        public static string StateText(Drawbridge d)
+        {
+            switch (d.State)
+            {
+                case DrawbridgeState.Warning: return "Ampel rot, Schranken senken sich";
+                case DrawbridgeState.Raising: return "Klappe hebt sich";
+                case DrawbridgeState.Open: return "offen – Schiffe fahren durch";
+                case DrawbridgeState.Lowering: return "Klappe senkt sich";
+                default: return "geschlossen – Straße frei";
+            }
+        }
+
         void RebuildDrawbridges()
         {
             var old = new List<Drawbridge>(drawbridges);
@@ -248,6 +273,18 @@ namespace CityBuilder.Simulation.Shipping
             plan.Cost = plan.ApproachA.Cost + plan.Span.Cost + plan.ApproachB.Cost + ShippingRules.DrawbridgeCost;
             if (plan.Error == RoadBuildError.None && !Affordable(plan.Cost)) plan.Error = RoadBuildError.InsufficientFunds;
             return plan;
+        }
+
+        /// <summary>Klappe abreißen (Fahrbahn wie beim Straßenabriss, Mechanik 25 % zurück); die Zufahrten bleiben.</summary>
+        public bool DemolishDrawbridge(int segmentId)
+        {
+            var seg = roads.GetSegment(segmentId);
+            if (seg == null || !seg.IsDrawbridge) return false;
+            if (!RoadBuilder.Demolish(roads, seg)) return false;
+            Budget?.Refund(ShippingRules.DrawbridgeCost * Economy.EconomyRules.DemolitionRefundShare);
+            crossingsDirty = true;
+            EnsureCrossings();
+            return true;
         }
 
         /// <summary>Baut die drei Stücke nacheinander (Klappe und zweite Zufahrt rasten am gebauten Ende ein); null bei Fehler.</summary>

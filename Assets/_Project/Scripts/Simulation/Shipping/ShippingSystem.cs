@@ -38,6 +38,8 @@ namespace CityBuilder.Simulation.Shipping
 
         /// <summary>Wird bei jeder Änderung an Häfen, Fahrrinnen, Klappbrücken oder Schiffen erhöht (Darstellung).</summary>
         public int Version { get; private set; }
+        /// <summary>Nur bei Änderungen an Häfen, Rinnen, Brücken-Querungen und Klappbrücken (Darstellung baut dann neu).</summary>
+        public int LayoutVersion { get; private set; }
 
         public IReadOnlyList<Harbor> Harbors => harbors;
         public IReadOnlyList<Ship> Ships => ships;

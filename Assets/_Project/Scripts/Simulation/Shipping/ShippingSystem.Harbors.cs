@@ -47,19 +47,29 @@ namespace CityBuilder.Simulation.Shipping
             if (shoreAlong < -r + 0.5f) { plan.Error = HarborBuildError.OnWater; return plan; }
             if (shoreAlong < 0f) shoreAlong = 0f;
             var shore = cursor + n * shoreAlong;
-            // Kaikante: so weit hinaus, bis der Liegeplatz tief genug ist (Binnenschiff), höchstens 60 m
-            float berthOffset = ShipCatalog.Barge.Beam * 0.5f + ShippingRules.BerthGap;
+            // Kaikante: so weit hinaus, bis der Liegeplatz tief genug ist – erst für Küstenfrachter (Seehafen, Kai bis
+            // MaxQuayReach ins Wasser), sonst für Binnenschiffe; dazwischen wird aufgeschüttet
             float quay = -1f;
-            for (float d = ShippingRules.QuayOverhang; d <= 60f; d += 2f)
+            ShipClass cls = ShipCatalog.Barge;
+            foreach (var c in new[] { ShipCatalog.Coaster, ShipCatalog.Barge })
             {
-                if (MinDepthAlongQuay(shore + n * (d + berthOffset), n, type.Width * 0.8f) >= ShipCatalog.Barge.RequiredDepth) { quay = d; break; }
+                float berthOffset = c.Beam * 0.5f + ShippingRules.BerthGap;
+                float reach = c == ShipCatalog.Coaster ? ShippingRules.MaxQuayReach : ShippingRules.MaxQuayReach * 0.75f;
+                for (float d = ShippingRules.QuayOverhang; d <= reach; d += 2f)
+                    if (MinDepthAlongQuay(shore + n * (d + berthOffset), n, type.Width * 0.8f) >= c.RequiredDepth) { quay = d; cls = c; break; }
+                if (quay >= 0f) break;
             }
-            if (quay < 0f) { plan.Error = HarborBuildError.TooShallow; plan.BerthDepth = MinDepthAlongQuay(shore + n * (60f + berthOffset), n, type.Width * 0.8f); return plan; }
+            if (quay < 0f)
+            {
+                plan.Error = HarborBuildError.TooShallow;
+                plan.BerthDepth = MinDepthAlongQuay(shore + n * (ShippingRules.MaxQuayReach * 0.75f + ShipCatalog.Barge.Beam * 0.5f + ShippingRules.BerthGap), n, type.Width * 0.8f);
+                return plan;
+            }
             var quayLine = shore + n * quay;
             plan.Front = -n;
             plan.Position = quayLine - n * (type.Depth * 0.5f);
-            plan.BerthDepth = MinDepthAlongQuay(quayLine + n * (ShipCatalog.Coaster.Beam * 0.5f + ShippingRules.BerthGap), n, type.Width * 0.8f);
-            plan.ShipClass = plan.BerthDepth >= ShipCatalog.Coaster.RequiredDepth ? ShipCatalog.Coaster : ShipCatalog.Barge;
+            plan.BerthDepth = MinDepthAlongQuay(quayLine + n * (cls.Beam * 0.5f + ShippingRules.BerthGap), n, type.Width * 0.8f);
+            plan.ShipClass = cls;
             plan.Error = ValidateHarbor(plan);
             return plan;
         }
@@ -89,7 +99,7 @@ namespace CityBuilder.Simulation.Shipping
             var fp = new Footprint(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in fp.Corners())
                 if (!world.Contains(c)) return HarborBuildError.OutOfWorld;
-            // Landseite (vordere Hälfte) muss Land sein, aufgeschüttet wird höchstens die hintere Hälfte
+            // Landseite (vorderes Viertel) muss Land sein, aufgeschüttet wird höchstens der Rest
             float lo = float.MaxValue, hi = float.MinValue;
             int water = 0, total = 0;
             for (int i = 0; i <= 4; i++)
@@ -97,7 +107,7 @@ namespace CityBuilder.Simulation.Shipping
                 {
                     var p = plan.Position + fp.Side * (type.Width * (i / 4f - 0.5f)) + plan.Front * (type.Depth * (j / 4f - 0.5f));
                     total++;
-                    if (terrain.IsWater(p)) { water++; if (j >= 2) return HarborBuildError.OnWater; continue; }
+                    if (terrain.IsWater(p)) { water++; if (j >= 4) return HarborBuildError.OnWater; continue; }
                     float h = terrain.HeightAt(p);
                     lo = MathF.Min(lo, h); hi = MathF.Max(hi, h);
                 }
@@ -142,6 +152,7 @@ namespace CityBuilder.Simulation.Shipping
             EnsureAccess();
             UpdateGatewayStatus();
             Version++;
+            LayoutVersion++;
             return h;
         }
 
@@ -167,8 +178,10 @@ namespace CityBuilder.Simulation.Shipping
             RemoveHarborWaterways(id);
             Budget?.Refund(h.Type.Cost * Economy.EconomyRules.DemolitionRefundShare);
             linkedGateways = -1;
+            crossingsDirty = true;
             UpdateGatewayStatus();
             Version++;
+            LayoutVersion++;
             return true;
         }
 

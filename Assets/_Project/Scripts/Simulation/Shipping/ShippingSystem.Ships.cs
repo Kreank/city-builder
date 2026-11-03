@@ -139,7 +139,7 @@ namespace CityBuilder.Simulation.Shipping
         // ------------------------------------------------------------ Lage auf der Fahrt
 
         /// <summary>Gesamtlänge der gerichteten Fahrt (Hafenschiffe: Fahrrinne + Weg vom Anfahrpunkt zum Liegeplatz).</summary>
-        internal float RouteLength(Ship s) => (s.Waterway?.Length ?? 0f) + LegLength(s);
+        public float RouteLength(Ship s) => (s.Waterway?.Length ?? 0f) + LegLength(s);
 
         float LegLength(Ship s)
         {

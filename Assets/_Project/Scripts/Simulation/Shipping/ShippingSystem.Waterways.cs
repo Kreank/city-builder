@@ -267,6 +267,7 @@ namespace CityBuilder.Simulation.Shipping
             }
             accessDirty = true;
             Version++;
+            LayoutVersion++;
         }
 
         void Collect(Waterway w, RoadNetwork net, bool rail)

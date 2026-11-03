@@ -40,7 +40,9 @@ namespace CityBuilder.Game.UI.Windows
                     "(„hier anschließen“) – erst dann ziehen Leute zu, und Handel/Lkw laufen über die Autobahn. Autobahn und " +
                     "Anschlussstelle gehören der Welt (nicht abreißbar). Die Fernbahn-Hauptstrecke liegt ebenfalls schon: ein " +
                     "Personenbahnhof an ihren Gleisen (Bauleiste „Bahn“, 7) mit Straße davor holt Fernzüge, Pendler und Zuzügler per Bahn, " +
-                    "ein Güterbahnhof macht Import/Export billiger. Wasserwege folgen später.");
+                    "ein Güterbahnhof macht Import/Export billiger. Auf dem Fluss fahren schon Schiffe: Brücken über die Fahrrinne müssen " +
+                    "hoch genug sein (automatische Trassierung macht das) – oder eine Klappbrücke bauen, die für Schiffe öffnet. Ein Güterhafen " +
+                    "am Ufer (Bauleiste „Hafen“, 8) bringt Seehandel und billige Fracht per Schiff.");
             ui.Section("Bauen");
             using (ui.Fields())
             {
@@ -60,6 +62,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("5 · F6", "ÖPNV (Haltestelle, Linie zeichnen, Busdepot) · Linienübersicht");
                 ui.Field("6", "Bauen (Anno-Stil): Wohnen, Gewerbe, Industrie setzen · LMB halten und ziehen = Reihe entlang der Straße · , . drehen · Stufen nach Einrichtungen in Reichweite"); // Setzen statt Zonen
                 ui.Field("7 · F7", "Bahn (Gleise, Weichen, Personen-/Güterbahnhof; Bild↑/↓ Bauhöhe) · Bahnübersicht"); // Bahn
+                ui.Field("8 · F8", "Hafen (Güterhafen am Ufer, Klappbrücke quer über die Fahrrinne) · Hafenübersicht · Fahrrinne beim Brückenbau sichtbar"); // Wasserstraße
             }
             ui.Section("Ansehen");
             using (ui.Fields())

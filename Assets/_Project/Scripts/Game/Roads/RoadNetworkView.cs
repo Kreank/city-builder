@@ -159,6 +159,9 @@ namespace CityBuilder.Game.Roads
                 segmentObjects[seg.Id] = mf;
             }
             mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground, structStart, structEnd);
+            // --- Wasserstraße: Klappe zeichnet die ShippingView (Modell mit beweglichen Klappen statt fester Fahrbahn)
+            var mr = mf.GetComponent<MeshRenderer>();
+            if (mr != null) mr.enabled = !seg.IsDrawbridge;
         }
 
         void RebuildNode(RoadNode node)
