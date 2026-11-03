@@ -164,6 +164,17 @@ namespace CityBuilder.Simulation.Goods
             return f.Yesterday.Profit;
         }
 
+        /// <summary>
+        /// Strom (kW) bzw. Wasser (m³/h) eines Industriegebäudes aus dem Rezept × Arbeitsplätze (Hook
+        /// <c>UtilitySystem.DemandProvider</c>). Andere Gebäude/ohne Firma → NaN (Katalogwert); mind. 1 kW / 0,1 m³/h.
+        /// </summary>
+        public float UtilityDemand(Building b, Utilities.UtilityKind kind)
+        {
+            if (b == null || !byBuilding.TryGetValue(b.Id, out var f) || !f.Recipe.IsIndustry) return float.NaN;
+            int jobs = Math.Max(1, b.Jobs);
+            return kind == Utilities.UtilityKind.Power ? MathF.Max(1f, f.Recipe.PowerPerJob * jobs) : MathF.Max(0.1f, f.Recipe.WaterPerJob * jobs);
+        }
+
         // ------------------------------------------------------------ Tick
 
         public void Tick(SimulationWorld world)

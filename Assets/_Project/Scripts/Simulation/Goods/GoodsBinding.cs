@@ -22,7 +22,11 @@ namespace CityBuilder.Simulation.Goods
                 goods.Workforce = citizens.WorkforceOf;       // Fachkräfte je Bildungsstufe
             }
             if (city != null) city.BusinessDemand = goods.DemandOffset; // Gewinn → Nachfrage der Zonen
-            if (utilities != null) goods.UtilitiesSatisfied = utilities.IsSatisfied;
+            if (utilities != null)
+            {
+                goods.UtilitiesSatisfied = utilities.IsSatisfied;
+                utilities.DemandProvider = goods.UtilityDemand; // Strom/Wasser der Industrie aus dem Rezept
+            }
         }
 
         /// <summary>

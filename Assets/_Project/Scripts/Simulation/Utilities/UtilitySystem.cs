@@ -185,6 +185,19 @@ namespace CityBuilder.Simulation.Utilities
         }
 
         public float TotalProduction(UtilityKind kind) { float s = 0f; foreach (var n in networks[(int)kind]) s += n.Production; return s; }
+        // --- G5 Warenketten (Hook): Verbrauch eines Gebäudes aus seiner Firma (Rezept × Arbeitsplätze); NaN/null = Katalogwert.
+        // Gesetzt in GoodsBinding.Connect (GoodsSystem.UtilityDemand).
+        public Func<Building, UtilityKind, float> DemandProvider { get; set; }
+
+        /// <summary>Verbrauch eines fertigen Gebäudes (kW bzw. m³/h): Firma nach Rezept, sonst <see cref="UtilityCatalog.Demand"/>.</summary>
+        public float DemandOf(Building b, UtilityKind kind)
+        {
+            if (b == null || !b.IsConstructed) return 0f;
+            float v = DemandProvider != null ? DemandProvider(b, kind) : float.NaN;
+            return float.IsNaN(v) ? UtilityCatalog.Demand(b, kind) : v;
+        }
+        // --- Ende G5
+
         public float TotalDemand(UtilityKind kind) { float s = 0f; foreach (var n in networks[(int)kind]) s += n.Demand; return s; }
         public float TotalUpkeepPerDay { get { float s = 0f; foreach (var f in facilities.Values) s += f.Type.UpkeepPerDay; return s; } }
 
@@ -575,7 +588,7 @@ namespace CityBuilder.Simulation.Utilities
                 // Älteste Gebäude zuerst; passt ein großes nicht mehr, können kleinere noch versorgt werden
                 foreach (var b in networkBuildings[k][id])
                 {
-                    float demand = UtilityCatalog.Demand(b, kind);
+                    float demand = DemandOf(b, kind); // G5: Industrie nach Rezept
                     n.Demand += demand;
                     bool supplied = demand > 0f && demand <= remaining + 1e-4f;
                     if (supplied) { remaining -= demand; n.Delivered += demand; n.SuppliedBuildings++; }

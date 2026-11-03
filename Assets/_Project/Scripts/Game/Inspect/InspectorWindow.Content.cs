@@ -94,7 +94,7 @@ namespace CityBuilder.Game.Inspect
             var u = world.Utilities;
             var s = u.GetStatus(b);
             string name = UtilityCatalog.KindName(kind);
-            float demand = UtilityCatalog.Demand(b, kind);
+            float demand = u.DemandOf(b, kind); // G5: Industrie nach Rezept
             string need = $"Bedarf {demand:0.#} {UtilityCatalog.Unit(kind)}";
             if (!b.IsConstructed) { ui.Field(name, "– (im Bau, noch kein Bedarf)", Tone.Muted); return; }
             if (s.Has(kind))

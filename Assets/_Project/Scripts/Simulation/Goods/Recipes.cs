@@ -107,7 +107,7 @@ namespace CityBuilder.Simulation.Goods
 
             // --- Gewinnung (braucht Vorkommen)
             Add("farm", "Bauernhof", FirmRole.Extraction, IndustryForm.Agriculture, null,
-                Out(GoodsCatalog.Grain, 3.4f, GoodsCatalog.Livestock, 0.56f), ResourceIds.Fertility, 0.25f, simple, 2f, 3f);
+                Out(GoodsCatalog.Grain, 3.4f, GoodsCatalog.Livestock, 0.56f), ResourceIds.Fertility, 0.25f, simple, 2f, 1f);
             Add("forestry", "Forstbetrieb", FirmRole.Extraction, IndustryForm.Forestry, null,
                 Out(GoodsCatalog.Wood, 5f), ResourceIds.Wood, 0.2f, simple, 1f, 0.2f);
             Add("ore_mine", "Erzbergwerk", FirmRole.Extraction, IndustryForm.Mining, null,

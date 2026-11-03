@@ -393,6 +393,9 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(s.TripId < 0, "Lkw-Fahrten haben negative Fahrt-Ids");
             var v = lab.Traffic.Vehicles.First(x => x.TripId == s.TripId);
             Assert.Equal(VehicleClass.Truck, v.Class);
+            lab.W.Step(); // Statistik zählt Lkw getrennt von Bürgerfahrzeugen
+            Assert.Equal(0, lab.Traffic.Stats.CitizenVehicles);
+            Assert.True(lab.Traffic.Stats.DeliveryVehicles >= 1);
             Assert.Same(s, lab.Goods.ShipmentForTrip(s.TripId));
             Assert.True(food.IncomingOf(flour) >= s.Amount - 1e-3f, "Bestellung ist unterwegs");
             Assert.Equal(0f, food.InputOf(flour));
@@ -594,6 +597,11 @@ namespace CityBuilder.Simulation.Tests
             g.ShipmentsOf(any.BuildingId, list);
             Assert.All(list, s => Assert.True(s.FromBuildingId == any.BuildingId || s.ToBuildingId == any.BuildingId));
             Assert.NotNull(g.FirmAt(any.BuildingId));
+            // Strom/Wasser der Industrie aus dem Rezept (Hook UtilitySystem.DemandProvider), Wohnen weiter nach Katalog
+            Assert.Equal(any.Recipe.PowerPerJob * any.Jobs, w.Utilities.DemandOf(any.Building, Simulation.Utilities.UtilityKind.Power), 3);
+            Assert.Equal(any.Recipe.WaterPerJob * any.Jobs, w.Utilities.DemandOf(any.Building, Simulation.Utilities.UtilityKind.Water), 3);
+            var home = w.City.Buildings.First(b => b.IsConstructed && b.Zone == ZoneType.ResidentialLow);
+            Assert.Equal(Simulation.Utilities.UtilityCatalog.Demand(home, Simulation.Utilities.UtilityKind.Power), w.Utilities.DemandOf(home, Simulation.Utilities.UtilityKind.Power));
             Assert.Null(g.FirmAt(w.City.Buildings.First(b => Zones.IsResidential(b.Zone) && b.Zone != ZoneType.Mixed).Id));
         }
 
