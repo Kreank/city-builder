@@ -56,7 +56,9 @@ namespace CityBuilder.Simulation.Utilities
     /// <summary>Geplante Leitung/Rohr (Vorschau).</summary>
     public sealed class LinePlan
     {
-        public UtilityKind Kind;
+        /// <summary>Leitungsart (Rohr, Kanal, Hochspannung, Freileitung, Erdkabel).</summary>
+        public UtilityLineType Type;
+        public UtilityKind Kind => Type.Kind;
         public Vector2 A, B;
         public float Cost;
         public UtilityBuildError Error;
@@ -70,12 +72,14 @@ namespace CityBuilder.Simulation.Utilities
     public enum UtilitySnap { None, LineEnd, Line, Facility, Road, Building }
 
     /// <summary>
-    /// Strom &amp; Wasser (G3): Versorger-Bauwerke, frei verlegte Leitungen/Rohre und die Netze.
+    /// Strom, Wasser &amp; Abwasser (G3): Versorger-Bauwerke, selbst verlegte Leitungen/Rohre und die Netze.
     /// <para>
-    /// Netzzusammenhang per Union-Find über einen Graphen aus Stadtstraßen (tragen Leitung und Rohr automatisch
-    /// mit, wie in Cities: Skylines), frei verlegten Leitungen/Rohren, Bauwerken und Gebäuden. Neu berechnet nur,
-    /// wenn sich Straßen, Gebäude oder Versorgung geändert haben. Pro Netz: Erzeugung gegen Bedarf; bei Unterdeckung
-    /// werden die ältesten Gebäude (kleinste Id) zuerst versorgt, der Rest bleibt unversorgt.
+    /// <b>Netze werden selbst verlegt</b> (Entscheidung des Spielers): Straßen führen nichts mehr mit. Netzzusammenhang per
+    /// Union-Find über Leitungen (Enden verbinden sich mit Leitungen derselben Ebene und mit Bauwerken), Bauwerke und
+    /// Gebäude (angeschlossen, wenn eine Leitung ≤ <see cref="ConnectionRules.BuildingReach"/> von der Zufahrt verläuft).
+    /// Strom hat zwei Ebenen: Kraftwerk → Hochspannung → Umspannwerk → Ortsnetz → Gebäude (s. UtilitySystem.PowerGrid.cs).
+    /// Neu berechnet nur, wenn sich Straßen, Gebäude oder Versorgung geändert haben. Pro Netz: Erzeugung gegen Bedarf;
+    /// bei Unterdeckung werden die ältesten Gebäude (kleinste Id) zuerst versorgt, der Rest bleibt unversorgt.
     /// </para>
     /// <para>
     /// Folge: Ein Gebäude, das länger als <see cref="AbandonAfterTicks"/> ohne Strom oder Wasser ist, wird verlassen
@@ -164,7 +168,7 @@ namespace CityBuilder.Simulation.Utilities
             roads.RegisterStructures(StructureBlocks);
             city.BuildingRemoved += b => status.Remove(b.Id);
             // Auf Versorger-Flächen und Mast-Grundflächen wachsen keine Gebäude (8-m-Zelle: halbe Zelle Rand)
-            city.LotBlocker = p => FacilityAt(p, ZoneGrid.CellSize * 0.5f) != null || PoleNear(p, ZoneGrid.CellSize * 0.5f + PoleFootprintHalf) != null;
+            city.LotBlocker = p => FacilityAt(p, ZoneGrid.CellSize * 0.5f) != null || PoleBlocks(p, ZoneGrid.CellSize * 0.5f);
         }
 
         public UtilityFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
@@ -187,11 +191,11 @@ namespace CityBuilder.Simulation.Utilities
 
         /// <summary>
         /// Gibt es in der Stadt mindestens einen Versorger dieser Art? Vorher fehlt die Versorgung „planmäßig“
-        /// (Startphase) und hat keine Folgen.
+        /// (Startphase) und hat keine Folgen. Ein Umspannwerk allein zählt nicht (es erzeugt nichts).
         /// </summary>
         public bool IsRequired(UtilityKind kind)
         {
-            foreach (var f in facilities.Values) if (f.Kind == kind) return true;
+            foreach (var f in facilities.Values) if (f.Kind == kind && !f.IsSubstation) return true;
             return false;
         }
 
@@ -210,7 +214,8 @@ namespace CityBuilder.Simulation.Utilities
             return id >= 0 && id < networks[(int)kind].Count ? networks[(int)kind][id] : null;
         }
 
-        public float TotalProduction(UtilityKind kind) { float s = 0f; foreach (var n in networks[(int)kind]) s += n.Production; return s; }
+        /// <summary>Erzeugung aller Bauwerke der Art (Strom: Kraftwerke auf allen Ebenen, ohne Umspannwerke – nichts doppelt).</summary>
+        public float TotalProduction(UtilityKind kind) { float s = 0f; foreach (var n in networks[(int)kind]) s += n.Generation; return s; }
         // --- G5 Warenketten (Hook): Verbrauch eines Gebäudes aus seiner Firma (Rezept × Arbeitsplätze); NaN/null = Katalogwert.
         // Gesetzt in GoodsBinding.Connect (GoodsSystem.UtilityDemand).
         public Func<Building, UtilityKind, float> DemandProvider { get; set; }
@@ -226,7 +231,13 @@ namespace CityBuilder.Simulation.Utilities
         }
         // --- Ende G5
 
-        public float TotalDemand(UtilityKind kind) { float s = 0f; foreach (var n in networks[(int)kind]) s += n.Demand; return s; }
+        /// <summary>Bedarf aller Gebäude der Art (Hochspannungsnetze zählen nicht – ihr Bedarf ist der weitergereichte Gebäudebedarf).</summary>
+        public float TotalDemand(UtilityKind kind)
+        {
+            float s = 0f;
+            foreach (var n in networks[(int)kind]) if (n.Level == GridLevel.Distribution) s += n.Demand;
+            return s;
+        }
         public float TotalUpkeepPerDay { get { float s = 0f; foreach (var f in facilities.Values) s += f.Type.UpkeepPerDay; return s; } }
 
         // ------------------------------------------------------------ Bauwerke planen/bauen/abreißen
@@ -295,7 +306,7 @@ namespace CityBuilder.Simulation.Utilities
             if (!plan.Type.NeedsWater) terrain.FlattenArea(f.Position, f.Front, plan.Type.Width, plan.Type.Depth, f.Height);
             StructureVersion++;
             FacilityMoved?.Invoke(f);
-            RerouteLines(p => f.Contains(p, PoleFootprintHalf));
+            RerouteLines((p, h) => f.Contains(p, h));
             return true;
         }
 
@@ -384,7 +395,7 @@ namespace CityBuilder.Simulation.Utilities
             StructureVersion++;
             FacilityAdded?.Invoke(f);
             // Masten auf der neuen Fläche: Leitung neu trassieren (oder abreißen, wenn es nicht geht)
-            RerouteLines(p => f.Contains(p, PoleFootprintHalf));
+            RerouteLines((p, h) => f.Contains(p, h));
             return f;
         }
 
@@ -419,21 +430,27 @@ namespace CityBuilder.Simulation.Utilities
 
         // ------------------------------------------------------------ Leitungen/Rohre
 
-        public LinePlan PlanLine(UtilityKind kind, Vector2 a, Vector2 b)
+        /// <summary>Planen mit der Standard-Leitungsart der Versorgungsart (<see cref="UtilityCatalog.DefaultLineType"/>; Strom = Freileitung).</summary>
+        public LinePlan PlanLine(UtilityKind kind, Vector2 a, Vector2 b) => PlanLine(UtilityCatalog.DefaultLineType(kind), a, b);
+
+        public LinePlan PlanLine(UtilityLineType type, Vector2 a, Vector2 b) => PlanLineCore(type, a, b, checkFunds: true);
+
+        /// <summary>Planen; <paramref name="checkFunds"/> = false prüft die Stadtkasse nicht je Stück (Sammelpläne prüfen die Summe).</summary>
+        LinePlan PlanLineCore(UtilityLineType type, Vector2 a, Vector2 b, bool checkFunds)
         {
-            var plan = new LinePlan { Kind = kind, A = a, B = b };
-            plan.Cost = plan.Length * UtilityCatalog.LineCostPerMeter(kind);
+            var plan = new LinePlan { Type = type, A = a, B = b };
+            plan.Cost = plan.Length * type.CostPerMeter;
             if (!InWorld(a) || !InWorld(b)) plan.Error = UtilityBuildError.OutOfWorld;
             else if (plan.Length < MinLineLength) plan.Error = UtilityBuildError.TooShort;
             else
                 foreach (var l in lines.Values)
-                    if (l.Kind == kind && ((Vector2.Distance(l.A, a) < 1f && Vector2.Distance(l.B, b) < 1f) ||
+                    if (l.Type == type && ((Vector2.Distance(l.A, a) < 1f && Vector2.Distance(l.B, b) < 1f) ||
                                            (Vector2.Distance(l.A, b) < 1f && Vector2.Distance(l.B, a) < 1f)))
                     { plan.Error = UtilityBuildError.Duplicate; break; }
-            // Stromleitungen brauchen Masten (Wasserrohre liegen unterirdisch und dürfen unter Straßen)
-            if (kind == UtilityKind.Power && plan.Error == UtilityBuildError.None)
-                plan.Error = PlanPoles(a, b, plan.Poles);
-            if (plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
+            // Oberirdische Leitungen brauchen Masten (Rohre, Kanäle, Erdkabel liegen unterirdisch und dürfen unter Straßen)
+            if (type.HasPoles && plan.Error == UtilityBuildError.None)
+                plan.Error = PlanPoles(a, b, plan.Poles, type);
+            if (checkFunds && plan.Error == UtilityBuildError.None && !Affordable(plan.Cost)) plan.Error = UtilityBuildError.InsufficientFunds;
             return plan;
         }
 
@@ -441,20 +458,21 @@ namespace CityBuilder.Simulation.Utilities
         {
             if (plan == null || !plan.IsValid || !Affordable(plan.Cost)) return null;
             Budget?.Spend(Economy.BudgetCategory.UtilityConstruction, plan.Cost);
-            var l = new UtilityLine { Id = nextLineId++, Kind = plan.Kind, A = plan.A, B = plan.B, Poles = PolePositions(plan.Poles) };
+            var l = new UtilityLine { Id = nextLineId++, Type = plan.Type, A = plan.A, B = plan.B, Poles = PolePositions(plan.Poles) };
             lines[l.Id] = l;
             StructureVersion++;
             return l;
         }
 
         public UtilityLine TryBuildLine(UtilityKind kind, Vector2 a, Vector2 b) => BuildLine(PlanLine(kind, a, b));
+        public UtilityLine TryBuildLine(UtilityLineType type, Vector2 a, Vector2 b) => BuildLine(PlanLine(type, a, b));
 
         /// <summary>Spieler-Abriss: entfernt die Leitung und schreibt den Abrisserlös gut.</summary>
         public bool DemolishLine(int id)
         {
             if (!lines.TryGetValue(id, out var l)) return false;
             RemoveLine(id);
-            Budget?.Refund(l.Length * UtilityCatalog.LineCostPerMeter(l.Kind) * Economy.EconomyRules.DemolitionRefundShare);
+            Budget?.Refund(l.Length * l.Type.CostPerMeter * Economy.EconomyRules.DemolitionRefundShare);
             return true;
         }
 
@@ -481,17 +499,25 @@ namespace CityBuilder.Simulation.Utilities
             return best;
         }
 
+        /// <summary>Wie <see cref="ResolveLinePoint(UtilityLineType, Vector2, float, out UtilitySnap)"/> mit der Standard-Leitungsart.</summary>
+        public Vector2 ResolveLinePoint(UtilityKind kind, Vector2 p, float snap, out UtilitySnap what) =>
+            ResolveLinePoint(UtilityCatalog.DefaultLineType(kind), p, snap, out what);
+
         /// <summary>
-        /// Rastet einen Punkt für ein Leitungsende ein: Leitungsende → Bauwerk der Art (Rand) → Leitung → Straße → Gebäude.
+        /// Rastet einen Punkt für ein Leitungsende ein: Leitungsende → Bauwerk, das diese Leitungsart annimmt (Rand) →
+        /// Leitung → Straße → Gebäude. Leitungen nur derselben Art und Ebene. Straße: unterirdische Leitungen (Rohr, Kanal,
+        /// Erdkabel) rasten unter dem Gehweg auf der Seite des Mauszeigers ein (<see cref="ConnectionRules.SidewalkInset"/>),
+        /// oberirdische auf der Straßenmitte (die Masten rücken neben die Straße).
         /// </summary>
-        public Vector2 ResolveLinePoint(UtilityKind kind, Vector2 p, float snap, out UtilitySnap what)
+        public Vector2 ResolveLinePoint(UtilityLineType type, Vector2 p, float snap, out UtilitySnap what)
         {
+            var kind = type.Kind;
             what = UtilitySnap.None;
             Vector2 best = p;
             float bestD = snap;
             foreach (var l in lines.Values)
             {
-                if (l.Kind != kind) continue;
+                if (l.Kind != kind || l.Level != type.Level) continue;
                 foreach (var e in new[] { l.A, l.B })
                 {
                     float d = Vector2.Distance(e, p);
@@ -502,7 +528,7 @@ namespace CityBuilder.Simulation.Utilities
 
             foreach (var f in facilities.Values)
             {
-                if (f.Kind != kind || !f.Contains(p, snap)) continue;
+                if (!Accepts(f, type) || !f.Contains(p, snap)) continue;
                 // Auf den Rand der Grundfläche legen
                 var d = p - f.Position;
                 float x = Math.Clamp(Vector2.Dot(d, f.Side), -f.Type.Width * 0.5f, f.Type.Width * 0.5f);
@@ -511,24 +537,56 @@ namespace CityBuilder.Simulation.Utilities
                 return f.Position + f.Side * x + f.Front * y;
             }
 
-            var line = LineNear(p, snap, kind);
+            UtilityLine line = null;
+            float lineD = snap;
+            foreach (var l in lines.Values)
+            {
+                if (l.Kind != kind || l.Level != type.Level) continue;
+                float d = l.DistanceTo(p);
+                if (d <= lineD) { lineD = d; line = l; }
+            }
             if (line != null)
             {
-                var ab = line.B - line.A;
-                float t = Math.Clamp(Vector2.Dot(p - line.A, ab) / MathF.Max(1e-6f, ab.LengthSquared()), 0f, 1f);
                 what = UtilitySnap.Line;
-                return line.A + ab * t;
+                return ConnectionRules.ClosestPoint(line, p);
             }
 
             var seg = NearestCityRoad(p, snap);
             if (seg != null)
             {
                 what = UtilitySnap.Road;
-                return seg.Evaluate(seg.ClosestT(p));
+                float t = seg.ClosestT(p);
+                var center = seg.Evaluate(t);
+                if (!type.Underground) return center;
+                return center + RoadNormal(seg, t) * (SideOf(seg, t, p) * SidewalkOffset(seg));
             }
             if (city.BuildingAt(p) != null) what = UtilitySnap.Building;
             return p;
         }
+
+        /// <summary>
+        /// Nimmt das Bauwerk diese Leitungsart an? Wasser/Abwasser: jedes Bauwerk der Art. Strom: Umspannwerk beide Ebenen,
+        /// große Kraftwerke nur Hochspannung, kleine Erzeuger (<see cref="UtilityFacilityType.FeedsLocalGrid"/>) beide.
+        /// </summary>
+        public static bool Accepts(UtilityFacility f, UtilityLineType type)
+        {
+            if (f == null || type == null || f.Kind != type.Kind) return false;
+            if (type.Kind != UtilityKind.Power || f.IsSubstation) return true;
+            return type.Level == GridLevel.HighVoltage || f.Type.FeedsLocalGrid;
+        }
+
+        /// <summary>Rechte Normale der Straße bei t (in Segmentrichtung).</summary>
+        static Vector2 RoadNormal(RoadSegment s, float t)
+        {
+            var tan = s.Tangent(t);
+            return new Vector2(tan.Y, -tan.X);
+        }
+
+        /// <summary>Seite von p zur Straße: +1 rechts (auch genau mittig), −1 links.</summary>
+        static float SideOf(RoadSegment s, float t, Vector2 p) => Vector2.Dot(p - s.Evaluate(t), RoadNormal(s, t)) >= 0f ? 1f : -1f;
+
+        /// <summary>Abstand Straßenmitte ↔ Leitung unter dem Gehweg.</summary>
+        static float SidewalkOffset(RoadSegment s) => MathF.Max(0f, s.Type.HalfWidth - ConnectionRules.SidewalkInset);
 
         // ------------------------------------------------------------ Tick
 
@@ -556,62 +614,70 @@ namespace CityBuilder.Simulation.Utilities
         /// <summary>Für Tests/Werkzeuge: sofort neu rechnen (ohne Uhr).</summary>
         public void ForceTick() => Tick(null);
 
+        /// <summary>
+        /// Netzzusammenhang einer Art neu berechnen (Netze selbst verlegt – Straßen führen nichts mit):
+        /// <list type="bullet">
+        /// <item>Leitungsenden verbinden sich (≤ <see cref="ConnectRadius"/>) mit Leitungen derselben Art und Ebene und mit
+        /// Bauwerken, die die Leitungsart annehmen (<see cref="Accepts"/>).</item>
+        /// <item>Gebäude hängen an jeder Leitung, die Gebäude anschließt, in Anschlussreichweite ihrer Zufahrt
+        /// (<see cref="ConnectionRules.Reaches"/>) bzw. deren Ende im Gebäude liegt.</item>
+        /// <item>Strom: Umspannwerk = zwei Knoten (Oberseite Hochspannung, Unterseite Ortsnetz) – die Ebenen bleiben getrennte
+        /// Netze und tauschen Leistung nur über das Umspannwerk (<see cref="TransformPower"/>). Kleine Erzeuger speisen ins
+        /// Ortsnetz, wenn ein Ortsnetz-Ende sie berührt, sonst in die Hochspannung; große Kraftwerke nur in die Hochspannung.</item>
+        /// </list>
+        /// Alle Listen nach Id sortiert → Netz-Ids und Ergebnis unabhängig von der Einfügereihenfolge (deterministisch).
+        /// </summary>
         void Rebuild(UtilityKind kind)
         {
             int k = (int)kind;
             var uf = new UnionFind();
+            var level = new List<GridLevel>(); // Ebene je Knoten (Index = Union-Find-Element)
+            int Add(GridLevel lv) { level.Add(lv); return uf.Add(); }
 
-            // Stadtstraßen tragen Leitung und Rohr: Segmente an gemeinsamen Knoten sind verbunden
-            var segIndex = new Dictionary<int, int>();
-            foreach (var s in roads.Segments)
-                if (ConnectionRules.CarriedByRoads(kind) && CarriesUtilities(s)) segIndex[s.Id] = uf.Add(); // Abwasser: nicht (selbst verlegt)
-            foreach (var n in roads.Nodes)
-            {
-                int first = -1;
-                foreach (int id in n.SegmentIds)
-                {
-                    if (!segIndex.TryGetValue(id, out int i)) continue;
-                    if (first < 0) first = i; else uf.Union(first, i);
-                }
-            }
-
-            // Gebäude hängen an ihrer Straße (Vorderseite)
+            // Gebäude
             var sorted = new List<Building>(city.Buildings);
             sorted.Sort((a, b) => a.Id.CompareTo(b.Id));
             var bIndex = new int[sorted.Count];
-            for (int i = 0; i < sorted.Count; i++)
-            {
-                var b = sorted[i];
-                bIndex[i] = uf.Add();
-                int segId = b.FrontSegmentId;
-                if (!segIndex.ContainsKey(segId))
-                {
-                    var near = NearestCityRoad(b.Entrance, ConnectRadius);
-                    segId = near != null ? near.Id : -1;
-                }
-                if (segId >= 0 && segIndex.TryGetValue(segId, out int si)) uf.Union(bIndex[i], si);
-            }
+            for (int i = 0; i < sorted.Count; i++) bIndex[i] = Add(GridLevel.Distribution);
 
-            // Bauwerke: an Straßen in Reichweite
-            var fList = new List<UtilityFacility>();
-            foreach (var f in facilities.Values) if (f.Kind == kind) fList.Add(f);
-            fList.Sort((a, b) => a.Id.CompareTo(b.Id));
-            var fIndex = new int[fList.Count];
-            for (int i = 0; i < fList.Count; i++)
-            {
-                fIndex[i] = uf.Add();
-                var f = fList[i];
-                foreach (var s in roads.Segments)
-                    if (segIndex.TryGetValue(s.Id, out int si) && RoadCrossesRect(s, f.Position, f.Front, f.Type.Width, f.Type.Depth, RoadReach))
-                        uf.Union(fIndex[i], si);
-            }
-
-            // Leitungen: Enden verbinden sich mit Leitungen, Bauwerken, Straßen und Gebäuden
+            // Leitungen
             var lList = new List<UtilityLine>();
             foreach (var l in lines.Values) if (l.Kind == kind) lList.Add(l);
             lList.Sort((a, b) => a.Id.CompareTo(b.Id));
             var lIndex = new int[lList.Count];
-            for (int i = 0; i < lList.Count; i++) lIndex[i] = uf.Add();
+            for (int i = 0; i < lList.Count; i++) lIndex[i] = Add(lList[i].Level);
+
+            // Bauwerke: Hauptknoten (Ortsnetz/Rohrnetz bzw. Hochspannung bei großen Kraftwerken), Umspannwerk zusätzlich Oberseite
+            var fList = new List<UtilityFacility>();
+            foreach (var f in facilities.Values) if (f.Kind == kind) fList.Add(f);
+            fList.Sort((a, b) => a.Id.CompareTo(b.Id));
+            var fIndex = new int[fList.Count];
+            var fUpper = new int[fList.Count];
+            for (int i = 0; i < fList.Count; i++)
+            {
+                var f = fList[i];
+                fUpper[i] = -1;
+                if (kind != UtilityKind.Power) { fIndex[i] = Add(GridLevel.Distribution); continue; }
+                if (f.IsSubstation)
+                {
+                    fIndex[i] = Add(GridLevel.Distribution);
+                    fUpper[i] = Add(GridLevel.HighVoltage);
+                    continue;
+                }
+                bool local = false;
+                if (f.Type.FeedsLocalGrid)
+                    foreach (var l in lList)
+                        if (l.Level == GridLevel.Distribution && (f.Contains(l.A, ConnectRadius) || f.Contains(l.B, ConnectRadius))) { local = true; break; }
+                fIndex[i] = Add(local ? GridLevel.Distribution : GridLevel.HighVoltage);
+            }
+
+            // Knoten eines Bauwerks auf einer Ebene (-1 = nimmt diese Ebene nicht an)
+            int FacilityNode(int i, GridLevel lv)
+            {
+                if (level[fIndex[i]] == lv) return fIndex[i];
+                return fUpper[i] >= 0 && level[fUpper[i]] == lv ? fUpper[i] : -1;
+            }
+
             var buildingPos = new Dictionary<int, int>();
             for (int i = 0; i < sorted.Count; i++) buildingPos[sorted[i].Id] = i;
             for (int i = 0; i < lList.Count; i++)
@@ -620,35 +686,36 @@ namespace CityBuilder.Simulation.Utilities
                 foreach (var e in new[] { l.A, l.B })
                 {
                     for (int j = 0; j < lList.Count; j++)
-                        if (j != i && lList[j].DistanceTo(e) <= ConnectRadius) uf.Union(lIndex[i], lIndex[j]);
+                        if (j != i && lList[j].Level == l.Level && lList[j].DistanceTo(e) <= ConnectRadius) uf.Union(lIndex[i], lIndex[j]);
                     for (int j = 0; j < fList.Count; j++)
-                        if (fList[j].Contains(e, ConnectRadius)) uf.Union(lIndex[i], fIndex[j]);
-                    var seg = NearestCityRoad(e, ConnectRadius);
-                    if (seg != null && segIndex.TryGetValue(seg.Id, out int segI)) uf.Union(lIndex[i], segI);
+                    {
+                        if (!Accepts(fList[j], l.Type) || !fList[j].Contains(e, ConnectRadius)) continue;
+                        int node = FacilityNode(j, l.Level);
+                        if (node >= 0) uf.Union(lIndex[i], node);
+                    }
+                    if (!l.Type.ConnectsBuildings) continue;
                     var b = city.BuildingAt(e);
                     if (b != null && buildingPos.TryGetValue(b.Id, out int bi)) uf.Union(lIndex[i], bIndex[bi]);
                 }
             }
 
-            // Selbst verlegte Netze (Abwasser): Gebäude hängen an jeder Leitung in Anschlussreichweite ihrer Zufahrt
-            if (!ConnectionRules.CarriedByRoads(kind) && lList.Count > 0)
+            // Hausanschlüsse: Gebäude hängen an jeder Leitung in Anschlussreichweite ihrer Zufahrt (ConnectionRules)
+            float reach = ConnectionRules.BuildingReach;
+            for (int j = 0; j < lList.Count; j++)
             {
-                float reach = ConnectionRules.BuildingReach;
-                for (int j = 0; j < lList.Count; j++)
+                var l = lList[j];
+                if (!l.Type.ConnectsBuildings) continue;
+                float x0 = MathF.Min(l.A.X, l.B.X) - reach, x1 = MathF.Max(l.A.X, l.B.X) + reach;
+                float y0 = MathF.Min(l.A.Y, l.B.Y) - reach, y1 = MathF.Max(l.A.Y, l.B.Y) + reach;
+                for (int i = 0; i < sorted.Count; i++)
                 {
-                    var l = lList[j];
-                    float x0 = MathF.Min(l.A.X, l.B.X) - reach, x1 = MathF.Max(l.A.X, l.B.X) + reach;
-                    float y0 = MathF.Min(l.A.Y, l.B.Y) - reach, y1 = MathF.Max(l.A.Y, l.B.Y) + reach;
-                    for (int i = 0; i < sorted.Count; i++)
-                    {
-                        var e = sorted[i].Entrance;
-                        if (e.X < x0 || e.X > x1 || e.Y < y0 || e.Y > y1) continue;
-                        if (ConnectionRules.Reaches(l, sorted[i])) uf.Union(bIndex[i], lIndex[j]);
-                    }
+                    var e = sorted[i].Entrance;
+                    if (e.X < x0 || e.X > x1 || e.Y < y0 || e.Y > y1) continue;
+                    if (ConnectionRules.Reaches(l, sorted[i])) uf.Union(bIndex[i], lIndex[j]);
                 }
             }
 
-            // Netze: je Wurzel eins (nur mit Gebäude, Bauwerk oder Leitung), Ids in fester Reihenfolge
+            // Netze: je Wurzel eins, Ids in fester Reihenfolge (Bauwerke, Leitungen, Gebäude)
             var list = networks[k];
             var members = networkBuildings[k];
             var map = buildingNetwork[k];
@@ -662,15 +729,22 @@ namespace CityBuilder.Simulation.Utilities
                 if (rootToNet.TryGetValue(root, out int id)) return id;
                 id = list.Count;
                 rootToNet[root] = id;
-                list.Add(new UtilityNetwork { Id = id, Kind = kind });
+                list.Add(new UtilityNetwork { Id = id, Kind = kind, Level = level[element] });
                 members.Add(new List<Building>());
                 return id;
             }
             for (int i = 0; i < fList.Count; i++)
             {
+                var f = fList[i];
                 int id = NetFor(fIndex[i]);
-                fList[i].NetworkId = id;
-                list[id].Facilities++;
+                f.NetworkId = id;
+                f.UpstreamNetworkId = fUpper[i] >= 0 ? NetFor(fUpper[i]) : -1;
+                if (f.IsSubstation)
+                {
+                    list[id].Substations++;
+                    list[f.UpstreamNetworkId].Substations++;
+                }
+                else list[id].Facilities++;
             }
             for (int i = 0; i < lList.Count; i++)
             {
@@ -693,19 +767,40 @@ namespace CityBuilder.Simulation.Utilities
             int k = (int)kind;
             bool changed = false;
             var list = networks[k];
-            foreach (var n in list) { n.Production = 0f; n.Demand = 0f; n.Delivered = 0f; n.SuppliedBuildings = 0; }
+            foreach (var n in list)
+            {
+                n.Production = 0f; n.Generation = 0f; n.Imported = 0f; n.TransformerCapacity = 0f;
+                n.Demand = 0f; n.Delivered = 0f; n.SuppliedBuildings = 0;
+            }
             foreach (var f in facilities.Values)
-                if (f.Kind == kind && f.NetworkId >= 0 && f.NetworkId < list.Count) list[f.NetworkId].Production += f.Output;
+                if (f.Kind == kind && !f.IsSubstation && f.NetworkId >= 0 && f.NetworkId < list.Count) list[f.NetworkId].Generation += f.Output;
+
+            // Bedarf je Netz (älteste Gebäude zuerst – Reihenfolge der Mitglieder)
+            var demands = new List<float[]>(list.Count);
+            for (int id = 0; id < list.Count; id++)
+            {
+                var m = networkBuildings[k][id];
+                var d = new float[m.Count];
+                for (int i = 0; i < m.Count; i++)
+                {
+                    d[i] = DemandOf(m[i], kind); // G5: Industrie nach Rezept
+                    list[id].Demand += d[i];
+                }
+                demands.Add(d);
+                list[id].Production = list[id].Generation;
+            }
+            if (kind == UtilityKind.Power) TransformPower(list);
 
             for (int id = 0; id < list.Count; id++)
             {
                 var n = list[id];
                 float remaining = n.Production;
+                var m = networkBuildings[k][id];
                 // Älteste Gebäude zuerst; passt ein großes nicht mehr, können kleinere noch versorgt werden
-                foreach (var b in networkBuildings[k][id])
+                for (int i = 0; i < m.Count; i++)
                 {
-                    float demand = DemandOf(b, kind); // G5: Industrie nach Rezept
-                    n.Demand += demand;
+                    var b = m[i];
+                    float demand = demands[id][i];
                     bool supplied = demand > 0f && demand <= remaining + 1e-4f;
                     if (supplied) { remaining -= demand; n.Delivered += demand; n.SuppliedBuildings++; }
 
@@ -721,10 +816,24 @@ namespace CityBuilder.Simulation.Utilities
             return changed;
         }
 
+        /// <summary>
+        /// Übergangsfrist nach dem Laden eines alten Spielstands (v1, Straßen trugen Strom/Wasser): so viele Ticks zählt
+        /// keine Ausfalldauer, damit der Spieler Hochspannung, Umspannwerk und Ortsnetz („Entlang Straßen verlegen“) nachrüsten kann.
+        /// </summary>
+        public int MigrationGraceTicks { get; private set; }
+        /// <summary>Übergangsfrist für alte Spielstände: 5 Spieltage.</summary>
+        public const int MigrationGraceAfterV1 = 5 * SimulationClock.TicksPerDay;
+
         void UpdateDurations()
         {
             // Dauer zählt erst, wenn die Art verlangt wird – sonst würde das erste Kraftwerk sofort alle Altbauten räumen
             bool power = IsRequired(UtilityKind.Power), water = IsRequired(UtilityKind.Water), sewage = IsRequired(UtilityKind.Sewage);
+            if (MigrationGraceTicks > 0)
+            {
+                // Netze selbst verlegt: alter Spielstand – während der Übergangsfrist zählt keine Ausfalldauer
+                MigrationGraceTicks = Math.Max(0, MigrationGraceTicks - TickInterval);
+                power = water = sewage = false;
+            }
             foreach (var b in city.Buildings)
             {
                 if (!status.TryGetValue(b.Id, out var s)) continue;
@@ -792,7 +901,7 @@ namespace CityBuilder.Simulation.Utilities
         /// </summary>
         void OnSegmentAdded(RoadSegment s)
         {
-            RerouteLines(p => RoadBlocksPole(s, p));
+            RerouteLines((p, h) => RoadBlocksPole(s, p, h));
         }
 
         // ------------------------------------------------------------ Geometrie

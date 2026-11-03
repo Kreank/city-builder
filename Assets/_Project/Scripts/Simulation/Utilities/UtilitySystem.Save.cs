@@ -12,7 +12,13 @@ namespace CityBuilder.Simulation.Utilities
     public sealed partial class UtilitySystem : ISaveable
     {
         public string SaveId => "utilities";
-        public int SaveVersion => 1;
+        /// <summary>
+        /// v2 (Netze selbst verlegt): Leitungsart je Leitung, Umspannwerk-Oberseite/Last, Netzebene + Umspannwerte je Netz,
+        /// Übergangsfrist. v1 (Straßen trugen Strom/Wasser): Leitungen = bisherige Art (Strom → Freileitung im Ortsnetz),
+        /// Netze werden beim ersten Durchlauf nach den neuen Regeln neu berechnet, und es gilt eine Übergangsfrist
+        /// (<see cref="MigrationGraceTicks"/>), damit der Spieler mit „Entlang Straßen verlegen“ nachrüsten kann.
+        /// </summary>
+        public int SaveVersion => 2;
 
         public void Write(SaveWriter w)
         {
@@ -24,6 +30,7 @@ namespace CityBuilder.Simulation.Utilities
             // Atom (G3 erw.): Störfälle, Abschaltungen
             w.Bool(IncidentsEnabled); w.Float(IncidentChancePerDay); w.Int(Incidents); w.Int(incidentCheckedDay);
             w.IntDictionary(offlineUntilDay, w.Int);
+            w.Int(MigrationGraceTicks); // v2
 
             facilities.WriteLayout(w, (id, f) =>
             {
@@ -34,11 +41,14 @@ namespace CityBuilder.Simulation.Utilities
                 w.Float(f.Height);
                 w.Float(f.Output);
                 w.Int(f.NetworkId);
+                w.Int(f.UpstreamNetworkId); // v2
+                w.Float(f.Load);            // v2
             });
             lines.WriteLayout(w, (id, l) =>
             {
                 w.Int(l.Id);
                 w.Name(l.Kind);
+                w.String(l.Type.Id); // v2
                 w.Vector2(l.A);
                 w.Vector2(l.B);
                 w.Int(l.NetworkId);
@@ -67,6 +77,8 @@ namespace CityBuilder.Simulation.Utilities
                     w.Int(n.Id);
                     w.Float(n.Production); w.Float(n.Demand); w.Float(n.Delivered);
                     w.Int(n.Facilities); w.Int(n.Buildings); w.Int(n.SuppliedBuildings); w.Int(n.Lines);
+                    // v2: Ebene und Umspannwerte
+                    w.Name(n.Level); w.Float(n.Generation); w.Float(n.Imported); w.Float(n.TransformerCapacity); w.Int(n.Substations);
                     var members = networkBuildings[k][i];
                     w.Int(members.Count);
                     foreach (var b in members) w.Int(b.Id);
@@ -84,6 +96,7 @@ namespace CityBuilder.Simulation.Utilities
             ReroutedLines = r.Int(); LinesRemovedByConstruction = r.Int();
             IncidentsEnabled = r.Bool(); IncidentChancePerDay = r.Float(); Incidents = r.Int(); incidentCheckedDay = r.Int();
             r.IntDictionaryInto(offlineUntilDay, r.Int, 4);
+            MigrationGraceTicks = version >= 2 ? r.Int() : MigrationGraceAfterV1;
 
             facilities.ReadLayout(r, () =>
             {
@@ -96,11 +109,17 @@ namespace CityBuilder.Simulation.Utilities
                 {
                     Id = id, Type = type, Position = r.Vector2(), Front = r.Vector2(), Height = r.Float(), Output = r.Float(), NetworkId = r.Int(),
                 };
+                if (version >= 2) { f.UpstreamNetworkId = r.Int(); f.Load = r.Float(); }
                 return new KeyValuePair<int, UtilityFacility>(id, f);
             });
             lines.ReadLayout(r, () =>
             {
-                var l = new UtilityLine { Id = r.Int(), Kind = r.Name<UtilityKind>(), A = r.Vector2(), B = r.Vector2(), NetworkId = r.Int(), Revision = r.Int() };
+                int lineId = r.Int();
+                var lineKind = r.Name<UtilityKind>();
+                // v1: noch keine Leitungsarten → bisherige Art (Strom = Freileitung im Ortsnetz, 45-m-Masten wie bisher)
+                var lineType = version >= 2 ? UtilityCatalog.LineTypeById(r.String()) : UtilityCatalog.DefaultLineType(lineKind);
+                if (lineType == null || lineType.Kind != lineKind) throw new SaveFormatException("Unbekannte Leitungsart.");
+                var l = new UtilityLine { Id = lineId, Type = lineType, A = r.Vector2(), B = r.Vector2(), NetworkId = r.Int(), Revision = r.Int() };
                 int poles = r.Count(8);
                 var list = new List<System.Numerics.Vector2>(poles);
                 for (int i = 0; i < poles; i++) list.Add(r.Vector2());
@@ -136,6 +155,12 @@ namespace CityBuilder.Simulation.Utilities
                         Id = r.Int(), Kind = knownKind ? kind : UtilityKind.Power, Production = r.Float(), Demand = r.Float(), Delivered = r.Float(),
                         Facilities = r.Int(), Buildings = r.Int(), SuppliedBuildings = r.Int(), Lines = r.Int(),
                     };
+                    if (version >= 2)
+                    {
+                        n.Level = r.Name<GridLevel>(); n.Generation = r.Float(); n.Imported = r.Float();
+                        n.TransformerCapacity = r.Float(); n.Substations = r.Int();
+                    }
+                    else n.Generation = n.Production;
                     int m = r.Count(4);
                     var members = new List<Building>(m);
                     for (int j = 0; j < m; j++)
@@ -152,6 +177,8 @@ namespace CityBuilder.Simulation.Utilities
                 networkBuildings[k].AddRange(memberList);
                 foreach (var kv in map) buildingNetwork[k][kv.Key] = kv.Value;
             }
+            // v1: Netze stammen noch aus „Straßen tragen mit“ → beim nächsten Durchlauf nach den neuen Regeln neu aufbauen
+            if (version < 2) builtStructureVersion = -1;
         }
     }
 }

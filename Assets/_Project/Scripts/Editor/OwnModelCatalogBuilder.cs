@@ -27,6 +27,8 @@ namespace CityBuilder.Editor
             { "SolarPark", "power_solar" }, { "WaterPump", "water_pump" }, { "WaterTower", "water_tower" },
             // G3 erweitert: Atomkraftwerk; die Kläranlage liegt als Modell unter Models/Services (Schlüssel mit Ordner)
             { "NuclearPlant", "power_nuclear" }, { "Services/SewagePlant", "sewage_plant" },
+            // Netze selbst verlegt: Umspannwerk (Modell folgt, bis dahin Platzhalter in UtilityView)
+            { "Substation", "power_substation" },
         };
 
         /// <summary>G4: Id des Dienstgebäudes (<c>ServiceCatalog</c>) → Dateinamen unter Models/Services (erster vorhandener gilt).</summary>

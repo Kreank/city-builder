@@ -430,7 +430,7 @@ namespace CityBuilder.Simulation.Services
                         return ServiceBuildError.OverlapsFacility;
                 foreach (var l in utilities.Lines)
                     foreach (var p in l.Poles)
-                        if (ServiceGeometry.InRect(p, plan.Position, plan.Front, type.Width, type.Depth, UtilitySystem.PoleFootprintHalf))
+                        if (ServiceGeometry.InRect(p, plan.Position, plan.Front, type.Width, type.Depth, l.PoleFootprintHalf))
                             return ServiceBuildError.OverlapsPole;
             }
 

@@ -53,32 +53,61 @@ namespace CityBuilder.Simulation.Tests
             return w;
         }
 
+        // Umgestellt (Netze selbst verlegt): früher „Roads_CarryPower_ToBuildings_ButNotAcrossGaps“ – Straßen trugen Strom.
         [Fact]
-        public void Roads_CarryPower_ToBuildings_ButNotAcrossGaps()
+        public void Roads_CarryNoPower_HousesNeedLocalGrid_ChainPlantHvSubstation()
         {
             var w = TwoStreets(out var west, out var east);
             var u = w.Utilities;
-            // Kraftwerk am Westende der ersten Straße (Rand der Fahrbahn < 8 m entfernt)
-            var plant = u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f); // Vorderseite zur Straße
+            // Kraftwerk direkt an der Straße: ohne Leitungen bekommt kein Gebäude Strom (Straßen führen nichts mit)
+            var plant = u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
             Assert.NotNull(plant);
             u.ForceTick();
+            Assert.All(west.Concat(east), b => Assert.False(u.IsSupplied(b, UtilityKind.Power), $"{b} hat Strom ohne Leitung"));
+            Assert.True(u.IsRequired(UtilityKind.Power));
+            u.RemoveFacility(plant.Id);
 
+            // Kette: Kraftwerk → Hochspannung → Umspannwerk → Erdkabel → Ortsnetz entlang der Weststraße
+            var (p, sub, hv) = GridKit.PowerChainWest(w);
+            GridKit.Lay(w, UtilityCatalog.UndergroundCable, new Vector2(0, 0), new Vector2(200, 0));
+            u.ForceTick();
             Assert.All(west, b => Assert.True(u.IsSupplied(b, UtilityKind.Power), $"{b} ohne Strom"));
             Assert.All(east, b => Assert.False(u.IsSupplied(b, UtilityKind.Power), $"{b} hat Strom trotz Lücke"));
             Assert.All(west, b => Assert.False(u.IsSupplied(b, UtilityKind.Water)));
             Assert.Equal(u.NetworkOf(west[0], UtilityKind.Power), u.NetworkOf(west[^1], UtilityKind.Power));
             Assert.NotEqual(u.NetworkOf(west[0], UtilityKind.Power), u.NetworkOf(east[0], UtilityKind.Power));
-            Assert.Same(u.NetworkOf(west[0], UtilityKind.Power), u.Networks(UtilityKind.Power)[plant.NetworkId]);
+
+            // Ebenen: Kraftwerk + Hochspannung bilden ein Netz, das Ortsnetz ein anderes – verbunden nur über das Umspannwerk
+            var nets = u.Networks(UtilityKind.Power);
+            var hvNet = nets[p.NetworkId];
+            var local = u.NetworkOf(west[0], UtilityKind.Power);
+            Assert.Equal(GridLevel.HighVoltage, hvNet.Level);
+            Assert.Equal(GridLevel.Distribution, local.Level);
+            Assert.Equal(hv.NetworkId, p.NetworkId);
+            Assert.Equal(p.NetworkId, sub.UpstreamNetworkId);
+            Assert.Same(local, nets[sub.NetworkId]);
+            Assert.Equal(local.Demand, sub.Load, 2);
+            Assert.Equal(local.Demand, local.Imported, 2);
+            Assert.Equal(local.Demand, hvNet.Demand, 2);
+            Assert.Equal(0, hvNet.Buildings);
+            // Bilanz zählt nichts doppelt: Erzeugung = Kraftwerk, Bedarf = Gebäude
+            Assert.Equal(p.Output, u.TotalProduction(UtilityKind.Power), 1);
+            Assert.Equal(w.City.Buildings.Sum(b => u.DemandOf(b, UtilityKind.Power)), u.TotalDemand(UtilityKind.Power), 1);
         }
 
+        // Umgestellt: früher verband die Straße beide Leitungsenden; jetzt braucht die Oststraße ein eigenes Ortsnetz.
         [Fact]
-        public void PowerLine_BridgesGap_AndChainsOfLinesConnect()
+        public void LocalLine_BridgesGap_AndChainsOfLinesConnect()
         {
             var w = TwoStreets(out _, out var east);
             var u = w.Utilities;
-            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
+            GridKit.PowerChainWest(w);
+            GridKit.Lay(w, UtilityCatalog.UndergroundCable, new Vector2(0, 0), new Vector2(200, 0));
+            GridKit.Lay(w, UtilityCatalog.UndergroundCable, new Vector2(500, 0), new Vector2(700, 0)); // Ortsnetz Ost, noch getrennt
+            u.ForceTick();
+            Assert.All(east, b => Assert.False(u.IsSupplied(b, UtilityKind.Power)));
 
-            // Zwei Leitungsstücke: Straßenende West → Zwischenpunkt → Straßenanfang Ost
+            // Zwei Freileitungsstücke: Straßenende West → Zwischenpunkt → Straßenanfang Ost
             Assert.NotNull(u.TryBuildLine(UtilityKind.Power, new Vector2(200, 0), new Vector2(350, 40)));
             u.ForceTick();
             Assert.All(east, b => Assert.False(u.IsSupplied(b, UtilityKind.Power)));
@@ -89,7 +118,9 @@ namespace CityBuilder.Simulation.Tests
 
             // Wasserrohr verbindet kein Stromnetz
             var w2 = TwoStreets(out _, out var east2);
-            w2.Utilities.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
+            GridKit.PowerChainWest(w2);
+            GridKit.Lay(w2, UtilityCatalog.UndergroundCable, new Vector2(0, 0), new Vector2(200, 0));
+            GridKit.Lay(w2, UtilityCatalog.UndergroundCable, new Vector2(500, 0), new Vector2(700, 0));
             w2.Utilities.TryBuildLine(UtilityKind.Water, new Vector2(200, 0), new Vector2(500, 0));
             w2.Utilities.ForceTick();
             Assert.All(east2, b => Assert.False(w2.Utilities.IsSupplied(b, UtilityKind.Power)));
@@ -102,45 +133,44 @@ namespace CityBuilder.Simulation.Tests
             Assert.All(east, b => Assert.False(u.IsSupplied(b, UtilityKind.Power)));
         }
 
+        // Umgestellt: früher „Highways_DoNotCarryUtilities_CityRoadsDo“ – jetzt verbindet keine Straße Leitungen.
         [Fact]
-        public void Highways_DoNotCarryUtilities_CityRoadsDo()
+        public void Roads_DoNotConnectLines_NeitherHighwaysNorCityRoads()
         {
-            var w = SimulationWorld.CreateDefault();
-            Road(w, new Vector2(0, 0), new Vector2(200, 0));
-            Road(w, new Vector2(250, 0), new Vector2(650, 0), RoadCatalog.Highway2);
-            var u = w.Utilities;
-            Assert.NotNull(u.TryBuildFacility(UtilityCatalog.WindTurbine, new Vector2(-20, 0)));
-            var a = u.TryBuildLine(UtilityKind.Power, new Vector2(200, 0), new Vector2(250, 0));
-            var b = u.TryBuildLine(UtilityKind.Power, new Vector2(650, 0), new Vector2(700, 0));
-            u.ForceTick();
-            Assert.NotEqual(a.NetworkId, b.NetworkId);
-
-            // Dieselbe Strecke als Stadtstraße verbindet beide Leitungen
-            var w2 = SimulationWorld.CreateDefault();
-            Road(w2, new Vector2(0, 0), new Vector2(200, 0));
-            Road(w2, new Vector2(250, 0), new Vector2(650, 0));
-            var a2 = w2.Utilities.TryBuildLine(UtilityKind.Power, new Vector2(200, 0), new Vector2(250, 0));
-            var b2 = w2.Utilities.TryBuildLine(UtilityKind.Power, new Vector2(650, 0), new Vector2(700, 0));
-            w2.Utilities.ForceTick();
-            Assert.Equal(a2.NetworkId, b2.NetworkId);
+            foreach (var type in new[] { RoadCatalog.Highway2, RoadCatalog.CityTwoLane })
+            {
+                var w = SimulationWorld.CreateDefault();
+                Road(w, new Vector2(0, 0), new Vector2(200, 0));
+                Road(w, new Vector2(250, 0), new Vector2(650, 0), type);
+                var u = w.Utilities;
+                var a = u.TryBuildLine(UtilityKind.Power, new Vector2(200, 0), new Vector2(250, 0));
+                var b = u.TryBuildLine(UtilityKind.Power, new Vector2(650, 0), new Vector2(700, 0));
+                Assert.NotNull(a);
+                Assert.NotNull(b);
+                u.ForceTick();
+                Assert.NotEqual(a.NetworkId, b.NetworkId);
+            }
         }
 
+        // Umgestellt: Erzeuger speist direkt ins Ortsnetz (kleiner Erzeuger), Ortsnetz als Erdkabel entlang der Straße.
         [Fact]
         public void Shortage_SuppliesOldestFirst_AndNeverMoreThanProduced()
         {
             var w = TwoStreets(out var west, out _);
             var u = w.Utilities;
-            var probe = u.TryBuildFacility(new UtilityFacilityType("probe", "Test", UtilityKind.Power, 0.001f, 10f, 10f, 0f, 0f), new Vector2(-15, 0));
+            GridKit.Lay(w, UtilityCatalog.UndergroundCable, new Vector2(-10, 0), new Vector2(200, 0));
+            var probe = u.TryBuildFacility(new UtilityFacilityType("probe", "Test", UtilityKind.Power, 0.001f, 10f, 10f, 0f, 0f, feedsLocalGrid: true), new Vector2(-15, 0));
             u.ForceTick();
             var net = u.Networks(UtilityKind.Power)[probe.NetworkId];
             float demand = net.Demand;
             output.WriteLine($"Bedarf West: {demand:0.#} kW, {net.Buildings} Gebäude");
+            Assert.Equal(GridLevel.Distribution, net.Level);
             Assert.True(demand > 0f);
             Assert.True(net.HasShortage);
             Assert.All(west, b => Assert.False(u.IsSupplied(b, UtilityKind.Power)));
 
             u.RemoveFacility(probe.Id);
-            var half = u.TryBuildFacility(new UtilityFacilityType("half", "Halb", UtilityKind.Power, demand * 0.5f, 10f, 10f, 0f, 0f), new Vector2(-15, 0));
+            var half = u.TryBuildFacility(new UtilityFacilityType("half", "Halb", UtilityKind.Power, demand * 0.5f, 10f, 10f, 0f, 0f, feedsLocalGrid: true), new Vector2(-15, 0));
             u.ForceTick();
             net = u.Networks(UtilityKind.Power)[half.NetworkId];
             int supplied = west.Count(b => u.IsSupplied(b, UtilityKind.Power));
@@ -151,6 +181,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.InRange(net.Coverage, 0.49f, 0.51f);
         }
 
+        // Umgestellt: Westen bekommt Strom (Kette + Erdkabel) und Wasser (Wasserturm + Rohr) selbst verlegt.
         [Fact]
         public void LongOutage_AbandonsBuildings_OnlyOnceUtilityExists()
         {
@@ -164,8 +195,10 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(u.IsSatisfied(west[0]));
 
             // Westen bekommt Strom + Wasser, der Osten nichts
-            u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(-26, 0), 90f);
+            GridKit.PowerChainWest(w);
+            GridKit.Lay(w, UtilityCatalog.UndergroundCable, new Vector2(0, 0), new Vector2(200, 0));
             u.TryBuildFacility(UtilityCatalog.WaterTower, new Vector2(214, 0), 270f); // Vorderseite nach Westen zum Straßenende
+            GridKit.Lay(w, UtilityCatalog.WaterPipe, new Vector2(0, 0), new Vector2(206, 0)); // endet am Wasserturm (Rand x = 208)
             u.ForceTick();
             Assert.All(west, b => Assert.True(u.IsSupplied(b), $"{b}: {u.GetStatus(b).HasPower}/{u.GetStatus(b).HasWater}"));
             Assert.False(u.IsSatisfied(east[0]));
@@ -253,9 +286,31 @@ namespace CityBuilder.Simulation.Tests
             u.ResolveLinePoint(UtilityKind.Water, new Vector2(-50, -42), 6f, out what);
             Assert.NotEqual(UtilitySnap.Facility, what); // Windrad ist kein Wasser-Bauwerk
 
+            // Umgestellt (Netze selbst verlegt): Rohre/Erdkabel rasten unter dem Gehweg auf der Seite des Mauszeigers ein
+            // (früher Straßenmitte), Freileitungen weiter auf der Mitte (Masten rücken neben die Straße).
+            float sidewalk = RoadCatalog.CityTwoLane.HalfWidth - ConnectionRules.SidewalkInset;
             p = u.ResolveLinePoint(UtilityKind.Water, new Vector2(100, 8), 6f, out what);
             Assert.Equal(UtilitySnap.Road, what);
+            Assert.Equal(sidewalk, p.Y, 2);
+            p = u.ResolveLinePoint(UtilityCatalog.UndergroundCable, new Vector2(100, -7), 6f, out what);
+            Assert.Equal(UtilitySnap.Road, what);
+            Assert.Equal(-sidewalk, p.Y, 2);
+            p = u.ResolveLinePoint(UtilityCatalog.OverheadLine, new Vector2(100, 8), 6f, out what);
+            Assert.Equal(UtilitySnap.Road, what);
             Assert.Equal(0f, p.Y, 2);
+
+            // Ebenen: Ortsnetz rastet nicht an großen Kraftwerken ein (nur Hochspannung), kleine Erzeuger nehmen beide
+            var coal = u.TryBuildFacility(UtilityCatalog.CoalPlant, new Vector2(300, 300));
+            Assert.NotNull(coal);
+            u.ResolveLinePoint(UtilityCatalog.UndergroundCable, new Vector2(300, 278), 6f, out what);
+            Assert.NotEqual(UtilitySnap.Facility, what);
+            u.ResolveLinePoint(UtilityCatalog.HighVoltageLine, new Vector2(300, 278), 6f, out what);
+            Assert.Equal(UtilitySnap.Facility, what);
+            u.ResolveLinePoint(UtilityCatalog.UndergroundCable, new Vector2(-50, -42), 6f, out what);
+            Assert.Equal(UtilitySnap.Facility, what); // Windrad speist direkt ins Ortsnetz
+            // Hochspannungs-Enden rasten nicht an Ortsnetz-Enden ein
+            u.ResolveLinePoint(UtilityCatalog.HighVoltageLine, new Vector2(-48, 102), 6f, out what);
+            Assert.NotEqual(UtilitySnap.LineEnd, what);
         }
 
         // ------------------------------------------------------------ Masten
