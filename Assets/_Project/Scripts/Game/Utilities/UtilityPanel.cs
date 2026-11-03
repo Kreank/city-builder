@@ -63,17 +63,17 @@ namespace CityBuilder.Game.Utilities
             if (!u.IsRequired(kind))
                 GUILayout.Label($"<color=#ffd060>Noch kein Versorger gebaut – Gebäude bleiben vorerst ohne {UtilityCatalog.KindName(kind)}.</color>", small);
 
-            var nets = u.Networks(kind).Where(n => n.Facilities > 0 || n.Buildings > 0)
-                .OrderByDescending(n => n.Facilities > 0).ThenByDescending(n => n.Demand).ToList();
+            var nets = u.Networks(kind).Where(n => n.Facilities > 0 || n.Buildings > 0 || n.Substations > 0)
+                .OrderByDescending(n => n.Level == GridLevel.HighVoltage).ThenByDescending(n => n.HasSource).ThenByDescending(n => n.Demand).ToList();
             int shown = 0;
             foreach (var n in nets)
             {
                 if (shown++ >= MaxRows) { GUILayout.Label($"… und {nets.Count - MaxRows} weitere Netze", small); break; }
-                string color = n.Facilities == 0 ? "#ff7060" : n.HasShortage ? "#ffb040" : "#7dff8a";
-                string state = n.Facilities == 0 ? "kein Versorger angeschlossen" : n.HasShortage ? $"Unterdeckung ({n.Coverage * 100f:0} %)" : "ausreichend";
-                GUILayout.Label($"<color={color}><b>Netz {n.Id + 1}</b> · {state}</color>\n" +
-                                $"   Erzeugung {n.Production:0} {unit} · Bedarf {n.Demand:0} {unit} · " +
-                                $"versorgt {n.SuppliedBuildings}/{n.Buildings} Gebäude · {n.Facilities} Bauwerke · {n.Lines} Leitungen", small);
+                string color = !n.HasSource ? "#ff7060" : n.HasShortage ? "#ffb040" : "#7dff8a";
+                // Netze selbst verlegt: gleiche Texte wie das neue Fenster (Ebene, Umspannwerke)
+                GUILayout.Label($"<color={color}><b>{CityBuilder.Game.UI.Windows.UtilityWindow.NetName(n)}</b> · " +
+                                $"{CityBuilder.Game.UI.Windows.UtilityWindow.NetState(n)}</color>\n   " +
+                                CityBuilder.Game.UI.Windows.UtilityWindow.NetDetails(n, unit), small);
             }
             if (nets.Count == 0) GUILayout.Label("Keine Netze.", small);
         }

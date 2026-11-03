@@ -39,9 +39,12 @@ namespace CityBuilder.Game.Utilities
             bool any = false;
             foreach (var n in u.Networks(kind))
             {
+                if (n.Level != GridLevel.Distribution) continue; // Hochspannung: Bedarf = weitergereichter Gebäudebedarf (nicht doppelt)
                 demand += n.Demand;
                 delivered += n.Delivered;
-                if (n.Buildings > 0 && n.HasShortage)
+                // Netze selbst verlegt: Gebäude ganz ohne Anschluss (eigenes Netz ohne Quelle) sind keine Unterdeckung,
+                // sondern fehlende Leitungen – die zeigt die Info-Ansicht (O) rot.
+                if (n.Buildings > 0 && n.HasShortage && n.HasSource)
                 {
                     any = true;
                     unsupplied += n.Buildings - n.SuppliedBuildings;
