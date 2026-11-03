@@ -276,7 +276,7 @@ namespace CityBuilder.Simulation.Tests
             output.WriteLine($"Kurve: Reihe außen {rowA.ValidCount}, Reihe innen {rowB.ValidCount} gültig, {overlapping} überlappen (Probe {probe})");
             Assert.True(rowA.ValidCount >= 5);
             Assert.True(rowB.ValidCount >= 3);
-            Assert.True(overlapping <= rowB.Items.Count / 3, $"{overlapping} von {rowB.Items.Count} überlappen");
+            Assert.Equal(0, overlapping); // dank Kurvenzuschlag (ohne: alle 9 überlappten)
         }
 
         [Fact]

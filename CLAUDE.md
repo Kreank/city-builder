@@ -73,7 +73,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Hilfe „Netz entlang Straßen verlegen“ (einzelne oder alle Stadtstraßen, normale Kosten, Vorschau) – v. a. für
   bestehende Städte/alte Spielstände (Übergangsfrist 5 Tage nach dem Laden eines Stands v1).
 
-## Entscheidung: Bauart (2026-11-03, Spieler – Wohnhäuser umgesetzt, s. „Wohnhäuser setzen (Anno-Stil)“)
+## Entscheidung: Bauart (2026-11-03, Spieler – umgesetzt, s. „Wohnhäuser setzen (Anno-Stil)“ und „Setzen statt Zonen“)
 - **Freie Straßen bleiben** (kein Anno-Raster).
 - **Wohnhäuser auch einzeln setzen (Anno-Stil), Zonen bleiben zusätzlich:** Der Spieler stellt ein Wohnhaus hin, es bevölkert
   sich und **steigt auf, wenn Bedürfnisse erfüllt sind** (Einrichtungen in Reichweite: Laden/Markt, Schule, Polizei, Gesundheit …).
@@ -81,6 +81,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   per gehaltener linker Maustaste als **Reihe entlang der Straße** (wie Anno). Welcher Betrieb in Laden/Büro/Halle einzieht,
   entscheidet die Simulation (Vorkommen, Nachfrage, Schwerpunkt). Zonen verschwinden aus der Bauleiste (Code bleibt für alte
   Stände), Zonenraster/Grundstücksplatten entfallen; Nachfrage als eigene Anzeige; Straßen-Abstandshilfe nach Haustiefen.
+  **Umgesetzt** (s. „Setzen statt Zonen“ unter „Wohnhäuser setzen“).
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
@@ -193,24 +194,30 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   enger Kurven frei von Selbstschnitt (enge Zone → Fächerpunkt). Grenze: Haarnadeln mit Schenkeln kürzer als die
   Straßenbreite überdecken sich physisch.
 - **Bauhilfe Parallelabstand** (`Simulation/Roads/ParallelGuides`, getestet in `ParallelGuideTests`; Anzeige
-  `RoadGuidesView`, Einrasten `RoadTool`): Das Zonenraster beginnt an der **Gehweg-Außenkante** (`RoadType.HalfWidth`),
-  Reihen à 8 m. Bei nahen Straßen gewinnt die **ältere** (kleinere Segment-Id, volle Reihen), die neuere bekommt nur
-  Reihen, deren Zellmitten ≥ `ZoneGrid.CellSpacing` (6,8 m) von fremden Zellen und > `ZoneGrid.RoadClearance` (3,6 m) vom
-  Straßenrand liegen (bis 1,2 m Überlappung wird geduldet, darüber fällt die Reihe weg – Rest bleibt ungenutzt).
-  **Optimaler Achsabstand** = halbe Breite A + halbe Breite B + (4 + n) × 8 m, n = Reihen der neuen Straße (F9: 4 → 3 →
-  2 → 1 → aus; Standard 4 = „Rücken an Rücken“ 64 m). Jedes Vielfache von 8 m ist lückenlos, Stufen unter 4 + 1 sind
-  sinnlos, weil die ältere Straße immer zuerst 4 Reihen nimmt (eine „1 Reihe je Seite“-Bebauung gibt das Raster nicht her).
-  Beispiele (4 + 4): city_2↔city_2 77 m, city_4↔city_4 84 m, city_4↔city_2 80,5 m, Einbahn 1-spurig↔selbst 74 m,
-  Tram↔selbst 83,4 m. `Evaluate` bildet die Raster-Regeln nach (Reihen je Straße, ungenutzt, Überlappung), `Describe`
-  liefert „Abstand 77,0 m · optimal (4 + 4 Reihen)“ bzw. „zu eng: X m Überlappung“/„X m Lücke“.
+  `RoadGuidesView`, Einrasten `RoadTool`) – **seit „Setzen statt Zonen“ nach Gebäudetiefen** (vorher Zonenraster 4 + n Reihen
+  à 8 m, 77 m für city_2↔city_2): Gesetzte Gebäude rasten mit der Vorderkante `RoadFront.SnapGap` 0,5 m vor der
+  Gehweg-Außenkante (`RoadType.HalfWidth`) ein. **Optimaler Achsabstand** = halbe Breite A + halbe Breite B + 2 × (0,5 m +
+  Tiefe) = zwei Reihen der gewählten Bauart **Rücken an Rücken**. Tiefe = `RoadTool.ParallelDepth` (F9: 16 → 24 → 32 m → aus,
+  Standard 24 m; folgt der im Bau-Werkzeug gewählten Bauart, `SetParallelDepth`). Beispiele city_2↔city_2: 16 m
+  (Einfamilienhaus, Laden) 46 m, 24 m (Mehrfamilienhaus, Wohn-/Geschäftshaus, Bürohaus, Gewerbehalle) 62 m, 32 m (Wohnblock,
+  Industriehalle) 78 m; city_4↔city_2 mit 24 m 65,5 m. `Evaluate(a, b, Abstand, Tiefe)` → `Rows` (0–2 Reihen passen), `Unused`,
+  `Overlap`, `Fit` (optimal bis 0,25 m Lücke, **enger als 0,01 m ist schon „zu eng“** – sonst überlappen die Gebäude), `Describe`
+  „Abstand 62,0 m · optimal (Rücken an Rücken, 2 × 24 m tief)“ / „X m Lücke zwischen den Rückseiten“ / „zu eng: X m Überlappung
+  (…, nur eine Reihe passt)“. **Kurvenzuschlag** (`CurveAllowance`, `GuideHit.Allowance`): auf Bögen stehen die Gebäude als
+  Sehnen, die hinteren Ecken beider Reihen ragen um ≈ b²/(4R) über (b = Breite = Tiefe der quadratischen Bauarten, R =
+  Krümmungsradius `CurveRadius` an der Stelle) + 0,75 m Puffer für die Bézier-Näherung; ab R > 3 km 0. Die Hinweiszeile bewertet
+  den Abstand ohne Zuschlag. Tests prüfen gegen echtes Setzen (`PlanHouseRow`): alle 25 Typpaare × 16/32 m Rücken an Rücken
+  ohne Lücke, Reihen-Modell über 33 Abstände = tatsächliches Setzen, 90°-Bogen (R ≈ 300 m) innen 9 von 9 Gebäuden passend
+  (ohne Zuschlag 0 von 9).
   Werkzeug (gerade/Kurve, Stadtstraßen): gestrichelte Parallelen beidseits der bis zu 3 nächsten ebenerdigen Stadtstraßen
-  (gerade auch 80 m über die Enden hinaus), deren Zonentiefe als zarte Fläche mit Reihenlinien, die Vorschau zeigt ihre
-  eigene Zonentiefe beidseitig (grün). Mit Einrasten (G, Strg hebt auf) rasten Start, Kontrollpunkt und Ende im Umkreis
+  (gerade auch 80 m über die Enden hinaus), dazu **nur eine zarte Linie** dort, wo die Rückseite einer Reihe der gewählten Tiefe
+  liegt (die früheren Zonentiefen-Flächen sind entfernt); die Vorschau zeigt diese Linie beidseits der eigenen Straße (grün).
+  Mit Einrasten (G, Strg hebt auf) rasten Start, Kontrollpunkt und Ende im Umkreis
   6 m auf die Linien ein; gerade Straßen von einer geraden Hilfslinie aus werden bis 8° Abweichung exakt parallel
   (Länge 8-m-Raster), Kurven zwischen zwei Punkten derselben gekrümmten Hilfslinie bekommen einen ausgeglichenen
-  Kontrollpunkt (`FitParallelControl`, 90°-Bogen mit 77 m Abstand < 1 m Abweichung). Abstand + Bewertung stehen in
+  Kontrollpunkt (`FitParallelControl`, 90°-Bogen < 1 m Abweichung). Abstand + Bewertung stehen in
   `RoadTool.Guide.Info` (Hinweiszeile + Beschriftung). **Blockraster (F10):** Länge gerader Straßen rastet auf
-  `BlockLength` = Zellen × 8 m + 2 × (halbe Breite + 1 m) ein (Kreuzungsfläche wird vom Raster ausgespart), Querlinien
+  `BlockLength` = Zellen × 8 m + 2 × (halbe Breite + 1 m) ein (8 m = Gebäudebreiten-Raster; Kreuzungsfläche ausgespart), Querlinien
   zeigen die Stellen; gilt, wenn der Start eine Kreuzung ist/wird. An Blockecken nimmt die ältere Straße die Eckzellen.
 
 ## Gelände
@@ -259,6 +266,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Im Zonen-Werkzeug und Info-Modus (`BuildingView.HighlightZones`, aus `RoadTool.CurrentMode`) wird die Platte kräftig
   und Platzhalter werden in Zonenfarbe getönt. Store-Modelle werden nie getönt. `BuildingView.VisualHeight(b)` liefert
   die sichtbare Höhe (Auswahl/Hervorhebung).
+- **Seit „Setzen statt Zonen“ (Spielerentscheidung):** Zonen sind ein **Altbestand**. Neue Städte setzen alle Gebäude
+  (s. „Setzen statt Zonen“); die Zonen-Kategorie erscheint in der Bauleiste nur, solange der Spielstand gemalte Zonen hat
+  (`CityStats.ZonedCells > 0`), Taste Z gehört dem Schwerpunkt-Pinsel. Der Code bleibt: alte Stände mit Zonen wachsen,
+  zonen und reißen ab wie bisher (Test `OldSaveWithZones_KeepsGrowing_AfterLoad_Deterministic`). Ohne gemalte Zonen wächst
+  nichts (`Grow` findet keine freie Zonenzelle; `NewGame_WithoutZones_NothingGrows_…`); geprüft: Nachfrage, Bodenwert-
+  Standortwahl (`LotPreference` wirkt nur beim Wachsen), Zuzug, Gateways, Firmen und Tests hängen nicht an Zonen.
+  `ZoneView` nur beim Zonen-Pinsel (nicht beim Schwerpunkt-Pinsel), Grundstücksplatten nur an Zonengebäuden.
 
 ## Bürger (G2)
 - `Simulation/Citizens`: `Citizen` (Alter, Bildung, Haushalt/Wohnung, Job, Bedürfnis Einkaufen, Tätigkeit, Fahrt),
@@ -410,8 +424,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Design-Token als `--cb-…`-Variablen, Klassen `cb-…`). Aufbau in C#, weil die Inhalte aus Katalogen kommen.
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
-  Einwohner, Arbeitslose, Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien → Werkzeugzeile + Kacheln + Infozeile;
+  Einwohner, Arbeitslose, **Nachfrage W/L/B/I** mit Tooltip „warum“ (Setzen statt Zonen, `GameHud.Demand.cs`), Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
+  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
@@ -872,9 +886,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Herkunft** `Building.Origin` (`BuildingOrigin.Zone` | `Player`, `IsPlayerPlaced`). **Bauarten** `Zoning/HouseCatalog`:
   Einfamilienhaus (Wohnen gering, 2×2 Zellen = 16×16 m, 4 000 €), Mehrfamilienhaus (mittel, 3×3, 16 000 €), Wohnblock (dicht,
   4×4, 45 000 €); Wohnungen wie gewachsene Gebäude gleicher Größe (`HouseholdsAtLevel`, Kapazität × 1,0/1,4/1,8 je Stufe wie G6).
-  Je Zonenart genau eine Bauart → Bauart = (Herkunft, Zone), im Spielstand steht nur die Herkunft. **Bewusst ohne Laden/
-  Mischgebiet:** Läden sind Firmen mit Lager/Gewinn/Pleite (G5) – die wählt weiter die Simulation (Entscheidung „Produktion
-  lenken statt bauen“); der Laden ist dafür eine *Anforderung* der Häuser.
+  ~~Je Zonenart genau eine Bauart~~ → seit „Setzen statt Zonen“: Bauart = (Herkunft, Zone, Größe) (`HouseCatalog.Of`), im Spielstand
+  steht weiter nur die Herkunft. ~~Bewusst ohne Laden/Mischgebiet~~ → abgelöst durch „Setzen statt Zonen“ (unten): der Spieler
+  setzt die Hülle, den Betrieb wählt weiter die Simulation.
 - **Simulation** `CitySystem.Houses.cs`: `PlanHouse(type, cursor, drehung, movingId)` richtet die Vorderseite über
   `RoadFront.TryAlign` zur Straße aus (Cursor ≤ Tiefe + 16 m vom Rand), `PlanHouseAt(type, mitte, front)` genau →
   `HousePlan` (Fehler `HouseBuildError`: OutOfWorld, OnWater, TooSteep > 4 m, OverlapsRoad, OverlapsStructure mit
@@ -918,6 +932,63 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Speichern:** Abschnitt `city` v2 (Herkunft je Gebäude); v1 → alle Gebäude „aus Zone“ (`HouseTests.Migration_CityV1_…`).
 - Später: Häuser-Meldungen im HUD (Aufstieg/Abstieg gesammelt wie `LandValueAlerts`), Bedarfsstufen der Haushalte (G5) an die
   Hausstufe koppeln, Marktplatz als eigener Dienst, Reichweiten aller Einrichtungen gleichzeitig, eigenes Aussehen gesetzter Häuser.
+
+### Setzen statt Zonen (Entscheidung des Spielers, umgesetzt)
+- **Was der Spieler tut:** Taste 6 / Kategorie **„Bauen“** mit Reitern **Wohnen** (Einfamilienhaus, Mehrfamilienhaus, Wohnblock),
+  **Gewerbe** (Laden 2×2 6 000 €, Wohn- und Geschäftshaus 3×3 20 000 €, Bürohaus 3×3 28 000 €), **Industrie** (Gewerbehalle 3×3
+  15 000 €, Industriehalle 4×4 30 000 €). Klick = ein Gebäude (wie bisher, drehbar). **LMB halten und entlang der Straße ziehen**
+  = Reihe gleichartiger Gebäude: Vorschau mit echten Modellen (`PlacementGhost` je Platz, gültig grün, ungültig rot),
+  Hinweiszeile „Reihe: 7 × Einfamilienhaus · Kosten 28 000 € · 1 ausgelassen (rot: Polizeiwache im Weg)“, Loslassen baut alle
+  gültigen, RMB/Esc bricht nur die Reihe ab (`RoadTool.RegisterOperation`). Welcher Betrieb in Laden/Büro/Halle einzieht,
+  entscheidet die Simulation (G5-Standortwahl inkl. Schwerpunkt/Förderung). Keine neue Taste (6 bleibt, Z = Lenken).
+- **Modell** `HouseCatalog` (8 Bauarten, `PlaceableGroup` = Reiter, `Description`, `JobsAtLevel`, `HasFirm`, `HasHomes`):
+  Bauart = Zone + Größe (`ForZone(zone, w, d)`), Kapazitäten wie gewachsene Gebäude gleicher Größe (`LandValueRules.HouseholdsFor/
+  JobsFor`), `BuildHouse` setzt jetzt auch `Jobs`. Firmen entstehen wie bei Zonengebäuden über `GoodsSystem.OnBuildingAdded`
+  (Laden/Mischgebiet → Einzelhandel, Büro → Büro, Halle → `ChooseIndustry` mit `SiteModifier` = Schwerpunkt/Förderung).
+  **Pleite in einer gesetzten Hülle** → kein Abriss, `GoodsSystem.NewTenant`: neuer Betreiber (Industrie: neue Standortwahl ohne
+  den alten Betrieb; Läden/Büros gleiche Rolle), Lager leer, Startkapital (`Bankruptcies` zählt weiter).
+- **Reihe** `Zoning/CitySystem.Rows.cs`: `PlanHouseRow(type, start, end, max = 40)` → `HouseRowPlan` (`Items` gültig/ungültig,
+  `TotalCost` nur gültige, `ValidCount`, `SegmentIds`, `Length`). Nächste ebenerdige Stadtstraße am Start (wie `TryAlign`), Seite =
+  Seite des Startpunkts, Richtung = Zugrichtung entlang der Tangente; `TraceRowPath` tastet die Vorderkanten-Linie (Gehweg + 0,5 m)
+  im 1-m-Schritt ab und läuft über Knoten mit **genau zwei Segmenten gleichen Typs** weiter (Knick/Bogen), stoppt an Kreuzungen,
+  Typwechseln, Brücken/Tunneln. Abstand: kleinste Bogenlänge ohne Überlappung mit dem Vorgänger (Bisektion, Rechtecke +
+  `RowGap` 0,05 m) → gerade genau Breite + 0,05 m, Kurve außen stoßen die Vorderecken, innen die hinteren Ecken an; auf der
+  Innenseite enger Kurven rückt ein Gebäude in 0,5-m-Schritten ab, bis die Vorderecken den Gehweg nicht berühren. Plätze bis zur
+  Maus (Mitte ≤ Mausprojektion + 0,1 Breite). Jeder Platz läuft durch `PlanHouseAt` (alle Platzregeln), Geld kumuliert
+  (`InsufficientFunds` ab dem ersten, der nicht mehr reicht). `BuildHouseRow(row)` prüft jeden Platz erneut, bucht die Summe
+  **genau einmal** (Kategorie `HouseConstruction`, Anzeige jetzt „Bau Gebäude (gesetzt)“) und legt die Gebäude an
+  (`PlaceBuilding`); reicht das Geld nicht für alle, wird nichts gebaut. Rein, deterministisch, ohne Zufall.
+- **Aufstieg je Bauart** (`HouseRules.LevelsFor(zone)`, datengetrieben wie die Wohnhäuser; Overloads mit `ZoneType` für
+  `RuleFor/NeedsFor/AllNeeds/MaxLevelFor/LevelName/ReachableLevel`, die alten Overloads = Wohnen): Wohnen und Mischgebiet wie
+  bisher. **Laden** Stufe 2 „belebt“ Strom, Wasser, **Kundschaft** 150 Einwohner in 600 m (`HouseNeedKind.Customers`,
+  `CustomerRadius`, Luftlinie Zufahrt ↔ Zufahrt) · Stufe 3 „gefragt“ Abwasser, Polizei, 500 Einwohner. **Büro** Stufe 2 „modern“
+  Strom, Wasser, **Fachkräfte** 30 % der Beschäftigten mit Studium (`Skilled`, aus `BuildingFacts.Skill`; Vorschau am Bauplatz =
+  Anteil der Erwachsenen der Stadt) · Stufe 3 „repräsentativ“ Abwasser, Polizei, Bibliothek/Oberschule, 55 %. **Halle** Stufe 2
+  „ausgebaut“ Strom, Wasser, **Güteranschluss** (`Freight`: `LandValue.HighwayAccessAt` ≥ 0,2 ≈ Autobahn ≤ 510 m) · Stufe 3
+  „Großbetrieb“ Abwasser, Feuerwehr, 40 % Facharbeiter (mittlerer Abschluss). Weich: Zufriedenheit/Besetzung der Beschäftigten.
+  Vorschau/Inspektor/Haus-Fenster zeigen die Regeln der Bauart (Reichweiten-Ring auch für Kundschaft).
+- **Nachfrage-Anzeige** `Zoning/DemandReport` (nur lesend): `ValueOf(city, kind)` (Wohnen = höchste der drei Dichten, Laden =
+  Einzelhandel, Büro, Industrie aus `CitySystem.Demand`, das die G5-Zuschläge schon enthält), `Explain(world, kind)` → Gründe
+  (Zuzugsdruck, freie Jobs, Einpendler, Arbeitslose, Auspendler, Leerstand, Zufriedenheit · Ladenjobs je Einwohner, Einkäufer
+  ohne Laden, Grundbedarf gestern gedeckt, Marge · arbeitslose Fachkräfte · Importanteil gestern, Steuerfaktor). Neue lesende
+  Helfer in `GoodsSystem`: `ImportShareYesterday`, `BasicShoppingMetYesterday`, `MarginDemand`.
+- **Spiel:** `HouseTool` (Reihe ziehen, Geister-Pool, Hinweis), `GameHud.Houses.cs` (Reiter, Kacheln mit Nachfrage-Balken ihrer
+  Art, Unterzeile Wohnungen/Jobs), `GameHud.Demand.cs` (obere Leiste: „Nachfrage“ W L B I als senkrechte Balken, Tooltip =
+  `Explain`, Klick öffnet Bauen mit passendem Reiter; USS-Block `.cb-demand…`), `GameHud.Focus.cs` (eigene Kategorie „Lenken“),
+  `HouseWindow` (Regeln der Bauart, Hinweis „Betrieb wählt die Simulation“), `BuildingView` (Grundstücksplatte nur noch an
+  Zonengebäuden), `RoadGuidesView` (keine Zonenflächen mehr, s. Bauhilfe Parallelabstand). Wahl einer Bauart stellt die
+  Abstandshilfe auf ihre Tiefe.
+- **Speichern:** keine neue Abschnittsversion nötig – Bauart ergibt sich aus Zone + Größe, gesetzte Wohnhäuser alter Stände
+  (2×2/3×3/4×4) passen unverändert; Pleite-Nachfolger nutzt bestehende Firmendaten. Determinismus-Test (`SaveLoadTests.BuildCity`)
+  setzt jetzt eine Laden- und eine Hallenreihe. Tests `PlacingTests` (13): Reihe gerade/links/Einzelklick/ohne Straße, Kurve +
+  Knick beidseits ohne Überlappung, ungültige ausgelassen + eine Buchung, Kasse kumuliert, Jobs/Firmen in Laden/Mischgebiet/Büro/
+  Hallen, Standortwahl in Hallen mit Schwerpunkt Öl/Gas (10 Hallen: 1 → 4 Öl/Gas-Betriebe), Pleite → neuer Betreiber, Aufstieg
+  Laden nach Kundschaft, Güteranschluss/Fachkräfte, kein Wachstum ohne Zonen, alter Stand mit Zonen wächst nach dem Laden
+  bitgleich weiter, Rundreise gesetzter Gewerbe-Reihen, Nachfrage-Erklärung.
+- **Optik ungetestet** (Unity nicht gestartet): Reihen-Geister (viele `PlacementGhost`), Reiter/Kacheln, senkrechte Nachfrage-Balken
+  und mehrzeilige Tooltips, Gebäude ohne Platte auf eingeebnetem Gelände, Katalogmodelle für Laden/Büro/Halle.
+- Offen: Reihe über Kreuzungen hinweg fortsetzen, Ecken/Blockinnenhöfe füllen, eigenes Aussehen gesetzter Läden/Hallen,
+  Schwerpunkt auch für Gewerbe/Büro, Nachfrage-Verlauf, Abriss ganzer Reihen per Ziehen.
 
 ## Stadtkasse (Teil von G5, vorgezogen)
 - `Simulation/Economy`: `EconomySystem` (`world.Economy`, läuft 1× je Spieltag, als letztes System), `EconomyRules`
@@ -1012,7 +1083,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Nachfrage der Zonen** (Hook `CitySystem.BusinessDemand`, additiv vor dem Steuerfaktor): ±25 × tanh(Ø Marge/0,15) der
   etablierten Firmen (ab 3 Tagen) je Zonenart; Industrie + bis 12 bei hohem Importanteil, Einzelhandel + bis 20 bei
   unerfüllten Einkäufen; Mischgebiet = halber Handel. **Verfall:** 21 Tage geglätteter Verlust und Konto unter dem Kreditrahmen
-  → Pleite, Gebäude wird verlassen (`AbandonBankruptBuildings`).
+  → Pleite, Gebäude wird verlassen (`AbandonBankruptBuildings`); **vom Spieler gesetzte Hüllen** bleiben stehen, ein neuer Betreiber
+  zieht ein (`NewTenant`, s. „Setzen statt Zonen“). Firmen entstehen in Zonen- und gesetzten Gebäuden gleich (`OnBuildingAdded`).
 - **Stadtkasse:** Gewerbesteuer = max(0, Tagesgewinn) × 2,5 × Satz (`EconomyRules.ProfitTaxMultiplier`; deckt vorerst auch
   den Lohnsteueranteil der alten Pauschale). Firmen haben eigene Kassen; Handel läuft nicht über die Stadtkasse.
 - **Vorkommen & Ernte aus der Welt** (`GoodsBinding.ConnectWorld` in `CreateDefault`): `DepositAt` = `world.Resources.DepositAt`,
@@ -1082,7 +1154,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   kein Spielzustand): ungenutzte ergiebige Vorkommen mit Himmelsrichtung („Hohes Ölvorkommen im Osten ungenutzt (~12 ha)“; ≥ 8
   Zellen ohne passenden Betrieb in 200 m, Boden erst ab 0,75, Wald ab 0,6), Importanteil ≥ 60 % bei Rohstoffen/Zwischenprodukten
   („Stahl wird zu 80 % importiert – Schwerpunkt oder Förderung „Verarbeitung““), Förderung ohne Betrieb, Schwerpunkt ohne Vorkommen.
-- **Spiel:** Zonen-Werkzeug (Taste Z, **keine neue Taste**) bekommt unter den Zonenkacheln „Schwerpunkt Industrie“: Kachel je
+- **Spiel:** seit „Setzen statt Zonen“ eigene Bauleisten-Kategorie **„Lenken“** (Taste Z öffnet den zuletzt gewählten Schwerpunkt,
+  `RoadTool.OpenFocusBrush`; technisch weiter `Mode.Zone` mit `SelectedFocus`, ohne Zonenraster). Früher: Zonen-Werkzeug (Taste Z) mit „Schwerpunkt Industrie“ unter den Zonenkacheln. Kachel je
   Schwerpunkt (Farbe, Fläche/Förderstufe) + „Automatisch“ (entfernen), Pinsel-Vorgaben 48/96/160 m (Schwerpunkt-Pinsel bis 160 m,
   Zonen-Pinsel weiter max. 60 m). `RoadTool.SelectedFocus`/`SelectFocus` (null = Zonen-Pinsel; `SelectZone` setzt zurück);
   LMB malt, RMB setzt automatisch, Esc zurück zum Auswählen (wie Zonen). Hinweiszeile + Beschriftung am Pinsel = `DepositHint`.
@@ -1631,6 +1704,11 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
    - ✅ Wohnhäuser einzeln setzen (Anno-Stil, Taste 6): 3 Bauarten, Platzregeln/Straßensperre wie Dienste, bevölkern über das
      Bürgersystem, Stufen nach Einrichtungen in Reichweite (datengetrieben, Abstieg), Vorschau mit ✓/✗ und Reichweiten,
      Inspektor, Verschieben, Spielstand city v2 (im Editor noch nicht visuell abgenommen). Zonen bleiben zusätzlich.
+   - ✅ Setzen statt Zonen: Reihe ziehen (LMB halten, folgt Straße/Kurve/Knick, eine Buchung), Laden, Wohn- und Geschäftshaus,
+     Bürohaus, Gewerbe-/Industriehalle (Betrieb wählt die Simulation inkl. Schwerpunkt, Pleite → neuer Betreiber), Aufstieg je Bauart
+     (Kundschaft, Fachkräfte, Güteranschluss), Kategorie Bauen mit Reitern + Lenken (Z), Zonen nur noch in alten Ständen, keine
+     Grundstücksplatten/Zonenflächen, Nachfrage-Anzeige mit „warum“, Parallelabstand nach Gebäudetiefen + Kurvenzuschlag
+     (im Editor noch nicht visuell abgenommen). Später: Reihen über Kreuzungen, Ecken füllen, eigenes Aussehen
    - ✅ Zeitmodell: Kalender 6 min/Tick + 180 Verkehrsschritte (Zeitdehnung 8), Fußwege/Platzhalter in Verkehrszeit,
      Fahrgäste gehen erst zur Haltestelle, Tempo 1/2/3 = 6/3/1,5 min je Spieltag mit Rechenzeit-Budget, Speichern mitten im Tick
      (im Editor noch nicht visuell abgenommen). Später: Abfahrten innerhalb des Ticks verteilen, CarShare neu abstimmen, Rad-Darstellung
