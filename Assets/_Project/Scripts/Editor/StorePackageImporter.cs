@@ -290,7 +290,7 @@ namespace CityBuilder.Editor
         public static void WriteInventory()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("# Inventur der Store-Prefabs: Pfad | Breite x Höhe x Tiefe (Prefab-Einheiten) | Meshes");
+            sb.AppendLine("# Inventur der Store-Prefabs: Pfad | Breite x Höhe x Tiefe (Prefab-Einheiten, inkl. Wurzel-Drehung) | Meshes");
             foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { ThirdPartySetup.Root }).OrderBy(AssetDatabase.GUIDToAssetPath))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
@@ -304,7 +304,8 @@ namespace CityBuilder.Editor
                 {
                     if (mf.sharedMesh == null) continue;
                     meshes++;
-                    var m = go.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                    // inkl. Drehung der Prefab-Wurzel (Z-up-Exporte werden dort aufgerichtet), ohne ihre Position
+                    var m = Matrix4x4.Translate(-go.transform.position) * mf.transform.localToWorldMatrix;
                     var mb = mf.sharedMesh.bounds;
                     for (int i = 0; i < 8; i++)
                     {
