@@ -5,7 +5,8 @@ using UnityEngine;
 namespace CityBuilder.Game.UI
 {
     /// <summary>
-    /// Provisorische Anzeige per IMGUI. Wird später durch echte UI (UI Toolkit) ersetzt.
+    /// Provisorische Entwickler-Anzeige per IMGUI (Statistik + Tastenhilfe, F1). Datum, Tempo, Einwohner und
+    /// Arbeitslose zeigt inzwischen die obere Leiste der Spiel-UI (<see cref="Hud.GameHud"/>).
     /// </summary>
     public sealed class DebugHud : MonoBehaviour
     {
@@ -51,7 +52,9 @@ namespace CityBuilder.Game.UI
                         "Leertaste Pause · 1/2/3 Tempo · Bauhöhe 0 = automatisch trassieren (Tunnel/Brücke/einebnen)\n" +
                         "WASD (Shift) bewegen · Q/E/Mitteltaste drehen · Mausrad zoomen · F1 Hilfe aus</size>";
 
-            var rect = new Rect(10, 10, 600, showHelp ? 228 : 128);
+            // Unter der oberen Leiste / neben der Ansichtsleiste der neuen UI (Platz für den Ansicht-Hinweis darüber)
+            float top = HudLayout.TopInset > 11f ? HudLayout.TopInset + 46f : 10f;
+            var rect = new Rect(HudLayout.LeftInset, top, 600, showHelp ? 228 : 128);
             UiBlocker.Register(rect);
             GUI.Box(rect, text, box);
 

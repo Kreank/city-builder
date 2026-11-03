@@ -8,8 +8,9 @@ using UnityEngine;
 namespace CityBuilder.Game.UI
 {
     /// <summary>
-    /// Provisorische Bauleiste (IMGUI) am unteren Rand: Bereich, Werkzeug, Straßentyp, Höhe, Verkehr.
-    /// Wird später durch eine richtige UI (UI Toolkit) ersetzt – die Logik bleibt im RoadTool.
+    /// Alte Bauleiste (IMGUI). Ersetzt durch die UI-Toolkit-Bauleiste (<see cref="Hud.GameHud"/>); wird nur noch
+    /// als Rückfall angehängt, wenn Theme/USS der neuen UI nicht geladen werden können. Nach Abnahme der neuen
+    /// UI im Editor löschen – zusammen mit TerraformTool.ToolbarRows und UtilityTool.DrawToolbarRows.
     /// </summary>
     public sealed class RoadToolbar : MonoBehaviour
     {
