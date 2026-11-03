@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using CityBuilder.Simulation.Citizens;
 using CityBuilder.Simulation.Environment;
+using CityBuilder.Simulation.Goods;
 using CityBuilder.Simulation.Roads;
 using CityBuilder.Simulation.Services;
 using CityBuilder.Simulation.Traffic;
@@ -170,6 +171,13 @@ namespace CityBuilder.Simulation.Core
             world.AddSystem(new WorldSystem());
             // --- Ende Welt
 
+            // --- G5 Warenketten (nach Diensten, vor der Stadtkasse: Tagesgewinne stehen fest, wenn die Kasse abrechnet)
+            world.Goods = new GoodsSystem(world.City, world.Traffic, world.Roads, world.Clock, seed);
+            world.AddSystem(world.Goods);
+            GoodsBinding.Connect(world.Goods, world.City, world.Citizens, world.Utilities);
+            GoodsBinding.ConnectWorld(world.Goods, world.Resources, world.Climate); // Vorkommen + Ernte aus der Welt
+            // --- Ende G5
+
             // --- Stadtkasse (zuletzt: rechnet täglich mit fertigem Stand ab; Baukosten über die Hooks)
             world.Economy = new Economy.EconomySystem(world.Settings, world.Roads, world.City, world.Utilities);
             world.Roads.Budget = world.Economy;
@@ -181,6 +189,7 @@ namespace CityBuilder.Simulation.Core
             world.Economy.PropertyTaxFactor = world.LandValue.PropertyTaxFactor; // G6: Grundsteuer nach Bodenwert
             world.AddSystem(world.Economy);
             // --- Ende Stadtkasse
+            world.Economy.TaxableProfit = world.Goods.TaxableProfit; // G5: Gewerbesteuer aus dem Gewinn
             return world;
         }
 
@@ -204,6 +213,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>G6 Bodenwert, Ausbaustufen, Gebäudezustand. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public LandValue.LandValueSystem LandValue { get; private set; }
+
+        /// <summary>Warenketten (G5): Firmen, Märkte, Lieferverkehr, Import/Export. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public GoodsSystem Goods { get; private set; }
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }

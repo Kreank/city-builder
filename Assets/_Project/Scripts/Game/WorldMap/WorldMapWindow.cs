@@ -18,7 +18,7 @@ namespace CityBuilder.Game.WorldMap
     {
         public enum Mode { Biomes, Relief, Countries, Temperature, Precipitation, Fertility, Forest, Ore, Coal, Oil, Sand, Groundwater }
 
-        static readonly string[] ModeNames =
+        public static readonly string[] ModeNames =
             { "Biome", "Relief", "Länder", "Temperatur", "Niederschlag", "Boden", "Wald", "Erz", "Kohle", "Öl", "Sand/Kies", "Grundwasser" };
 
         const int WindowId = 0x3E7D;
@@ -38,7 +38,7 @@ namespace CityBuilder.Game.WorldMap
 
         public void Init(RoadTool roadTool) => tool = roadTool;
 
-        Planet Planet => tool != null && tool.Runner != null && tool.Runner.World != null ? tool.Runner.World.Planet : null;
+        public Planet Planet => tool != null && tool.Runner != null && tool.Runner.World != null ? tool.Runner.World.Planet : null;
 
         void Update()
         {
@@ -54,6 +54,7 @@ namespace CityBuilder.Game.WorldMap
         void OnGUI()
         {
             if (!visible) return;
+            if (CityBuilder.Game.UI.Panels.UiPanels.ToolkitActive) return; // neue UI: UI/Windows/WorldMapUiWindow (IMGUI nur Rückfall)
             if (small == null)
             {
                 small = new GUIStyle(GUI.skin.label) { fontSize = 12, richText = true, wordWrap = true };
@@ -121,9 +122,19 @@ namespace CityBuilder.Game.WorldMap
             GUI.DragWindow();
         }
 
+        /// <summary>Kartentextur für einen Modus (für die UI-Toolkit-Weltkarte; wird bei Moduswechsel neu gefärbt).</summary>
+        public Texture2D TextureFor(Mode m)
+        {
+            var p = Planet;
+            if (p == null) return null;
+            mode = m;
+            if (texture == null || shownMode != mode || shownCountryVersion != p.StartRegionId) Rebuild(p);
+            return texture;
+        }
+
         // ------------------------------------------------------------ Texte
 
-        static string CellText(Planet p, int i)
+        public static string CellText(Planet p, int i)
         {
             var sb = new StringBuilder();
             float lat = p.LatitudeOf(i), lon = p.Longitude(p.XOf(i));

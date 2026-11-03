@@ -81,6 +81,11 @@ namespace CityBuilder.Simulation.Economy
         public int Version { get; private set; }
         public IReadOnlyList<IUpkeepSource> UpkeepSources => upkeepSources;
 
+        // --- G5 Warenketten (Hook): Tagesgewinn der Firma im Gebäude (NaN = keine Firma → pauschal je Job).
+        // Gesetzt in SimulationWorld.CreateDefault (GoodsSystem.TaxableProfit).
+        public Func<Building, double> TaxableProfit { get; set; }
+        // --- Ende G5
+
         // ------------------------------------------------------------ Steuern
 
         public float TaxRate(TaxKind kind) => taxRates[(int)kind];
@@ -200,6 +205,18 @@ namespace CityBuilder.Simulation.Economy
                         d.Add(BudgetCategory.ResidentialTax, b.OccupiedHouseholds * EconomyRules.HouseholdTaxBase
                             * (PropertyTaxFactor?.Invoke(b) ?? 1f) * TaxRate(TaxKind.Residential));
                     // --- Ende G6
+                    // --- G5 Warenketten (Hook): Gewerbesteuer aus dem Gewinn der Firma statt pauschal je Job
+                    if (TaxableProfit != null && TaxKindOf(b.Zone) != TaxKind.Residential)
+                    {
+                        double profit = TaxableProfit(b);
+                        if (!double.IsNaN(profit))
+                        {
+                            var k = TaxKindOf(b.Zone);
+                            if (profit > 0) d.Add(Budget.TaxCategory(k), profit * EconomyRules.ProfitTaxMultiplier * TaxRate(k));
+                            continue;
+                        }
+                    }
+                    // --- Ende G5
                     if (b.Workers > 0)
                     {
                         var kind = TaxKindOf(b.Zone);

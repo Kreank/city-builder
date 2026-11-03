@@ -64,6 +64,7 @@ namespace CityBuilder.Game.UI.Panels
             var f = new Frame { Window = window };
             window.Host = this;
             f.Root = Ui.El("cb-window", window.Slot == WindowSlot.Right ? "cb-window--right" : "cb-window--center", "cb-hidden");
+            if (!string.IsNullOrEmpty(window.FrameClass)) f.Root.AddToClassList(window.FrameClass);
             f.Head = Ui.Box("cb-window__head");
             f.Root.Add(f.Head);
             f.Scroll = new ScrollView(ScrollViewMode.Vertical);

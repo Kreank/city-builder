@@ -38,6 +38,8 @@ namespace CityBuilder.Game.UI.Panels
             public float Value = float.NaN;
             public Color? Color;
             public string Tip;
+            public Action<Vector2> Point;
+            public Action<Vector2?> Hover;
         }
 
         /// <summary>

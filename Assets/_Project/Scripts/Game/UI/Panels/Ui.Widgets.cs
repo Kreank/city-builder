@@ -604,6 +604,43 @@ namespace CityBuilder.Game.UI.Panels
             Bind(e[2], () => setPage(page + 1), page < pages - 1);
         }
 
+        /// <summary>
+        /// Bild (z. B. Kartentextur) in fester Größe. <paramref name="onClick"/>/<paramref name="onHover"/> bekommen die
+        /// Position als 0..1 (Ursprung oben links); Hover meldet null beim Verlassen. Klick zeichnet das Fenster neu.
+        /// </summary>
+        public void Image(Texture2D texture, float width, float height, Action<Vector2> onClick = null, Action<Vector2?> onHover = null)
+        {
+            var e = Take("image", () =>
+            {
+                var img = El("cb-image");
+                img.RegisterCallback<PointerDownEvent>(ev =>
+                {
+                    if (ev.button != 0 || !(img.userData is Tag t) || t.Point == null) return;
+                    t.Point(Normalized(img, ev.localPosition));
+                    Clicked?.Invoke();
+                });
+                img.RegisterCallback<PointerMoveEvent>(ev => (img.userData as Tag)?.Hover?.Invoke(Normalized(img, ev.localPosition)));
+                img.RegisterCallback<PointerLeaveEvent>(_ => (img.userData as Tag)?.Hover?.Invoke(null));
+                return img;
+            });
+            var tag = TagOf(e);
+            tag.Point = onClick;
+            tag.Hover = onHover;
+            if (e.style.backgroundImage.value.texture != texture) e.style.backgroundImage = new StyleBackground(texture);
+            if (Math.Abs(tag.Value - width * 10000f - height) > 0.5f)
+            {
+                tag.Value = width * 10000f + height;
+                e.style.width = width;
+                e.style.height = height;
+            }
+        }
+
+        static Vector2 Normalized(VisualElement e, Vector3 local)
+        {
+            var r = e.contentRect;
+            return new Vector2(r.width > 0f ? Mathf.Clamp01(local.x / r.width) : 0f, r.height > 0f ? Mathf.Clamp01(local.y / r.height) : 0f);
+        }
+
         // ------------------------------------------------------------ Hilfen
 
         /// <summary>Initialen aus einem Namen („Anna Berger“ → „AB“).</summary>
