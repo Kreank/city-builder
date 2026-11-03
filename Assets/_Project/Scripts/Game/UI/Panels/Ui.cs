@@ -145,7 +145,8 @@ namespace CityBuilder.Game.UI.Panels
         /// <summary>Zusätzliche, wechselnde Klasse (z. B. Farbton) setzen – die vorige wird entfernt.</summary>
         static void SetExtraClass(VisualElement e, string cls)
         {
-            var t = TagOf(e);
+            // auch für innere Elemente ohne eigenen Tag (z. B. das Wert-Label einer Zeile)
+            if (!(e.userData is Tag t)) e.userData = t = new Tag { Kind = "inner" };
             if (t.ExtraClass == cls) return;
             if (!string.IsNullOrEmpty(t.ExtraClass)) e.RemoveFromClassList(t.ExtraClass);
             if (!string.IsNullOrEmpty(cls)) e.AddToClassList(cls);
@@ -189,7 +190,7 @@ namespace CityBuilder.Game.UI.Panels
         /// <summary>Breite in Prozent nur bei Änderung setzen (Balken).</summary>
         static void SetWidth(VisualElement e, float fraction)
         {
-            var t = TagOf(e);
+            if (!(e.userData is Tag t)) e.userData = t = new Tag { Kind = "inner" };
             float v = Math.Max(0f, Math.Min(1f, float.IsNaN(fraction) ? 0f : fraction));
             if (Math.Abs(t.Value - v) < 0.0005f) return;
             t.Value = v;
@@ -207,7 +208,7 @@ namespace CityBuilder.Game.UI.Panels
 
         static void SetHeight(VisualElement e, float fraction)
         {
-            var t = TagOf(e);
+            if (!(e.userData is Tag t)) e.userData = t = new Tag { Kind = "inner" };
             float v = Math.Max(0f, Math.Min(1f, float.IsNaN(fraction) ? 0f : fraction));
             if (Math.Abs(t.Value - v) < 0.0005f) return;
             t.Value = v;
