@@ -465,7 +465,7 @@ namespace CityBuilder.Simulation.Utilities
             // Stadtstraßen tragen Leitung und Rohr: Segmente an gemeinsamen Knoten sind verbunden
             var segIndex = new Dictionary<int, int>();
             foreach (var s in roads.Segments)
-                if (CarriesUtilities(s)) segIndex[s.Id] = uf.Add();
+                if (ConnectionRules.CarriedByRoads(kind) && CarriesUtilities(s)) segIndex[s.Id] = uf.Add(); // Abwasser: nicht (selbst verlegt)
             foreach (var n in roads.Nodes)
             {
                 int first = -1;
@@ -525,9 +525,27 @@ namespace CityBuilder.Simulation.Utilities
                     for (int j = 0; j < fList.Count; j++)
                         if (fList[j].Contains(e, ConnectRadius)) uf.Union(lIndex[i], fIndex[j]);
                     var seg = NearestCityRoad(e, ConnectRadius);
-                    if (seg != null) uf.Union(lIndex[i], segIndex[seg.Id]);
+                    if (seg != null && segIndex.TryGetValue(seg.Id, out int segI)) uf.Union(lIndex[i], segI);
                     var b = city.BuildingAt(e);
                     if (b != null && buildingPos.TryGetValue(b.Id, out int bi)) uf.Union(lIndex[i], bIndex[bi]);
+                }
+            }
+
+            // Selbst verlegte Netze (Abwasser): Gebäude hängen an jeder Leitung in Anschlussreichweite ihrer Zufahrt
+            if (!ConnectionRules.CarriedByRoads(kind) && lList.Count > 0)
+            {
+                float reach = ConnectionRules.BuildingReach;
+                for (int j = 0; j < lList.Count; j++)
+                {
+                    var l = lList[j];
+                    float x0 = MathF.Min(l.A.X, l.B.X) - reach, x1 = MathF.Max(l.A.X, l.B.X) + reach;
+                    float y0 = MathF.Min(l.A.Y, l.B.Y) - reach, y1 = MathF.Max(l.A.Y, l.B.Y) + reach;
+                    for (int i = 0; i < sorted.Count; i++)
+                    {
+                        var e = sorted[i].Entrance;
+                        if (e.X < x0 || e.X > x1 || e.Y < y0 || e.Y > y1) continue;
+                        if (ConnectionRules.Reaches(l, sorted[i])) uf.Union(bIndex[i], lIndex[j]);
+                    }
                 }
             }
 

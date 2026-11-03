@@ -82,8 +82,49 @@ namespace CityBuilder.Simulation.Tests
         {
             var outlet = w.Utilities.TryBuildFacility(UtilityCatalog.SewageOutlet, OutletPos);
             Assert.NotNull(outlet);
-            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Sewage, OutletPos, new Vector2(RoadEnd, 0))); // Kanal zur Straße
+            SewerMain(w);
+            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Sewage, OutletPos, new Vector2(RoadEnd, 0))); // Kanal zum Hauptsammler
             return outlet;
+        }
+
+        /// <summary>Abwasser wird selbst verlegt: Hauptsammler unter der Hauptstraße (einmal je Welt).</summary>
+        static void SewerMain(SimulationWorld w)
+        {
+            if (w.Utilities.Lines.Any(l => l.Kind == UtilityKind.Sewage && l.A == new Vector2(-300, 0))) return;
+            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Sewage, new Vector2(-300, 0), new Vector2(RoadEnd, 0)));
+        }
+
+        /// <summary>Abwasser-Bauwerk südlich der Hauptstraße plus Kanal zum Hauptsammler.</summary>
+        static UtilityFacility SewageFacility(SimulationWorld w, UtilityFacilityType type, Vector2 pos)
+        {
+            SewerMain(w);
+            var f = w.Utilities.TryBuildFacility(type, pos);
+            if (f == null) return null;
+            Assert.NotNull(w.Utilities.TryBuildLine(UtilityKind.Sewage, pos, new Vector2(pos.X, 0)));
+            return f;
+        }
+
+        [Fact]
+        public void Sewage_IsNotCarriedByRoads_HousesNeedSewerInReach()
+        {
+            var w = Town();
+            var u = w.Utilities;
+            Assert.NotNull(u.TryBuildFacility(UtilityCatalog.SewagePlant, new Vector2(-50, -28)));
+            u.ForceTick();
+            // Kläranlage an der Straße, aber ohne Kanal: Straßen führen kein Abwasser mit
+            Assert.All(Constructed(w), b => Assert.False(u.IsSupplied(b, UtilityKind.Sewage)));
+            Assert.NotNull(u.TryBuildLine(UtilityKind.Sewage, new Vector2(-50, -28), new Vector2(-50, 0)));
+            Assert.NotNull(u.TryBuildLine(UtilityKind.Sewage, new Vector2(-50, 0), new Vector2(-150, 0)));
+            u.ForceTick();
+            var houses = Constructed(w);
+            Assert.Contains(houses, b => u.IsSupplied(b, UtilityKind.Sewage));
+            foreach (var b in houses)
+            {
+                bool inReach = u.ConnectedLine(b, UtilityKind.Sewage) != null;
+                Assert.Equal(inReach, u.IsSupplied(b, UtilityKind.Sewage));
+            }
+            Assert.Contains(houses, b => !u.IsSupplied(b, UtilityKind.Sewage)); // weiter östlich: kein Kanal
+            Assert.Null(u.ConnectedLine(houses[0], UtilityKind.Water)); // Wasser bleibt (noch) straßengeführt
         }
 
         static void WaterTicks(SimulationWorld w, int runs)
@@ -114,13 +155,13 @@ namespace CityBuilder.Simulation.Tests
 
             // Zu kleine Kläranlage → verlangt, aber nicht alle entsorgt → Versorgung nicht erfüllt
             var tiny = new UtilityFacilityType("tiny_sewage", "Mini", UtilityKind.Sewage, 0.05f, 10f, 10f, 0f, 0f);
-            Assert.NotNull(u.TryBuildFacility(tiny, new Vector2(-120, -14)));
+            Assert.NotNull(SewageFacility(w, tiny, new Vector2(-120, -14)));
             u.ForceTick();
             Assert.True(u.IsRequired(UtilityKind.Sewage));
             Assert.Contains(houses, b => !u.IsSupplied(b, UtilityKind.Sewage) && !u.IsSatisfied(b));
 
             // Echte Kläranlage: alle entsorgt, Bedarf = 0,9 × Wasserbedarf
-            Assert.NotNull(u.TryBuildFacility(UtilityCatalog.SewagePlant, new Vector2(-50, -28)));
+            Assert.NotNull(SewageFacility(w, UtilityCatalog.SewagePlant, new Vector2(-50, -28)));
             u.ForceTick();
             houses = Constructed(w); // der Bau hat ggf. Gebäude verdrängt
             Assert.All(houses, b => Assert.True(u.IsSupplied(b, UtilityKind.Sewage), $"{b} ohne Abwasser"));
@@ -161,7 +202,7 @@ namespace CityBuilder.Simulation.Tests
                 var u = w.Utilities;
                 Pump(w, PumpDownstream);
                 Outlet(w);
-                if (treat) Assert.NotNull(u.TryBuildFacility(UtilityCatalog.SewagePlant, new Vector2(-50, -28)));
+                if (treat) Assert.NotNull(SewageFacility(w, UtilityCatalog.SewagePlant, new Vector2(-50, -28)));
                 WaterTicks(w, 300);
                 var home = Constructed(w).First(b => b.Residents > 0 && u.IsSupplied(b, UtilityKind.Water));
                 drinking = w.WaterQuality.DrinkingWaterQuality(home);
