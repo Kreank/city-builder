@@ -83,7 +83,8 @@ namespace CityBuilder.Game.Roads
         MeshRenderer previewRenderer;
         readonly List<RoadMeshBuilder.PreviewCurve> previewCurves = new List<RoadMeshBuilder.PreviewCurve>();
 
-        public Mode CurrentMode { get; private set; } = Mode.Straight;
+        /// <summary>UX: Start im Auswählen-Modus (<see cref="SelectMode"/>) – nichts „in der Maus“.</summary>
+        public Mode CurrentMode { get; private set; } = Mode.Inspect;
         public RoadType SelectedType { get; private set; } = RoadCatalog.CityTwoLane;
         public RoadTemplateKind TemplateKind { get; private set; } = RoadTemplateKind.DiamondInterchange;
         public float TemplateRotation { get; private set; }
@@ -153,6 +154,7 @@ namespace CityBuilder.Game.Roads
 
             // Info-Modus (C): Inspektor für Gebäude, Fahrzeuge, Versorgungsbauwerke und Bürger (+ Stadtübersicht)
             Ensure<CityBuilder.Game.Inspect.InspectorPanel>().Init(this, previewMaterial);
+            Ensure<CityBuilder.Game.Inspect.FacilityMover>().Init(this, previewMaterial); // UX: Bauwerke verschieben (Y)
 
             // Terraforming-Werkzeug (Modus Terraform, Taste L)
             Ensure<CityBuilder.Game.Terrain.TerraformTool>().Init(this, previewMaterial);
@@ -259,6 +261,109 @@ namespace CityBuilder.Game.Roads
             Cancel();
         }
 
+        // --- UX: Auswählen-Modus als Standard und Rückkehrziel
+        // Entscheidung: der vorhandene Mode.Inspect IST der Auswählen-Modus (Linksklick wählt im Inspektor) – kein neuer
+        // Enum-Wert, damit Inspektor, Picking, BuildingView und die Werkzeuge anderer Agenten unverändert passen.
+
+        /// <summary>Auswählen: keine Bauvorschau, Linksklick wählt Gebäude/Fahrzeug/Bürger/Dienst/Versorger/Depot.</summary>
+        public const Mode SelectMode = Mode.Inspect;
+        public bool IsSelectMode => CurrentMode == SelectMode;
+
+        /// <summary>Zurück zum Auswählen (Esc/Rechtsklick ohne laufenden Bauvorgang, Knopf „Auswählen“).</summary>
+        public void ReturnToSelect()
+        {
+            if (IsSelectMode) { Cancel(); return; }
+            SetMode(SelectMode);
+        }
+
+        /// <summary>Werkzeugtaste: Werkzeug an – erneut gedrückt zurück zum Auswählen.</summary>
+        public void ToggleMode(Mode mode) => SetMode(CurrentMode == mode ? SelectMode : mode);
+
+        struct Operation { public System.Func<bool> Busy; public System.Action Escape, RightClick; }
+        readonly List<Operation> operations = new List<Operation>();
+
+        /// <summary>
+        /// Begleit-Werkzeuge melden laufende Vorgänge (Leitung in Kette, Buslinie zeichnen, Verschieben …): Solange
+        /// <paramref name="busy"/> true ist, brechen Esc bzw. Rechtsklick nur diesen Vorgang ab (<paramref name="rightClick"/>
+        /// = eigene Rechtsklick-Bedeutung, sonst wie Esc); sonst geht es zurück zum Auswählen.
+        /// </summary>
+        public void RegisterOperation(System.Func<bool> busy, System.Action escape, System.Action rightClick = null)
+        {
+            if (busy != null && escape != null) operations.Add(new Operation { Busy = busy, Escape = escape, RightClick = rightClick });
+        }
+
+        /// <summary>Läuft gerade ein Bauvorgang (Straße begonnen, Leitung in Kette, …)?</summary>
+        public bool IsBusy
+        {
+            get
+            {
+                if (step != Step.Start) return true;
+                foreach (var op in operations) if (op.Busy()) return true;
+                return false;
+            }
+        }
+
+        /// <summary>In diesen Werkzeugen hat Rechtsklick eine eigene Bedeutung (Zonen löschen, Gelände umgekehrt).</summary>
+        public bool RightClickHasOwnMeaning => CurrentMode == Mode.Zone || CurrentMode == Mode.Terraform;
+
+        /// <summary>Hinweis für die Hinweiszeile (null im Auswählen-Modus).</summary>
+        public string ReturnHint => IsSelectMode ? null
+            : IsBusy ? "Esc/Rechtsklick: Vorgang abbrechen"
+            : RightClickHasOwnMeaning ? "Esc: zurück zum Auswählen" : "Esc/Rechtsklick: zurück zum Auswählen";
+
+        /// <summary>Esc/Rechtsklick: erst laufenden Vorgang abbrechen, dann zurück zum Auswählen (läuft nach allen Updates).</summary>
+        void HandleCancelInput()
+        {
+            var kb = Keyboard.current;
+            var mouse = Mouse.current;
+            bool esc = kb != null && kb.escapeKey.wasPressedThisFrame &&
+                       CityBuilder.Game.UI.Panels.WindowHost.EscapeConsumedFrame != Time.frameCount; // Fenster haben Vorrang
+            bool rmb = mouse != null && mouse.rightButton.wasPressedThisFrame && !UiBlocker.IsPointerOverUi(mouse.position.ReadValue());
+            if (!esc && !rmb) return;
+            foreach (var op in operations)
+            {
+                if (!op.Busy()) continue;
+                if (rmb && !esc) (op.RightClick ?? op.Escape)();
+                else op.Escape();
+                return;
+            }
+            if (step != Step.Start) { Cancel(); return; }
+            if (CurrentMode == Mode.Traffic && (SelectedNode != null || SelectedSegment != null)) { ClearSelection(); return; }
+            if (IsSelectMode) return; // Auswahl aufheben macht der Inspektor
+            if (rmb && !esc && RightClickHasOwnMeaning) return;
+            SetMode(SelectMode);
+        }
+
+        void LateUpdate()
+        {
+            HandleCancelInput();
+            ShowBlocker(pendingBlocker);
+            pendingBlocker = null;
+        }
+
+        // Bauwerks-Sperre: blockierendes Bauwerk in der Vorschau hervorheben
+        PlacementGhost blockerGhost;
+        StructureBlock pendingBlocker;
+
+        void ShowBlocker(StructureBlock b)
+        {
+            if (blockerGhost == null)
+            {
+                if (b == null) return;
+                blockerGhost = new PlacementGhost(transform, "Road Blocker Highlight");
+            }
+            if (b == null) { blockerGhost.Hide(); return; }
+            var fp = b.Footprint;
+            blockerGhost.Show(fp.Center, fp.Front, fp.Width + 2f, fp.Depth + 2f, b.Height, 10f, invalidMaterial, showFront: false);
+        }
+
+        /// <summary>Fehlertext mit Namen des Bauwerks („Straße überschneidet Polizeiwache“).</summary>
+        public static string ErrorText(RoadBuildError error, StructureBlock blockedBy) =>
+            error == RoadBuildError.OverlapsStructure && blockedBy != null
+                ? $"Straße überschneidet {blockedBy.Name} – anders führen oder Gebäude verschieben (Auswählen → Verschieben)"
+                : ErrorText(error);
+        // --- Ende UX
+
         public void SelectType(RoadType type)
         {
             if (type == null) return;
@@ -304,7 +409,7 @@ namespace CityBuilder.Game.Roads
             if (ground != null)
                 ground.UndergroundForced = ForceUnderground || IsBuildMode &&
                     (BuildHeight < -0.1f || (step != Step.Start && startHeight - GroundAt(startPoint) < -0.1f));
-            if (mouse.rightButton.wasPressedThisFrame) { Cancel(); if (CurrentMode == Mode.Traffic) ClearSelection(); }
+            // Esc/Rechtsklick: HandleCancelInput (LateUpdate) – abbrechen bzw. zurück zum Auswählen
 
             // Auswahl darf nicht auf gelöschte Objekte zeigen
             var roads = runner.World.Roads;
@@ -344,19 +449,20 @@ namespace CityBuilder.Game.Roads
 
         void HandleKeys(Keyboard kb)
         {
+            // R schaltet Gerade ↔ Kurve (aus anderen Werkzeugen: Gerade); die übrigen Werkzeugtasten erneut = Auswählen
             if (kb.rKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Straight ? Mode.Curve : Mode.Straight);
-            if (kb.kKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Roundabout ? Mode.Straight : Mode.Roundabout);
-            if (kb.bKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Bulldoze ? Mode.Straight : Mode.Bulldoze);
-            if (kb.uKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Upgrade ? Mode.Straight : Mode.Upgrade);
-            if (kb.iKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Reverse ? Mode.Straight : Mode.Reverse);
-            if (kb.tKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Traffic ? Mode.Straight : Mode.Traffic);
+            if (kb.kKey.wasPressedThisFrame) ToggleMode(Mode.Roundabout);
+            if (kb.bKey.wasPressedThisFrame) ToggleMode(Mode.Bulldoze);
+            if (kb.uKey.wasPressedThisFrame) ToggleMode(Mode.Upgrade);
+            if (kb.iKey.wasPressedThisFrame) ToggleMode(Mode.Reverse);
+            if (kb.tKey.wasPressedThisFrame) ToggleMode(Mode.Traffic);
             if (kb.hKey.wasPressedThisFrame) ToggleDualCarriageway();
             if (kb.xKey.wasPressedThisFrame) ToggleUndergroundView();
             // Zonen über das gedruckte Zeichen „Z“ der aktuellen Tastaturbelegung (Input System liest sonst die
             // US-Lage: auf QWERTZ läge „Zonen“ auf der Taste Y)
             var zoneKey = kb.FindKeyOnCurrentKeyboardLayout("z") ?? kb.zKey;
-            if (zoneKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Zone ? Mode.Straight : Mode.Zone);
-            if (kb.cKey.wasPressedThisFrame) SetMode(CurrentMode == Mode.Inspect ? Mode.Straight : Mode.Inspect); // G2 Bürger-Info
+            if (zoneKey.wasPressedThisFrame) ToggleMode(Mode.Zone);
+            if (kb.cKey.wasPressedThisFrame) ToggleCityInfo(); // UX: C = Stadtübersicht (im Auswählen-Modus)
             if (CurrentMode == Mode.Zone)
             {
                 if (kb.leftBracketKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame) SetBrush(BrushRadius - 4f);
@@ -370,7 +476,15 @@ namespace CityBuilder.Game.Roads
             if (kb.pageDownKey.wasPressedThisFrame) ChangeHeight(-HeightStep);
             if (kb.commaKey.wasPressedThisFrame) RotateTemplate(-15f);
             if (kb.periodKey.wasPressedThisFrame) RotateTemplate(15f);
-            if (kb.escapeKey.wasPressedThisFrame) { Cancel(); ClearSelection(); }
+            // Esc: HandleCancelInput (LateUpdate, nach den Fenstern)
+        }
+
+        /// <summary>Stadtübersicht im Inspektor ein/aus (Taste C, Info-Knopf oben) – wechselt dafür ins Auswählen.</summary>
+        public void ToggleCityInfo()
+        {
+            var inspector = GetComponent<CityBuilder.Game.Inspect.InspectorPanel>();
+            if (!IsSelectMode) { SetMode(SelectMode); if (inspector != null) inspector.ShowOverview = true; return; }
+            if (inspector != null) inspector.ShowOverview = !inspector.ShowOverview;
         }
 
         void CycleType(int dir)
@@ -509,7 +623,7 @@ namespace CityBuilder.Game.Roads
                 Cost = plan.Cost,
                 Type = plan.Type,
                 Valid = placingControl || plan.IsValid,
-                Error = placingControl || plan.IsValid ? null : ErrorText(plan.Error),
+                Error = placingControl || plan.IsValid ? null : ErrorText(plan.Error, plan.BlockedBy),
                 Info = HeightInfo(roads, plan),
             };
             string parallel = ParallelInfo(roads, plan); // Bauhilfe Parallelabstand
@@ -531,6 +645,7 @@ namespace CityBuilder.Game.Roads
                     g.HasEndReference = SegmentReference(plan.EndAnchor, g.EndDirection, out g.EndReference, out g.EndAngle);
             }
             Guide = g;
+            if (!placingControl) pendingBlocker = plan.BlockedBy; // UX: Bauwerks-Sperre hervorheben
 
             previewCurves.Clear();
             previewCurves.Add(new RoadMeshBuilder.PreviewCurve(plan.Start, plan.Control, plan.End, plan.Type.Width, plan.StartHeight, plan.EndHeight, plan.Profile));
@@ -549,7 +664,8 @@ namespace CityBuilder.Game.Roads
             ShowPlan(roads, main, placingControl: false);
             var g = Guide;
             g.Valid = dual.IsValid;
-            g.Error = dual.IsValid ? null : ErrorText(dual.Error);
+            g.Error = dual.IsValid ? null : ErrorText(dual.Error, dual.BlockedBy);
+            pendingBlocker = dual.BlockedBy;
             g.Cost = dual.Cost;
             g.Info = "Doppelbau (H) · " + g.Info;
             Guide = g;
@@ -761,7 +877,7 @@ namespace CityBuilder.Game.Roads
                 StartHeight = startHeight,
                 EndHeight = startHeight,
                 Valid = currentRoundabout.IsValid,
-                Error = currentRoundabout.IsValid ? null : ErrorText(currentRoundabout.Error),
+                Error = currentRoundabout.IsValid ? null : ErrorText(currentRoundabout.Error, currentRoundabout.BlockedBy),
                 Cost = currentRoundabout.Cost,
                 Length = Mathf.PI * 2f * radius,
                 Start = startPoint,
@@ -777,6 +893,7 @@ namespace CityBuilder.Game.Roads
                 previewCurves.Add(new RoadMeshBuilder.PreviewCurve(p0, c, p2, type.Width, startHeight, startHeight));
             }
             ShowPreviewMesh(currentRoundabout.IsValid);
+            pendingBlocker = currentRoundabout.BlockedBy;
 
             if (clicked && currentRoundabout.IsValid)
             {
@@ -810,6 +927,7 @@ namespace CityBuilder.Game.Roads
             foreach (var p in currentTemplate.Pieces)
                 previewCurves.Add(new RoadMeshBuilder.PreviewCurve(p.P0, p.Control, p.P2, p.Type.Width, p.H0, p.H2));
             ShowPreviewMesh(currentTemplate.IsValid);
+            pendingBlocker = currentTemplate.BlockedBy;
 
             Guide = new GuideState
             {
@@ -819,7 +937,7 @@ namespace CityBuilder.Game.Roads
                 End = raw,
                 Type = highway,
                 Valid = currentTemplate.IsValid,
-                Error = currentTemplate.IsValid ? null : ErrorText(currentTemplate.Error),
+                Error = currentTemplate.IsValid ? null : ErrorText(currentTemplate.Error, currentTemplate.BlockedBy),
                 Cost = currentTemplate.Cost,
                 Info = $"{RoadTemplates.DisplayName(TemplateKind)} · {TemplateRotation:0}° (, und . drehen) · {currentTemplate.Cost:0} €",
             };
@@ -843,6 +961,8 @@ namespace CityBuilder.Game.Roads
             var error = RoadBuilder.CheckReplace(roads, segment, SelectedType);
             bool valid = error == RoadBuildError.None;
             ShowSegmentHighlight(segment, SelectedType.Width, valid);
+            var blocker = error == RoadBuildError.OverlapsStructure ? RoadBuilder.ReplaceBlocker(roads, segment, SelectedType) : null;
+            pendingBlocker = blocker;
             Guide = new GuideState
             {
                 Active = true,
@@ -853,7 +973,7 @@ namespace CityBuilder.Game.Roads
                 EndHeight = segment.HeightAt(0.5f),
                 Type = SelectedType,
                 Valid = valid,
-                Error = valid ? null : error == RoadBuildError.Duplicate ? "Ist bereits dieser Typ" : ErrorText(error),
+                Error = valid ? null : error == RoadBuildError.Duplicate ? "Ist bereits dieser Typ" : ErrorText(error, blocker),
                 Info = $"Ausbau: {segment.Type.DisplayName} → {SelectedType.DisplayName} · {RoadBuilder.ReplaceCost(segment, SelectedType):0} €",
             };
             if (clicked && valid) RoadBuilder.Replace(roads, segment, SelectedType);
@@ -1005,6 +1125,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.InvalidHeight: return $"Höhe {RoadBuilder.MinHeight:0} bis {RoadBuilder.MaxHeight:0} m über Gelände";
                 case RoadBuildError.OverWater: return "Über Wasser nur als Brücke – Bauhöhe erhöhen (Bild↑)";
                 case RoadBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                case RoadBuildError.OverlapsStructure: return "Straße überschneidet ein Bauwerk – anders führen oder Gebäude verschieben";
                 default: return null;
             }
         }

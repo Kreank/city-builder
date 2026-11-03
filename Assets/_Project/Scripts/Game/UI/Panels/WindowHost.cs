@@ -98,6 +98,9 @@ namespace CityBuilder.Game.UI.Panels
                 if (f.Window.Slot == WindowSlot.Right) f.Root.style.bottom = px;
         }
 
+        /// <summary>UX: Frame, in dem ein Fenster Esc verbraucht hat – das RoadTool geht dann nicht zusätzlich zum Auswählen zurück.</summary>
+        public static int EscapeConsumedFrame { get; private set; } = -1;
+
         public void Update()
         {
             foreach (var f in frames)
@@ -125,8 +128,8 @@ namespace CityBuilder.Game.UI.Panels
             var kb = Keyboard.current;
             if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
-                if (center != null) { center.Window.Close(); dirty = true; }
-                else if (right != null && right.Window.HandleEscape()) dirty = true;
+                if (center != null) { center.Window.Close(); dirty = true; EscapeConsumedFrame = Time.frameCount; }
+                else if (right != null && right.Window.HandleEscape()) { dirty = true; EscapeConsumedFrame = Time.frameCount; }
             }
 
             bool refresh = dirty || Time.unscaledTime >= nextRefresh;

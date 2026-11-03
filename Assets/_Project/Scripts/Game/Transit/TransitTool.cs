@@ -57,6 +57,8 @@ namespace CityBuilder.Game.Transit
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            // UX: gezeichnete Linie = laufender Vorgang (Esc verwirft, Rechtsklick nimmt den letzten Halt zurück)
+            tool.RegisterOperation(() => Active && Current == TransitAction.Line && drawing.Count > 0, () => drawing.Clear(), UndoStop);
             okMaterial = new Material(transparent) { name = "TransitPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
             badMaterial = new Material(transparent) { name = "TransitPreviewBad", color = new Color(1f, 0.25f, 0.2f, 0.5f) };
             routeMaterial = new Material(transparent) { name = "TransitRoutePreview", color = new Color(1f, 0.85f, 0.2f, 0.9f) };
@@ -123,16 +125,15 @@ namespace CityBuilder.Game.Transit
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.digit5Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
-                tool.SetMode(Active ? RoadTool.Mode.Straight : RoadTool.Mode.Transit);
+                tool.ToggleMode(RoadTool.Mode.Transit); // UX: erneut 5 = Auswählen
             if (!Active) { drawing.Clear(); return; }
             if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
             if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
             if (Current == TransitAction.Line)
             {
                 if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) FinishLine();
-                if (kb.escapeKey.wasPressedThisFrame && drawing.Count > 0) drawing.Clear();
-                var mouse = Mouse.current;
-                if (mouse != null && mouse.rightButton.wasPressedThisFrame) UndoStop();
+                // UX: Esc verwirft / Rechtsklick nimmt den letzten Halt zurück – über RoadTool.RegisterOperation, damit
+                // ohne gezeichnete Linie dieselben Tasten zum Auswählen zurückführen
             }
         }
 

@@ -53,7 +53,9 @@ namespace CityBuilder.Game.UI.Windows
             ui.Section("Ansehen");
             using (ui.Fields())
             {
-                ui.Field("C · F", "Info-Modus · Fahrzeug/Bürger verfolgen");
+                ui.Field("Esc · Rechtsklick", "Vorgang abbrechen, sonst zurück zum Auswählen (Standard: Linksklick wählt aus)");
+                ui.Field("C · F", "Stadtübersicht · Fahrzeug/Bürger verfolgen");
+                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot verschieben (, . drehen, Klick setzt)");
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");
