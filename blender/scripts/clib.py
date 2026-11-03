@@ -37,6 +37,11 @@ PALETTE = [
     ("pastel_yellow", "#EBD58C"), ("pastel_blue",   "#A9C6DE"), ("pastel_green","#B5D1A3"), ("pastel_pink", "#E3B3A8"),
     ("terracotta",    "#C4704F"), ("slate",         "#5A6470"), ("beige",       "#CDBB98"), ("gold",        "#C9A13B"),
     ("flower_pink",   "#E06F9C"), ("flower_violet", "#8E6CC4"), ("court_orange","#D9773F"), ("glass_light", "#7FA3C2"),
+    # --- Landwirtschaft / Kueste (nur hinten anhaengen!)
+    ("wheat",         "#D9BC5C"), ("soil",          "#7B5B3E"), ("soil_light",  "#9C7A55"), ("corn",        "#6E9A3E"),
+    ("rapeseed",      "#EAD53A"), ("sea",           "#2F6F99"), ("foam",        "#E9F2F4"), ("grass_dry",   "#A8B064"),
+    # --- Gelaende (nur hinten anhaengen!)
+    ("rock",          "#8A847B"), ("rock_dark",     "#625D57"),
 ]
 GRID = 8
 CELL = 16
