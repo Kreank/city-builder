@@ -26,7 +26,7 @@ namespace CityBuilder.Simulation.Tests
         readonly ITestOutputHelper output;
         public GatewayTests(ITestOutputHelper output) => this.output = output;
 
-        static WorldSettings Settings(bool terrain = false, bool world = false, int worldSeed = 99)
+        static WorldSettings Settings(bool terrain = false, bool world = false, int worldSeed = 99, bool fullPlanet = false)
         {
             var s = new WorldSettings
             {
@@ -37,7 +37,7 @@ namespace CityBuilder.Simulation.Tests
             {
                 s.GenerateWorld = true;
                 s.WorldSeed = worldSeed;
-                s.Planet = new World.PlanetSettings { Width = 96, Height = 48, TargetRegions = 60, TargetCountries = 8 };
+                if (!fullPlanet) s.Planet = new World.PlanetSettings { Width = 96, Height = 48, TargetRegions = 60, TargetCountries = 8 };
             }
             return s;
         }
@@ -84,9 +84,13 @@ namespace CityBuilder.Simulation.Tests
         [InlineData(true, true, 99)]
         [InlineData(true, true, 7)]
         [InlineData(true, true, 2024)]
-        public void Highway_IsBuilt_ContinuousBothWays_WithInterchangeAndFeeder(bool terrain, bool world, int seed)
+        [InlineData(true, true, 2024, true)]  // Spiel-Standard: volle Erde, Seed 2024
+        [InlineData(true, true, 74, true)]
+        [InlineData(true, true, 333, true)]   // Hang: Brücke der Anschlussstelle braucht lichte Höhe
+        [InlineData(true, true, 592, true)]
+        public void Highway_IsBuilt_ContinuousBothWays_WithInterchangeAndFeeder(bool terrain, bool world, int seed, bool fullPlanet = false)
         {
-            var w = SimulationWorld.CreateDefault(Settings(terrain, world, seed));
+            var w = SimulationWorld.CreateDefault(Settings(terrain, world, seed, fullPlanet));
             var report = w.Gateways.LastReport;
             output.WriteLine(report.ToString());
             foreach (var g in w.Gateways.All) output.WriteLine($"  {g} @ {g.Position}");

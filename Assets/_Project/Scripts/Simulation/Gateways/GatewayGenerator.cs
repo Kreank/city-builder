@@ -291,8 +291,8 @@ namespace CityBuilder.Simulation.Gateways
             float o = GatewayRules.PreferredInterchangeOffset;
             float[] sides = { -o, o, -o * 0.5f, o * 0.5f, 0f, -o * 1.5f, o * 1.5f };
             float[] alongs = { 0f, -200f, 200f, -400f, 400f };
-            foreach (float a in alongs)
-                foreach (float s in sides)
+            foreach (float s in sides)
+                foreach (float a in alongs)
                     yield return (a, s);
         }
 
@@ -324,6 +324,7 @@ namespace CityBuilder.Simulation.Gateways
                     Flags = stub ? RoadSegmentFlags.None : RoadSegmentFlags.Locked,
                 });
             }
+            if (!BridgeClears(roads, plan.Pieces, origin, u, n)) return null;
             plan.StubA = origin + n * DiamondE;
             plan.StubB = origin - n * DiamondE;
             // Zubringer-Enden auf Land
@@ -339,6 +340,34 @@ namespace CityBuilder.Simulation.Gateways
             if (!PlanCarriageway(plan, roads, origin - u * DiamondE + left, -u, edge, outward: true, out plan.ExitB)) return null;
             if (!PlanCarriageway(plan, roads, origin - u * DiamondE + right, -u, edge, outward: false, out plan.EntryB)) return null;
             return plan;
+        }
+
+        /// <summary>
+        /// Die Vorlage prüft ihre Teile nur gegen den Bestand, nicht untereinander: am Hang kann die Brücke der Querstraße
+        /// (8 m über ihren Enden) der geländefolgenden Autobahn zu nahe kommen. Hier vorab: lichte Höhe an beiden Fahrbahnen.
+        /// </summary>
+        static bool BridgeClears(RoadNetwork roads, List<Piece> pieces, Vector2 origin, Vector2 u, Vector2 n)
+        {
+            Piece bridge = null;
+            foreach (var p in pieces)
+                if (p.Type.Category == RoadCategory.City && MathF.Abs(Vector2.Dot(p.P0 - origin, n)) < DiamondC + 1f
+                    && MathF.Abs(Vector2.Dot(p.P2 - origin, n)) < DiamondC + 1f) bridge = p;
+            if (bridge == null) return true;
+            foreach (var p in pieces)
+            {
+                if (!p.Type.IsHighway) continue;
+                float a = Vector2.Dot(p.P0 - origin, u), b = Vector2.Dot(p.P2 - origin, u);
+                if (MathF.Min(a, b) > 0f || MathF.Max(a, b) < 0f) continue; // kreuzt die Querachse nicht
+                float t = MathF.Abs(b - a) > 1e-3f ? -a / (b - a) : 0.5f;
+                var rp = RoadBuilder.Plan(roads, p.P0, 0f, p.Control, p.P2, 0f, p.Type, p.H0, p.H2, p.Flags, p.FollowTerrain);
+                if (!rp.IsValid) return false;
+                float road = rp.HeightAt(t);
+                var cross = Bezier.Evaluate(p.P0, p.Control, p.P2, t);
+                float s = Vector2.Dot(cross - bridge.P0, bridge.P2 - bridge.P0) / MathF.Max(1e-3f, (bridge.P2 - bridge.P0).LengthSquared());
+                float deck = bridge.H0 + (bridge.H2 - bridge.H0) * Math.Clamp(s, 0f, 1f);
+                if (deck - road < RoadBuilder.Clearance + 0.5f) return false;
+            }
+            return true;
         }
 
         /// <summary>
