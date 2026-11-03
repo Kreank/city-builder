@@ -48,22 +48,22 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("Tab · H", "Straßentyp wechseln · Doppelbau (Autobahn)");
                 ui.Field("Bild↑ / Bild↓", "Bauhöhe (0 = automatisch trassieren: Tunnel/Brücke/einebnen)");
                 ui.Field("G · Strg", "Einrasten an/aus · halten = frei");
-                ui.Field("F9 · F10", "Parallelstraßen: Reihen 4→3→2→1→aus · Blockraster");
+                ui.Field("F9 · F10", "Parallelstraßen: Gebäudetiefe 16→24→32 m→aus (Rücken an Rücken) · Blockraster");
                 ui.Field(", .", "Vorlage/Bauwerk drehen");
-                ui.Field("Z · [ ]", "Zonen · Pinselgröße");
+                ui.Field("Z · [ ]", "Produktion lenken (Schwerpunkt-Pinsel) · Pinselgröße · Zonen nur noch in alten Spielständen (Bauleiste „Zonen“)");
                 ui.Field("Z → Schwerpunkt", "Industrie lenken: Schwerpunkt-Gebiet malen (RMB = automatisch), Rohstoff-Ansicht zeigt das Vorkommen"); // Produktion lenken
                 ui.Field("L", "Gelände formen");
                 ui.Field("J", "Versorgung (Strom, Wasser)");
                 ui.Field("4 · ⇧4", "Dienste · Abdeckungs-Ansicht durchschalten");
                 ui.Field("5 · F6", "ÖPNV (Haltestelle, Linie zeichnen, Busdepot) · Linienübersicht");
-                ui.Field("6", "Wohnhäuser einzeln setzen (Anno-Stil, , . drehen) – Stufen nach Einrichtungen in Reichweite");
+                ui.Field("6", "Bauen (Anno-Stil): Wohnen, Gewerbe, Industrie setzen · LMB halten und ziehen = Reihe entlang der Straße · , . drehen · Stufen nach Einrichtungen in Reichweite"); // Setzen statt Zonen
             }
             ui.Section("Ansehen");
             using (ui.Fields())
             {
                 ui.Field("Esc · Rechtsklick", "Vorgang abbrechen, sonst zurück zum Auswählen (Standard: Linksklick wählt aus)");
                 ui.Field("C · F", "Stadtübersicht · Fahrzeug/Bürger verfolgen");
-                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot/gesetztes Wohnhaus verschieben (, . drehen, Klick setzt)");
+                ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot/gesetztes Gebäude verschieben (, . drehen, Klick setzt)");
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
                 ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
                 ui.Field("X", "Unterirdisch-Ansicht");

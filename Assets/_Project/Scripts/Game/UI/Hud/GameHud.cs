@@ -439,6 +439,7 @@ namespace CityBuilder.Game.UI.Hud
                        $"Auspendler {BuildLabels.Number(s.CommutersOut)} · Einpendler {BuildLabels.Number(s.CommutersIn)}";
             });
             topBar.Add(jobs);
+            topBar.Add(DemandChip()); // Setzen statt Zonen: Nachfrage W/L/B/I mit „warum“ (GameHud.Demand.cs)
 
             // Stadtkasse: Kontostand + Saldo der letzten Woche, Klick öffnet das Fenster (M)
             var cash = Stat(HudIconKind.Coins, "cb-icon--accent", "Stadtkasse", out var cashValue, out var cashExtra);

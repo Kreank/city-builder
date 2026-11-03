@@ -120,7 +120,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.TradePurchases: return "Handel: Einkauf";
                 case BudgetCategory.PenaltiesPaid: return "Vertragsstrafen (gezahlt)";
                 // --- Ende Etappe 8
-                case BudgetCategory.HouseConstruction: return "Bau Wohnhäuser";
+                case BudgetCategory.HouseConstruction: return "Bau Gebäude (gesetzt)"; // Setzen statt Zonen: Wohnhäuser, Läden, Büros, Hallen
                 case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
                 default: return c.ToString();
             }

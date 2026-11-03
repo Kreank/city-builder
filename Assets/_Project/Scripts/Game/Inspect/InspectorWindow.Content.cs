@@ -329,7 +329,7 @@ namespace CityBuilder.Game.Inspect
             ui.Section("Stufe & Bedürfnisse", "Anno-Regeln · Einrichtungen in Reichweite");
             using (ui.Card())
             {
-                ui.Meter($"Stufe {info.Level} von {info.MaxLevel} · {HouseRules.LevelName(info.Level)}",
+                ui.Meter($"Stufe {info.Level} von {info.MaxLevel} · {HouseRules.LevelName(b.Zone, info.Level)}",
                     top ? "höchste Stufe" : $"Aufstieg {info.ProgressDays}/{info.DaysNeeded} Tage", info.Progress,
                     top || info.Missing == LevelGap.None ? Tone.Good : Tone.Accent);
                 if (!top && info.Missing != LevelGap.None) ui.Note(info.MissingText);
@@ -345,7 +345,7 @@ namespace CityBuilder.Game.Inspect
                     {
                         var f = info.Facts;
                         bool satOk = f.Satisfaction >= info.NeedSatisfaction, occOk = f.Occupancy >= info.NeedOccupancy;
-                        ui.Field($"{(satOk ? "✓" : "✗")} Zufriedenheit (weich)", f.Satisfaction < 0f ? "noch keine Bewohner" : $"{f.Satisfaction * 100f:0} % / mind. {info.NeedSatisfaction * 100f:0} %", satOk ? Tone.Good : Tone.Accent);
+                        ui.Field($"{(satOk ? "✓" : "✗")} Zufriedenheit (weich)", f.Satisfaction < 0f ? (b.Households > 0 ? "noch keine Bewohner" : "noch keine Beschäftigten") : $"{f.Satisfaction * 100f:0} % / mind. {info.NeedSatisfaction * 100f:0} %", satOk ? Tone.Good : Tone.Accent);
                         ui.Field($"{(occOk ? "✓" : "✗")} Belegung (weich)", $"{f.Occupancy * 100f:0} % / mind. {info.NeedOccupancy * 100f:0} %", occOk ? Tone.Good : Tone.Accent);
                     }
                 }
@@ -366,7 +366,7 @@ namespace CityBuilder.Game.Inspect
             using (ui.Actions())
                 ui.ActionButton($"Abreißen (+{BuildLabels.Money(type.Cost * CityBuilder.Simulation.Economy.EconomyRules.DemolitionRefundShare)})",
                     () => world.City.DemolishHouse(b.Id), ActionStyle.Secondary, false, true,
-                    "Haus abreißen – 25 % der Baukosten zurück, Bewohner ziehen um oder weg");
+                    "Gebäude abreißen – 25 % der Baukosten zurück, Bewohner ziehen um oder weg, Beschäftigte verlieren den Job");
         }
 
         static void Requirement(Ui ui, string label, float have, float need)

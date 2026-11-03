@@ -7,12 +7,19 @@ using UnityEngine.UIElements;
 namespace CityBuilder.Game.UI.Hud
 {
     /// <summary>
-    /// Produktion lenken: Pinsel-Art „Schwerpunkt“ in der Bauleisten-Kategorie Zonen (Taste Z) – eigener Block, damit
+    /// Produktion lenken: Bauleisten-Kategorie „Lenken“ (Taste Z, Pinsel-Art „Schwerpunkt“) – eigener Block, damit
     /// <c>GameHud.BuildBar.cs</c> nur einen Einhängepunkt bekommt. Kachel je Schwerpunkt (Farbe wie die Fläche auf der Karte,
     /// Unterzeile = gemalte Fläche bzw. Förderstufe), „Automatisch“ entfernt den Schwerpunkt; LMB malt, RMB setzt automatisch.
     /// </summary>
     public sealed partial class GameHud
     {
+        /// <summary>Setzen statt Zonen: eigene Kategorie „Lenken“ (Taste Z) statt Abschnitt im Zonen-Werkzeug.</summary>
+        void BuildFocusPanel()
+        {
+            Header("Produktion lenken", "LMB malt den Schwerpunkt · RMB setzt automatisch · [ ] Pinsel · Hallen setzt du unter Bauen → Industrie (6)");
+            BuildFocusSection();
+        }
+
         void BuildFocusSection()
         {
             var policy = runner.World.Policy;

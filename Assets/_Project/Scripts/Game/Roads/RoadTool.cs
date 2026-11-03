@@ -261,10 +261,17 @@ namespace CityBuilder.Game.Roads
         /// <summary>Gewählter Schwerpunkt (null = normaler Zonen-Pinsel). <see cref="IndustryFocus.Auto"/> = Schwerpunkt entfernen.</summary>
         public IndustryFocus? SelectedFocus { get; private set; }
 
+        /// <summary>Zuletzt gewählter Schwerpunkt (Taste Z öffnet ihn wieder).</summary>
+        IndustryFocus lastFocus = IndustryBranches.Branches[0];
+
+        /// <summary>Schwerpunkt-Pinsel mit dem zuletzt gewählten Schwerpunkt öffnen (Taste Z, Bauleiste „Lenken“).</summary>
+        public void OpenFocusBrush() => SelectFocus(lastFocus);
+
         public void SelectFocus(IndustryFocus focus)
         {
             bool fromZoneBrush = !SelectedFocus.HasValue;
             SelectedFocus = focus;
+            if (focus != IndustryFocus.Auto) lastFocus = focus;
             if (fromZoneBrush && BrushRadius < 48f) BrushRadius = 48f; // Gebiete sind groß
             SetMode(Mode.Zone);
         }
@@ -492,7 +499,7 @@ namespace CityBuilder.Game.Roads
             bool clicked = mouse.leftButton.wasPressedThisFrame;
             var ray = cam.ScreenPointToRay(screen);
 
-            if (zoneView != null) zoneView.Visible = CurrentMode == Mode.Zone;
+            if (zoneView != null) zoneView.Visible = CurrentMode == Mode.Zone && !SelectedFocus.HasValue; // Setzen statt Zonen: Raster nur beim Zonen-Pinsel
 
             switch (CurrentMode)
             {
@@ -526,8 +533,13 @@ namespace CityBuilder.Game.Roads
             if (kb.xKey.wasPressedThisFrame) ToggleUndergroundView();
             // Zonen über das gedruckte Zeichen „Z“ der aktuellen Tastaturbelegung (Input System liest sonst die
             // US-Lage: auf QWERTZ läge „Zonen“ auf der Taste Y)
+            // Setzen statt Zonen: Z öffnet den Schwerpunkt-Pinsel „Produktion lenken“ (Zonen nur noch über die Bauleiste in alten Ständen)
             var zoneKey = kb.FindKeyOnCurrentKeyboardLayout("z") ?? kb.zKey;
-            if (zoneKey.wasPressedThisFrame) ToggleMode(Mode.Zone);
+            if (zoneKey.wasPressedThisFrame)
+            {
+                if (CurrentMode == Mode.Zone) SetMode(SelectMode);
+                else OpenFocusBrush();
+            }
             if (kb.cKey.wasPressedThisFrame) ToggleCityInfo(); // UX: C = Stadtübersicht (im Auswählen-Modus)
             if (CurrentMode == Mode.Zone)
             {

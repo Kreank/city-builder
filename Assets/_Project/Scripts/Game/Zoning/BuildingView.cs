@@ -87,7 +87,7 @@ namespace CityBuilder.Game.Zoning
             if (runner == null || runner.World == null || cube == null) return;
             // UX: Auswählen ist jetzt der Standard – kräftige Zonen nur im Zonen-Werkzeug und in der Stadtübersicht
             var inspector = tool != null ? tool.GetComponent<CityBuilder.Game.Inspect.InspectorPanel>() : null;
-            HighlightZones = tool != null && (tool.CurrentMode == RoadTool.Mode.Zone ||
+            HighlightZones = tool != null && ((tool.CurrentMode == RoadTool.Mode.Zone && !tool.SelectedFocus.HasValue) || // nicht beim Schwerpunkt-Pinsel
                                               (tool.CurrentMode == RoadTool.Mode.Inspect && inspector != null && inspector.ShowOverview));
 
             var city = runner.World.City;
@@ -138,10 +138,14 @@ namespace CityBuilder.Game.Zoning
                 var basePos = SimConvert.ToWorld(b.Position, b.Height);
                 var model = catalog != null ? PickForLevel(catalog.Buildings(b.Zone), b.Variant, b.Level) : null; // G6
 
-                // Grundstücksplatte in Zonenfarbe (Bordkante um das Gebäude)
-                if (!plates.TryGetValue(b.Zone, out var plateList)) plates[b.Zone] = plateList = new List<Matrix4x4>();
-                plateList.Add(Matrix4x4.TRS(basePos + Vector3.up * (PlateTop - PlateDepth * 0.5f), look,
-                    new Vector3(b.Width * 0.96f, PlateDepth, b.Depth * 0.96f)));
+                // Grundstücksplatte in Zonenfarbe (Bordkante um das Gebäude) – Setzen statt Zonen: nur noch für Zonengebäude
+                // alter Spielstände; gesetzte Gebäude stehen ohne Platte auf dem Gelände
+                if (!b.IsPlayerPlaced)
+                {
+                    if (!plates.TryGetValue(b.Zone, out var plateList)) plates[b.Zone] = plateList = new List<Matrix4x4>();
+                    plateList.Add(Matrix4x4.TRS(basePos + Vector3.up * (PlateTop - PlateDepth * 0.5f), look,
+                        new Vector3(b.Width * 0.96f, PlateDepth, b.Depth * 0.96f)));
+                }
 
                 // --- Eigene Assets: Bauernhöfe (Landwirtschafts-Firma) zeichnet die FarmView als Hof/Felder je Jahreszeit
                 if (farms == null) farms = GetComponent<FarmView>();
