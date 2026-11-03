@@ -112,8 +112,9 @@ namespace CityBuilder.Simulation.Utilities
         readonly EnvironmentLayers environment;
         readonly Vector2 min, max;
 
-        readonly Dictionary<int, UtilityFacility> facilities = new Dictionary<int, UtilityFacility>();
-        readonly Dictionary<int, UtilityLine> lines = new Dictionary<int, UtilityLine>();
+        // StableMap: Durchlauf-Reihenfolge wie Dictionary, aber speicherbar (Spielstand, Determinismus)
+        readonly StableMap<int, UtilityFacility> facilities = new StableMap<int, UtilityFacility>();
+        readonly StableMap<int, UtilityLine> lines = new StableMap<int, UtilityLine>();
         readonly Dictionary<int, UtilityStatus> status = new Dictionary<int, UtilityStatus>();
         // Je Art (Strom, Wasser, Abwasser) – Index = (int)UtilityKind
         readonly List<UtilityNetwork>[] networks = { new List<UtilityNetwork>(), new List<UtilityNetwork>(), new List<UtilityNetwork>() };

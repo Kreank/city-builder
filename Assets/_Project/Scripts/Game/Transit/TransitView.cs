@@ -49,6 +49,17 @@ namespace CityBuilder.Game.Transit
             runner = r;
             baseMaterial = lit;
             lineBase = transparent;
+            r.WorldReplaced += () =>
+            {
+                // Speichern & Laden: Objekte gehören zu Ids der alten Welt
+                foreach (var o in stopObjects.Values) if (o != null) Destroy(o);
+                foreach (var o in depotObjects.Values) if (o != null) Destroy(o);
+                foreach (var l in lineRenderers.Values) if (l != null) Destroy(l.gameObject);
+                stopObjects.Clear();
+                depotObjects.Clear();
+                lineRenderers.Clear();
+                builtVersion = builtRoads = -1;
+            };
         }
 
         void Start()

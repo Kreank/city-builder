@@ -24,5 +24,8 @@ namespace CityBuilder.Simulation.Core
         public int Minute => (int)(TimeOfDay * 24f * 60f) % 60;
 
         internal void Advance() => Tick++;
+
+        /// <summary>Spielstand: Uhr auf einen gespeicherten Tick setzen.</summary>
+        internal void Restore(long tick) => Tick = tick;
     }
 }

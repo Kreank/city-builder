@@ -132,6 +132,7 @@ namespace CityBuilder.Simulation.Core
         public static SimulationWorld CreateDefault(WorldSettings settings = null, int seed = 12345)
         {
             var world = new SimulationWorld(settings ?? new WorldSettings());
+            world.Seed = seed; // Speichern & Laden: CreateDefault(settings, seed) baut die Welt beim Laden neu auf
             world.AddSystem(new NoiseSystem());
             world.Traffic = new TrafficSystem(world.Roads, world.Min, world.Max, seed);
             world.AddSystem(world.Traffic);
@@ -246,6 +247,13 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Stadtkasse (Kontostand, Steuern, Bilanz). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Economy.EconomySystem Economy { get; private set; }
+
+        // --- Speichern & Laden
+        /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>
+        public int Seed { get; private set; } = 12345;
+        /// <summary>Alle Systeme in Ausführungsreihenfolge (Spielstand: ISaveable-Systeme werden automatisch erfasst).</summary>
+        public IReadOnlyList<ISimulationSystem> Systems => systems;
+        // --- Ende Speichern & Laden
 
         public void AddSystem(ISimulationSystem system)
         {

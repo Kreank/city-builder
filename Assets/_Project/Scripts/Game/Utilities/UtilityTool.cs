@@ -49,6 +49,7 @@ namespace CityBuilder.Game.Utilities
         public void Init(RoadTool roadTool, Material transparent)
         {
             tool = roadTool;
+            if (tool.Runner != null) tool.Runner.WorldReplaced += () => placingLine = false; // Speichern & Laden
             // UX: Esc/Rechtsklick beenden die Leitungskette (sonst zurück zum Auswählen)
             tool.RegisterOperation(() => Active && placingLine, () => placingLine = false);
             okMaterial = new Material(transparent) { name = "UtilityPreviewOk", color = new Color(0.3f, 0.9f, 1f, 0.45f) };
@@ -102,7 +103,7 @@ namespace CityBuilder.Game.Utilities
         void Update()
         {
             if (tool == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             if (kb.jKey.wasPressedThisFrame) tool.ToggleMode(RoadTool.Mode.Utility); // UX: erneut J = Auswählen
             if (!Active) return;

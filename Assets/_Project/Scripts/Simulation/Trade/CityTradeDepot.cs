@@ -20,7 +20,7 @@ namespace CityBuilder.Simulation.Trade
     /// </list>
     /// Zustand in klaren Feldern je Gut (für Speichern/Laden).
     /// </summary>
-    public sealed class CityTradeDepot : ITradeGateway
+    public sealed partial class CityTradeDepot : ITradeGateway
     {
         readonly TradeSystem trade;
         readonly GoodsSystem goods;

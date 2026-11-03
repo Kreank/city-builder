@@ -57,6 +57,7 @@ namespace CityBuilder.Game.Zoning
             runner = r;
             baseMaterial = lit;
             tool = GetComponent<RoadTool>();
+            r.WorldReplaced += () => { builtVersion = -1; visualHeights.Clear(); }; // Speichern & Laden: neu aufbauen
         }
 
         void Start()

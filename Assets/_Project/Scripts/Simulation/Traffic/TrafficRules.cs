@@ -53,7 +53,7 @@ namespace CityBuilder.Simulation.Traffic
     /// Alle vom Spieler gesetzten Verkehrsregeln. Übernimmt Regeln automatisch, wenn Segmente
     /// zerteilt, umgebaut oder umgedreht werden.
     /// </summary>
-    public sealed class TrafficRules
+    public sealed partial class TrafficRules
     {
         readonly RoadNetwork network;
         readonly Dictionary<int, NodeRules> nodes = new Dictionary<int, NodeRules>();

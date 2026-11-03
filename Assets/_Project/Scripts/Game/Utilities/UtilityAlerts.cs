@@ -24,7 +24,11 @@ namespace CityBuilder.Game.Utilities
         string abandonedZone;
         float abandonedSince;
 
-        public void Init(SimulationRunner r) => runner = r;
+        public void Init(SimulationRunner r)
+        {
+            runner = r;
+            r.WorldReplaced += () => { shownStatus = -1; abandonedPending = 0; removedLines = 0; }; // Speichern & Laden
+        }
 
         /// <summary>
         /// Ist irgendein Netz der Art unterdeckt (und wird die Art schon verlangt, d. h. gibt es einen Versorger)?

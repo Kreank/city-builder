@@ -30,7 +30,7 @@ namespace CityBuilder.Simulation.Services
     /// Direkte Folgen (keine Bürgerwirkungen – die baut das Bedürfnissystem über <see cref="Coverage"/>):
     /// Müll stapelt sich am Gebäude ohne Abfuhr (<see cref="GarbageAt"/>), Brandrisiko-Wert je Gebäude (<see cref="FireRisk"/>).
     /// </summary>
-    public sealed class ServiceSystem : ISimulationSystem, Economy.IUpkeepSource
+    public sealed partial class ServiceSystem : ISimulationSystem, Economy.IUpkeepSource
     {
         /// <summary>Alle 5 Ticks = alle 30 Spielminuten (wie Stadt und Versorgung).</summary>
         public int TickInterval => 5;
@@ -95,8 +95,9 @@ namespace CityBuilder.Simulation.Services
         readonly EnvironmentLayers environment;
         readonly Vector2 min, max;
 
-        readonly Dictionary<int, ServiceFacility> facilities = new Dictionary<int, ServiceFacility>();
-        readonly Dictionary<int, BuildingState> states = new Dictionary<int, BuildingState>();
+        // StableMap: Durchlauf-Reihenfolge wie Dictionary, aber speicherbar (Spielstand, Determinismus)
+        readonly Core.StableMap<int, ServiceFacility> facilities = new Core.StableMap<int, ServiceFacility>();
+        readonly Core.StableMap<int, BuildingState> states = new Core.StableMap<int, BuildingState>();
         /// <summary>Je Kanal: Gebäude-Id → erreichende Dienste (in Id-Reihenfolge aufgebaut).</summary>
         readonly Dictionary<int, BuildingLinks>[] links = new Dictionary<int, BuildingLinks>[Channels.Length];
         readonly List<Building> sortedBuildings = new List<Building>();

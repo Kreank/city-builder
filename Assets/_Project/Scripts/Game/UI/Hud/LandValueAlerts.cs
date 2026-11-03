@@ -22,7 +22,11 @@ namespace CityBuilder.Game.UI.Hud
         int decayed;
         string decayExample;
 
-        public void Init(SimulationRunner r) => runner = r;
+        public void Init(SimulationRunner r)
+        {
+            runner = r;
+            r.WorldReplaced += () => { lastDay = -1; decayed = 0; topLevel = 0; }; // Speichern & Laden: nichts aus der alten Welt melden
+        }
 
         void OnDestroy() => Unsubscribe();
 

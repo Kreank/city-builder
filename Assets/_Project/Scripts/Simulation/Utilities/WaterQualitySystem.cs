@@ -27,7 +27,7 @@ namespace CityBuilder.Simulation.Utilities
     /// Bürgersystem (Gesundheit). Bodenwert am Ufer: <see cref="PollutionNear"/>.
     /// </para>
     /// </summary>
-    public sealed class WaterQualitySystem : ISimulationSystem
+    public sealed partial class WaterQualitySystem : ISimulationSystem
     {
         public int TickInterval => 5;
 

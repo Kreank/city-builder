@@ -191,7 +191,7 @@ namespace CityBuilder.Simulation.Citizens
     }
 
     /// <summary>Kurze Erinnerungsliste je Bürger (fest <see cref="Memories.Capacity"/>, wird erst bei Bedarf angelegt).</summary>
-    public sealed class MemoryList
+    public sealed partial class MemoryList
     {
         readonly Memory[] items = new Memory[Memories.Capacity];
         public int Count { get; private set; }

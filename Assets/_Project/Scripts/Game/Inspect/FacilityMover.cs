@@ -77,7 +77,7 @@ namespace CityBuilder.Game.Inspect
         void Update()
         {
             if (tool == null || tool.Runner == null || tool.Runner.World == null) return;
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             if (kb == null) return;
             var moveKey = kb.FindKeyOnCurrentKeyboardLayout("y") ?? kb.yKey;
             if (moveKey != null && moveKey.wasPressedThisFrame && tool.IsSelectMode)

@@ -13,7 +13,12 @@ namespace CityBuilder.Game.Services
         SimulationRunner runner;
         int lastId;
 
-        public void Init(SimulationRunner r) => runner = r;
+        public void Init(SimulationRunner r)
+        {
+            runner = r;
+            // Speichern & Laden: Schlagzeilen der geladenen Welt nicht erneut melden
+            r.WorldReplaced += () => { var m = r.World?.Media; lastId = m != null && m.Recent.Count > 0 ? m.Recent[0].Id : 0; };
+        }
 
         void Update()
         {

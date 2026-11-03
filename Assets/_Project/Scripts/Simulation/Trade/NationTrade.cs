@@ -63,7 +63,7 @@ namespace CityBuilder.Simulation.Trade
     }
 
     /// <summary>Zollsätze eines Landes: Grundzoll + Sätze je Lieferland (NaN = Grundzoll). Handelsabkommen setzen effektiv 0.</summary>
-    public sealed class TariffSchedule
+    public sealed partial class TariffSchedule
     {
         readonly double[] overrides;
         public double General { get; internal set; }
@@ -91,7 +91,7 @@ namespace CityBuilder.Simulation.Trade
     /// Handelszustand eines Landes (Spieler und NPC gleich): Persönlichkeit, Zölle, Vertrauen in andere Länder, Gedächtnis,
     /// Handelsvolumen. Beziehungen (symmetrisch) liegen im <see cref="TradeSystem"/>.
     /// </summary>
-    public sealed class NationTrade
+    public sealed partial class NationTrade
     {
         public const int MemoryCapacity = 12;
 

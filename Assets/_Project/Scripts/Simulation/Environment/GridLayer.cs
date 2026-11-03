@@ -8,7 +8,7 @@ namespace CityBuilder.Simulation.Environment
     /// Rohstoffvorkommen). Die Bebauung ist frei – die Umwelt wird trotzdem in
     /// Zellen gerechnet, weil das schnell und gut skalierbar ist.
     /// </summary>
-    public sealed class GridLayer
+    public sealed partial class GridLayer
     {
         readonly float[] cells;
         float[] scratch;

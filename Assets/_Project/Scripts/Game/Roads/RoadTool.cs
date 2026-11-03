@@ -124,6 +124,10 @@ namespace CityBuilder.Game.Roads
             previewRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             previewRenderer.enabled = false;
 
+            // --- Speichern & Laden: neue Welt → laufenden Bau abbrechen, Auswahl/Vorlage verwerfen
+            runner.WorldReplaced += () => { Cancel(); ClearSelection(); currentTemplate = null; templatePlannedVersion = -1; };
+            // --- Ende Speichern & Laden
+
             // Zugehörige Anzeigen hängen am Werkzeug – so muss die Szene nicht neu erzeugt werden.
             Ensure<RoadGuidesView>().Init(this, previewMaterial);
             Ensure<TrafficPanel>().Init(this, previewMaterial);
@@ -203,6 +207,10 @@ namespace CityBuilder.Game.Roads
             // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
             // --- Ende G5
+
+            // --- Speichern & Laden: Spielmenü (Esc), Strg+S/Strg+L, Autosave
+            Ensure<CityBuilder.Game.Persistence.SaveManager>().Init(this);
+            // --- Ende Speichern & Laden
 
             // Spiel-UI (UI Toolkit) zuletzt – sie greift auf die Begleiter oben zu. Fehlen Theme/USS in Resources,
             // bleibt die alte IMGUI-Bauleiste als Rückfall.
@@ -317,12 +325,14 @@ namespace CityBuilder.Game.Roads
         /// <summary>Esc/Rechtsklick: erst laufenden Vorgang abbrechen, dann zurück zum Auswählen (läuft nach allen Updates).</summary>
         void HandleCancelInput()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             var mouse = Mouse.current;
             bool esc = kb != null && kb.escapeKey.wasPressedThisFrame &&
                        CityBuilder.Game.UI.Panels.WindowHost.EscapeConsumedFrame != Time.frameCount; // Fenster haben Vorrang
             bool rmb = mouse != null && mouse.rightButton.wasPressedThisFrame && !UiBlocker.IsPointerOverUi(mouse.position.ReadValue());
             if (!esc && !rmb) return;
+            // Speichern & Laden: Esc öffnet das Spielmenü nur, wenn hier nichts abzubrechen/zurückzusetzen ist
+            if (esc && (IsBusy || !IsSelectMode || SelectedNode != null || SelectedSegment != null)) GameKeyboard.ConsumeEscape();
             foreach (var op in operations)
             {
                 if (!op.Busy()) continue;
@@ -403,7 +413,7 @@ namespace CityBuilder.Game.Roads
 
         void Update()
         {
-            var kb = Keyboard.current;
+            var kb = GameKeyboard.Current;
             var mouse = Mouse.current;
             if (mouse == null) return;
 

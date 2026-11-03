@@ -1847,3 +1847,16 @@
     padding-top: 4px;
     padding-bottom: 4px;
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Speichern & Laden – Texteingabe im Baukasten (Ui.TextInput)
+   --------------------------------------------------------------------------------------------------------------- */
+.cb-text-row {
+    align-items: center;
+}
+
+.cb-text-input {
+    flex-grow: 1;
+    margin-left: 8px;
+    min-width: 120px;
+}
