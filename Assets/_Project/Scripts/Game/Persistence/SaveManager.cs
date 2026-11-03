@@ -52,6 +52,8 @@ namespace CityBuilder.Game.Persistence
         int autosaveMinutes = -1;
 
         public SaveMenuWindow Window { get; private set; }
+        /// <summary>Spielstart: Neues-Spiel-Fenster (Welt, Vorlieben, Startregion, Stadtname).</summary>
+        public NewGameWindow NewGameDialog { get; private set; }
 
         /// <summary>Name des laufenden Spiels (letztes Speichern/Laden); null = noch nie gespeichert.</summary>
         public string CurrentName { get; private set; }
@@ -82,9 +84,19 @@ namespace CityBuilder.Game.Persistence
         {
             if (tool == null || Runner == null) { enabled = false; return; }
             var hud = GetComponent<GameHud>();
-            if (hud != null && hud.Windows != null) Window = hud.Windows.Add(new SaveMenuWindow(this));
+            if (hud != null && hud.Windows != null)
+            {
+                Window = hud.Windows.Add(new SaveMenuWindow(this));
+                NewGameDialog = hud.Windows.Add(new NewGameWindow(this)); // Spielstart
+            }
             Runner.WorldReplaced += ScheduleAutosave;
             ScheduleAutosave();
+            // Spielstart: erster Programmstart ohne Spielstand → gleich das Neues-Spiel-Fenster (nicht schließbar)
+            if (Runner.AwaitingNewGame)
+            {
+                if (NewGameDialog != null) NewGameDialog.Open(firstStart: true);
+                else NewGame(null, null); // ohne neue UI: Standardwelt wie früher
+            }
         }
 
         void OnDestroy()
@@ -129,7 +141,7 @@ namespace CityBuilder.Game.Persistence
                 tool.IsSelectMode && !tool.IsBusy)
                 Window.Open();
             // Sicherheitsnetz: Menü zu → keine Texteingabe mehr aktiv (Fokus kann am versteckten Feld hängen bleiben)
-            if (Window == null || !Window.IsOpen) GameKeyboard.TextInputActive = false;
+            if ((Window == null || !Window.IsOpen) && (NewGameDialog == null || !NewGameDialog.IsOpen)) GameKeyboard.TextInputActive = false;
         }
 
         void PollWrite()
@@ -256,6 +268,32 @@ namespace CityBuilder.Game.Persistence
             HudMessages.Info("Neues Spiel", worldSeed.HasValue ? $"Welt-Seed {worldSeed}" : null, HudIconKind.Info, "save");
         }
 
+        // --- Spielstart & Startregion
+        /// <summary>Neues-Spiel-Fenster öffnen (aus dem Spielmenü); ohne neue UI wie früher sofort neu starten.</summary>
+        public void OpenNewGame()
+        {
+            if (NewGameDialog != null) NewGameDialog.Open(firstStart: false);
+            else NewGame(null, null);
+        }
+
+        /// <summary>Neues Spiel aus dem Neues-Spiel-Fenster (Seed, Startregion, Stadtname stehen in den Einstellungen).</summary>
+        public void StartNewGame(WorldSettings settings)
+        {
+            Runner.NewGame(settings);
+            CurrentName = null;
+            var w = Runner.World;
+            HudMessages.Info($"{w.Realm.DisplayName} gegründet",
+                w.StartRegion != null ? $"Region {w.StartRegion.Name} · Welt-Seed {settings.WorldSeed}" : null, HudIconKind.Info, "save");
+        }
+
+        /// <summary>Gibt es schon einen Spielstand (dann startet das Spiel ohne Neues-Spiel-Fenster)?</summary>
+        public static bool HasAnySave()
+        {
+            try { return Directory.Exists(Folder) && Directory.GetFiles(Folder, "*" + Extension).Length > 0; }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { return false; }
+        }
+        // --- Ende Spielstart
+
         /// <summary>Alle Spielstände, neueste zuerst (nur Köpfe gelesen).</summary>
         public List<SaveSlot> ListSaves()
         {
@@ -276,7 +314,7 @@ namespace CityBuilder.Game.Persistence
         string DefaultName()
         {
             var w = Runner?.World;
-            return w?.StartRegion != null ? w.StartRegion.Name : "Spielstand";
+            return w?.Realm != null ? w.Realm.CityName : w?.StartRegion != null ? w.StartRegion.Name : "Spielstand"; // Spielstart: Stadtname
         }
 
         static string PathFor(string name)

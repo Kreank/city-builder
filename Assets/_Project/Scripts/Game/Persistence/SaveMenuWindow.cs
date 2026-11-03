@@ -7,7 +7,7 @@ namespace CityBuilder.Game.Persistence
 {
     /// <summary>
     /// Spielmenü (mittiges Fenster, Esc): Speichern / Speichern unter, Laden (Liste mit Name, Spielzeit, Einwohner,
-    /// Kontostand, Dateigröße), Neues Spiel (Welt-Seed/Startregion optional), Einstellungen (Autosave). Logik im
+    /// Kontostand, Dateigröße), Neues Spiel (öffnet das Neues-Spiel-Fenster), Einstellungen (Autosave). Logik im
     /// <see cref="SaveManager"/>. Solange das Menü offen ist, ist das Spiel pausiert.
     /// </summary>
     public sealed class SaveMenuWindow : GameWindow
@@ -23,12 +23,10 @@ namespace CityBuilder.Game.Persistence
         bool open;
         int tab;
         string saveAsName = "";
-        string seedText = "", regionText = "";
         SaveSlot selected;
         List<SaveSlot> slots;
         float slotsReadAt = -10f;
         int page;
-        bool confirmNew;
         int speedBeforeOpen = -1;
 
         public SaveMenuWindow(SaveManager manager) : base(WindowSlot.Center) { this.manager = manager; }
@@ -40,7 +38,6 @@ namespace CityBuilder.Game.Persistence
             open = true;
             tab = startTab;
             selected = null;
-            confirmNew = false;
             slots = null;
             ContentVersion++;
             if (Runner != null && !Runner.IsPaused) { speedBeforeOpen = Runner.SpeedIndex; Runner.SetSpeed(0); }
@@ -72,7 +69,7 @@ namespace CityBuilder.Game.Persistence
 
         public override void DrawBody(Ui ui)
         {
-            ui.Tabs(TabNames, tab, i => { tab = i; selected = null; confirmNew = false; slots = null; ContentVersion++; });
+            ui.Tabs(TabNames, tab, i => { tab = i; selected = null; slots = null; ContentVersion++; });
             switch (tab)
             {
                 case 0: DrawSave(ui); break;
@@ -141,31 +138,13 @@ namespace CityBuilder.Game.Persistence
 
         void DrawNewGame(Ui ui)
         {
+            // Spielstart & Startregion: eigenes Fenster (Welt, Vorlieben, Vorschläge, Stadtname) statt Seed/Regionsnummer
             ui.Section("Neues Spiel");
-            ui.Note("Leer lassen = Einstellungen der Szene (Welt-Seed) bzw. automatische Startregion (gemäßigt, fruchtbar, Fluss/Küste).");
-            ui.TextInput("Welt-Seed", seedText, v => seedText = v, null, 12);
-            ui.TextInput("Startregion (Nr.)", regionText, v => regionText = v, null, 6);
-            bool seedOk = string.IsNullOrWhiteSpace(seedText) || int.TryParse(seedText.Trim(), out _);
-            bool regionOk = string.IsNullOrWhiteSpace(regionText) || int.TryParse(regionText.Trim(), out _);
-            if (!seedOk || !regionOk) ui.Message("Eingabe", "Seed und Startregion müssen ganze Zahlen sein.", Tone.Warn);
+            ui.Note("Welt würfeln, Vorlieben wählen (Klima, Lage, Gelände, Schwerpunkt …), Startregion aussuchen und die Stadt benennen. " +
+                    "Du beginnst als freie Stadt in unbesiedeltem Land – mit weiteren Städten wirst du später ein eigenes Land.");
             using (ui.Actions())
-            {
-                if (!confirmNew)
-                    ui.ActionButton("Neues Spiel …", () => confirmNew = true, ActionStyle.Secondary, enabled: seedOk && regionOk);
-                else
-                {
-                    ui.ActionButton("Wirklich neu starten", () =>
-                    {
-                        int? seed = int.TryParse(seedText.Trim(), out int s) ? s : (int?)null;
-                        int? region = int.TryParse(regionText.Trim(), out int r) ? r : (int?)null;
-                        manager.NewGame(seed, region);
-                        confirmNew = false;
-                        Close();
-                    }, ActionStyle.Danger);
-                    ui.ActionButton("Abbrechen", () => confirmNew = false);
-                }
-            }
-            if (confirmNew) ui.Message("Achtung", "Nicht gespeicherter Fortschritt geht verloren (Autosave bleibt erhalten).", Tone.Warn);
+                ui.ActionButton("Neues Spiel einrichten …", () => { Close(); manager.OpenNewGame(); }, ActionStyle.Primary);
+            ui.Message("Hinweis", "Nicht gespeicherter Fortschritt geht beim Start verloren (Autosave bleibt erhalten).", Tone.Warn);
         }
 
         void DrawSettings(Ui ui)

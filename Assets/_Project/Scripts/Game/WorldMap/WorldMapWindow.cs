@@ -322,6 +322,9 @@ namespace CityBuilder.Game.WorldMap
             }
         }
 
+        /// <summary>Farbe eines Bioms (wie in der Biom-Ansicht) – auch für die Karte im Neues-Spiel-Fenster.</summary>
+        public static Color32 BiomeColor(Biome b) => BiomeColors[Mathf.Clamp((int)b, 0, BiomeColors.Length - 1)];
+
         /// <summary>Spielstart: unbesiedeltes Land ohne Staat (Länder-Ansicht).</summary>
         public const uint FreeLandColor = 0xD8D2C0;
 

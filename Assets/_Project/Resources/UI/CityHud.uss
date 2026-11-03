@@ -1860,3 +1860,49 @@
     margin-left: 8px;
     min-width: 120px;
 }
+
+/* ------------------------------------------------------------ Spielstart: Neues-Spiel-Fenster (Auswahl-Chips, Schritte) */
+
+.cb-choice {
+    height: 28px;
+    padding-left: 11px;
+    padding-right: 11px;
+    border-width: 1px;
+    border-color: var(--cb-border);
+    background-color: var(--cb-surface-2);
+    color: var(--cb-text);
+    transition-property: background-color, border-color, color, opacity;
+    transition-duration: 0.12s;
+}
+
+.cb-choice:hover {
+    background-color: var(--cb-card-hover);
+}
+
+.cb-choice.cb-on {
+    background-color: var(--cb-action);
+    border-color: var(--cb-action);
+    color: var(--cb-on-action);
+}
+
+.cb-choice--rare {
+    border-color: var(--cb-accent);
+}
+
+.cb-choice.cb-disabled {
+    opacity: 0.35;
+}
+
+.cb-choice__badge {
+    margin-left: 6px;
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+}
+
+.cb-choice.cb-on .cb-choice__badge {
+    color: var(--cb-on-action);
+}
+
+.cb-choice--rare .cb-choice__badge {
+    color: var(--cb-accent);
+}
