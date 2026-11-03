@@ -35,6 +35,8 @@ namespace CityBuilder.Simulation.Traffic
         /// <summary>Segment-Parameter t der Zufahrt.</summary>
         public float DestinationT { get; internal set; }
         public bool HasSegmentDestination => DestinationSegmentId >= 0;
+        /// <summary>Verkehrszeit (<see cref="TrafficSystem.Time"/>, s) beim Start – für die Fahrtdauer im Inspektor.</summary>
+        public float StartTime { get; internal set; }
 
         /// <summary>Wartezeit am Stück (s) – für Deadlock-Auflösung und Umleitung.</summary>
         public float WaitTime { get; internal set; }

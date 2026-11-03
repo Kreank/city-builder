@@ -135,6 +135,19 @@ namespace CityBuilder.Simulation.Citizens
         public IReadOnlyList<Household> HouseholdsIn(int buildingId) => homes.TryGetValue(buildingId, out var l) ? l : NoHouseholds;
         public IReadOnlyList<Citizen> WorkersAt(int buildingId) => staff.TryGetValue(buildingId, out var l) ? l : NoCitizens;
 
+        /// <summary>Bürger, zu dessen Autofahrt die Fahrt-Id gehört (<see cref="Vehicle.TripId"/>); null = Durchgangsverkehr/beendet.</summary>
+        public Citizen CitizenForTrip(int tripId) =>
+            tripId != 0 && trips.TryGetValue(tripId, out var c) && !gone.Contains(c) ? c : null;
+
+        /// <summary>Fahrzeug der laufenden Autofahrt des Bürgers (null = keine Autofahrt bzw. Fahrzeug schon entfernt).</summary>
+        public Vehicle VehicleOf(Citizen c)
+        {
+            if (c == null || c.TripId == 0) return null;
+            foreach (var v in traffic.ActiveVehicles)
+                if (v.TripId == c.TripId) return v;
+            return null;
+        }
+
         /// <summary>Bürger, die sich gerade im Gebäude aufhalten.</summary>
         public int PresentIn(int buildingId)
         {
@@ -557,6 +570,7 @@ namespace CityBuilder.Simulation.Citizens
             if (destination.IsNone) { c.BusyUntil = now + 10; return; }
             c.Purpose = purpose;
             c.Destination = destination;
+            c.TripStartTick = now;
             c.Activity = Activity.Travelling;
             c.Mode = TravelMode.Other;
             if (SamePlace(c.Location, destination)) { c.ArriveTick = now; return; }

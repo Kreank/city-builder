@@ -152,8 +152,8 @@ namespace CityBuilder.Game.Roads
             zoneView.Init(runner, previewMaterial);
             if (litBase != null) Ensure<BuildingView>().Init(runner, litBase);
 
-            // G2 Bürger: Info-Modus (C) mit Bürger-/Gebäude-Panel
-            Ensure<CityBuilder.Game.Citizens.CitizenPanel>().Init(this, previewMaterial);
+            // Info-Modus (C): Inspektor für Gebäude, Fahrzeuge, Versorgungsbauwerke und Bürger (+ Stadtübersicht)
+            Ensure<CityBuilder.Game.Inspect.InspectorPanel>().Init(this, previewMaterial);
 
             // Terraforming-Werkzeug (Modus Terraform, Taste L)
             Ensure<CityBuilder.Game.Terrain.TerraformTool>().Init(this, previewMaterial);
@@ -292,7 +292,7 @@ namespace CityBuilder.Game.Roads
             switch (CurrentMode)
             {
                 case Mode.Zone: UpdateZone(raw); break;
-                case Mode.Inspect: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G2: Klick wählt Gebäude (CitizenPanel)
+                case Mode.Inspect: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Klick wählt Objekt (InspectorPanel)
                 case Mode.Terraform: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // TerraformTool
                 case Mode.Utility: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // G3: UtilityTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
