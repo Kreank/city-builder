@@ -35,6 +35,10 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Gelände unter dem Netz (Standard: flach auf 0).</summary>
         public IGround Ground { get; set; } = FlatGround.Instance;
 
+        // --- Stadtkasse (Hook): prüft/bucht Baukosten in RoadBuilder. null = Bauen kostenlos (reine Netz-Tests).
+        public Economy.IConstructionBudget Budget { get; set; }
+        // --- Ende Stadtkasse
+
         public IEnumerable<RoadNode> Nodes => nodes.Values;
         public IEnumerable<RoadSegment> Segments => segments.Values;
         public int NodeCount => nodes.Count;

@@ -47,8 +47,12 @@ namespace CityBuilder.Simulation.Environment
         public int ChangedPoints;
         /// <summary>Gitterpunkte im Pinsel, die ganz gesperrt waren (unter Straßen/Gebäuden).</summary>
         public int LockedPoints;
-        /// <summary>Bewegte Erdmenge in m³ (Summe |Δh| · Zellfläche) – Grundlage für spätere Kosten.</summary>
+        /// <summary>Bewegte Erdmenge in m³ (Summe |Δh| · Zellfläche).</summary>
         public float Volume;
+        /// <summary>Gebuchte Kosten (Volumen × <c>EconomyRules.TerraformCostPerCubicMeter</c>).</summary>
+        public double Cost;
+        /// <summary>Nicht ausgeführt: zu wenig Geld in der Stadtkasse.</summary>
+        public bool InsufficientFunds;
         /// <summary>Geändertes Rechteck (Weltkoordinaten, inkl. einer Zelle Rand). Nur gültig, wenn <see cref="Changed"/>.</summary>
         public Vector2 Min, Max;
 
