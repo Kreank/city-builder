@@ -108,8 +108,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Ziel-Halt (`CitizenSystem.EgressTicks`), Parkwege (`TimeModel.WalkTicks`, gleiche Formel in `PedestrianPlanner.ParkWalkTicks`),
   statistische Busfahrten, Lkw-Platzhalter (`GoodsRules.PlaceholderTicks`: 1,3 × Luftlinie ÷ 9 m/s). ÖPNV-Fahrgast geht erst zur
   Haltestelle (`Passenger.ReadyTime` = Start + Zugangsweg) und kann erst dann einsteigen.
-- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,67) × `SpeedMultipliers` 1/2/4 →
-  1 Spieltag = 6 / 3 / 1,5 Minuten (120 / 240 / 480 Verkehrsschritte je Sekunde). Der Runner verteilt die Verkehrsschritte über
+- **Echtzeit** (nur Unity, `SimulationRunner`): Tempo 1/2/3 = `TicksPerRealSecond` (0,111) × `SpeedMultipliers` 1/3/6 →
+  1 Spieltag = 36 / 12 / 6 Minuten, Verkehr sichtbar 5× / 15× / 30× Echtzeit (20 / 60 / 120 Verkehrsschritte je Sekunde;
+  Entscheidung des Spielers 2026-11-03 „viel langsamer“, vorher 6 / 3 / 1,5 min). `ticksPerSecond` ist **nicht** mehr
+  serialisiert (die Szene hatte einen alten Wert 10 gespeichert, der das Zeitmodell überschrieb). Der Runner verteilt die Verkehrsschritte über
   die Frames (`Substep`), Budget `maxSimMillisecondsPerFrame` 8 ms: Rückstand wird verworfen (Simulation langsamer, Frame
   friert nicht ein; `DroppedStepsLastFrame`, `LastFrameSimMilliseconds` in Debug-HUD/Hilfe). `TickAlpha` = Bruchteil zum nächsten
   **Verkehrsschritt** (Fahrzeug-Interpolation), `GameTickTime` = Kalenderzeit für Fußgänger, `AnimationTimeScale` = Verkehrszeit je
