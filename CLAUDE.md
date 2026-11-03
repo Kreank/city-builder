@@ -221,7 +221,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Leitungen am selben Punkt zusammenlegen.
 
 ## Store-Assets (nicht im Git, `Assets/ThirdParty/`)
-Import über Package Manager → My Assets (oder Batch `-importPackage`), danach Menü
+Einfachster Weg: Pakete im Package Manager → My Assets nur **herunterladen**, dann Menü
+„City Builder → Third Party → Import Downloaded Store Packages“ (`StorePackageImporter`: importiert alle aus dem Cache
+`%APPDATA%\Unity\Asset Store-5.x` ohne Dialog und führt danach die beiden Schritte unten aus).
+Manuell: Import über Package Manager → My Assets (oder Batch `-importPackage`), danach Menü
 „City Builder → Third Party → Organize And Convert“ (verschiebt nach ThirdParty, Built-in → URP) und
 „… → Build Asset Catalog“ (erzeugt `ThirdParty/_Catalog/Resources/AssetCatalog.asset`). Ohne Katalog: Platzhalter.
 Pakete: SimplePoly City, Pandazole City Town, Colorful City (Triangularity), Modular Lowpoly Streets,
