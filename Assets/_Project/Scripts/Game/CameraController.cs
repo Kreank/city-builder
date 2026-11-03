@@ -32,6 +32,12 @@ namespace CityBuilder.Game
 
         void Awake() => targetDistance = distance;
 
+        /// <summary>
+        /// Inspektor: Fokus folgt diesem Punkt (null = frei). Wird jedes Frame neu gesetzt; Verschieben per Tastatur
+        /// hebt das Folgen auf (setzt null) – der Setzende erkennt das daran.
+        /// </summary>
+        public Vector3? FollowTarget { get; set; }
+
         void Start() => runner = FindAnyObjectByType<SimulationRunner>();
 
         void LateUpdate()
@@ -50,6 +56,15 @@ namespace CityBuilder.Game
                 if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) move.x -= 1f;
                 if (kb.qKey.isPressed) yaw += rotateSpeed * dt;
                 if (kb.eKey.isPressed) yaw -= rotateSpeed * dt;
+            }
+
+            if (move != Vector2.zero) FollowTarget = null;
+            else if (FollowTarget.HasValue)
+            {
+                var t = FollowTarget.Value;
+                float k = 1f - Mathf.Exp(-8f * dt);
+                focus.x = Mathf.Lerp(focus.x, t.x, k);
+                focus.z = Mathf.Lerp(focus.z, t.z, k);
             }
 
             if (move != Vector2.zero)
