@@ -92,7 +92,7 @@ namespace CityBuilder.Game.Traffic
                 small = new GUIStyle(GUI.skin.label) { fontSize = 12, richText = true, wordWrap = true };
             }
 
-            var area = new Rect(Screen.width - 430f, 10f, 420f, Mathf.Min(Screen.height - 170f, 620f));
+            var area = new Rect(Screen.width - 430f, HudLayout.TopInset, 420f, Mathf.Min(Screen.height - HudLayout.TopInset - HudLayout.BottomInset, 620f));
             UiBlocker.Register(area);
             GUI.Box(area, GUIContent.none);
             GUILayout.BeginArea(new Rect(area.x + 10f, area.y + 8f, area.width - 20f, area.height - 16f));

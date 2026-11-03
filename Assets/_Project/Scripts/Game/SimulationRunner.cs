@@ -61,18 +61,25 @@ namespace CityBuilder.Game
 
         public void SetSpeed(int index) => SpeedIndex = Mathf.Clamp(index, 0, SpeedMultipliers.Length - 1);
 
+        /// <summary>Anzahl der Tempostufen inkl. Pause (Index 0).</summary>
+        public static int SpeedCount => SpeedMultipliers.Length;
+        public static int MultiplierOf(int index) => SpeedMultipliers[Mathf.Clamp(index, 0, SpeedMultipliers.Length - 1)];
+
         int lastSpeedBeforePause = 1;
+
+        /// <summary>Pause an/aus (Leertaste oder Pause-Knopf der UI); kehrt zum Tempo vor der Pause zurück.</summary>
+        public void TogglePause()
+        {
+            if (IsPaused) SetSpeed(lastSpeedBeforePause);
+            else { lastSpeedBeforePause = SpeedIndex; SetSpeed(0); }
+        }
 
         void HandleSpeedInput()
         {
             var kb = Keyboard.current;
             if (kb == null) return;
 
-            if (kb.spaceKey.wasPressedThisFrame)
-            {
-                if (IsPaused) SetSpeed(lastSpeedBeforePause);
-                else { lastSpeedBeforePause = SpeedIndex; SetSpeed(0); }
-            }
+            if (kb.spaceKey.wasPressedThisFrame) TogglePause();
             if (kb.digit1Key.wasPressedThisFrame) SetSpeed(1);
             if (kb.digit2Key.wasPressedThisFrame) SetSpeed(2);
             if (kb.digit3Key.wasPressedThisFrame) SetSpeed(3);

@@ -19,7 +19,8 @@ namespace CityBuilder.Game.Terrain
         public const float ApplyRate = 20f;
         const int RingSegments = 72;
 
-        static readonly float[] Strengths = { 1f, 3f, 8f };
+        /// <summary>Stärkestufen sanft/mittel/stark (Bauleiste).</summary>
+        public static readonly float[] Strengths = { 1f, 3f, 8f };
 
         RoadTool tool;
         Material ringMaterial;
