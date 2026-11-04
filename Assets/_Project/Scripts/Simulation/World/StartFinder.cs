@@ -393,7 +393,7 @@ namespace CityBuilder.Simulation.World
                 if (sb.Length > 0) sb.Append(" · ");
                 sb.Append(o.Name);
             }
-            return sb.Length > 0 ? sb.ToString() : "keine Vorlieben";
+            return sb.Length > 0 ? sb.ToString() : "keine Wünsche";
         }
     }
 }

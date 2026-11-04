@@ -240,6 +240,12 @@ namespace CityBuilder.Game.Zoning
                 HintText = $"{t.DisplayName} · {Capacity(t)} · Kosten {CityBuilder.Game.UI.Hud.BuildLabels.Money(t.Cost)} · {turn}" +
                            (reach != null ? " · " + reach : "") + (missing.Length > 0 ? " · " + missing : "") + " · ziehen = Reihe";
                 label = $"{t.DisplayName} · {t.Cost:0} € · {reach}\n{NeedLine()}";
+                if (!plan.HasRoadAccess)
+                {
+                    // Frei setzen: erlaubt, aber ohne Straße ruht der Bau und das Gebäude verfällt
+                    HintText = $"{t.DisplayName} · Kosten {CityBuilder.Game.UI.Hud.BuildLabels.Money(t.Cost)} · {turn} · " + NoRoadText;
+                    label = $"{t.DisplayName} · {t.Cost:0} €\nNoch keine Straße – Vorderseite (Pfeil) zur geplanten Straße drehen (, und .)";
+                }
             }
             else
             {
@@ -382,6 +388,11 @@ namespace CityBuilder.Game.Zoning
             labelWorld = SimConvert.ToWorld(b.Position, b.Height + PlaceholderTall(type) + 6f);
             if (clicked) city.DemolishHouse(b.Id);
         }
+
+        /// <summary>Hinweis für Gebäude ohne Straße (frei setzen).</summary>
+        public static string NoRoadText =>
+            $"Noch keine Straße: gebaut wird erst, wenn eine Stadtstraße vor der Vorderseite (Pfeil, höchstens {CitySystem.HouseRoadReach:0} m) liegt – " +
+            $"ohne Anbindung verfällt es nach {CitySystem.HouseNoRoadDays} Tagen";
 
         public static string ErrorText(HousePlan plan)
         {

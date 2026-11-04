@@ -97,11 +97,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(plan.Position.X, single.Items[0].Position.X, 3);
             Assert.Equal(plan.Position.Y, single.Items[0].Position.Y, 3);
 
-            // ohne Straße: ein ungültiger Platz
+            // ohne Straße: ein Platz (frei setzen – gültig, wartet aber auf eine Straße)
             var none = w.City.PlanHouseRow(t, new Vector2(0, 200), new Vector2(80, 200));
             Assert.False(none.Aligned);
             Assert.Single(none.Items);
-            Assert.Equal(HouseBuildError.NoRoadAccess, none.Items[0].Error);
+            Assert.True(none.Items[0].IsValid, none.Items[0].Error.ToString());
+            Assert.False(none.Items[0].HasRoadAccess);
         }
 
         [Fact]

@@ -23,29 +23,40 @@ namespace CityBuilder.Game.UI.Panels
             {
                 var r = Box("cb-field", "cb-text-row");
                 r.Add(Lbl("cb-field__label"));
-                var tf = new TextField { maxLength = maxLength };
-                tf.AddToClassList("cb-text-input");
-                var holder = new TextHolder();
-                tf.userData = holder;
-                tf.RegisterValueChangedCallback(ev => holder.Change?.Invoke(ev.newValue));
-                tf.RegisterCallback<FocusInEvent>(_ => GameKeyboard.TextInputActive = true);
-                tf.RegisterCallback<FocusOutEvent>(_ => GameKeyboard.TextInputActive = false);
-                tf.RegisterCallback<DetachFromPanelEvent>(_ => GameKeyboard.TextInputActive = false);
-                tf.RegisterCallback<KeyDownEvent>(ev =>
-                {
-                    if (ev.keyCode == KeyCode.Return || ev.keyCode == KeyCode.KeypadEnter)
-                    {
-                        holder.Submit?.Invoke();
-                        tf.Blur();
-                        Clicked?.Invoke();
-                    }
-                    else if (ev.keyCode == KeyCode.Escape) tf.Blur();
-                }, TrickleDown.TrickleDown);
-                r.Add(tf);
+                r.Add(NewTextField(maxLength, null));
                 return r;
             });
             SetText((Label)e[0], label);
-            var field = (TextField)e[1];
+            BindTextField((TextField)e[1], value, onChange, onSubmit);
+        }
+
+        /// <summary>Neues Textfeld mit dunklem Stil (<c>cb-text-input</c>), Enter/Esc und Tastatursperre.</summary>
+        TextField NewTextField(int maxLength, string extraClass)
+        {
+            var tf = new TextField { maxLength = maxLength };
+            tf.AddToClassList("cb-text-input");
+            if (!string.IsNullOrEmpty(extraClass)) tf.AddToClassList(extraClass);
+            var holder = new TextHolder();
+            tf.userData = holder;
+            tf.RegisterValueChangedCallback(ev => holder.Change?.Invoke(ev.newValue));
+            tf.RegisterCallback<FocusInEvent>(_ => GameKeyboard.TextInputActive = true);
+            tf.RegisterCallback<FocusOutEvent>(_ => GameKeyboard.TextInputActive = false);
+            tf.RegisterCallback<DetachFromPanelEvent>(_ => GameKeyboard.TextInputActive = false);
+            tf.RegisterCallback<KeyDownEvent>(ev =>
+            {
+                if (ev.keyCode == KeyCode.Return || ev.keyCode == KeyCode.KeypadEnter)
+                {
+                    holder.Submit?.Invoke();
+                    tf.Blur();
+                    Clicked?.Invoke();
+                }
+                else if (ev.keyCode == KeyCode.Escape) tf.Blur();
+            }, TrickleDown.TrickleDown);
+            return tf;
+        }
+
+        static void BindTextField(TextField field, string value, Action<string> onChange, Action onSubmit)
+        {
             var h = (TextHolder)field.userData;
             h.Change = onChange;
             h.Submit = onSubmit;

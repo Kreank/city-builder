@@ -169,6 +169,9 @@ namespace CityBuilder.Game.UI.Hud
             HudMessages.Posted += OnMessage;
             Ui.TooltipHook = (e, text) => Tip(e, text);
             if (!UiPanels.ForceImgui) BuildWindows();
+            // Tooltip über allem (Fenster, Mitte-Ebene und Weltbeschriftungen kommen erst in BuildWindows dazu)
+            toastStack.BringToFront();
+            tooltip.BringToFront();
             // G6: Aufstiege/Verfall gesammelt als Meldung (höchstens 1× je Spieltag)
             var lvAlerts = GetComponent<LandValueAlerts>() ?? gameObject.AddComponent<LandValueAlerts>();
             lvAlerts.Init(runner);

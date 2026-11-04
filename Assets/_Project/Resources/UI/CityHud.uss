@@ -1858,7 +1858,342 @@
 .cb-text-input {
     flex-grow: 1;
     margin-left: 8px;
+    margin-right: 0;
     min-width: 120px;
+}
+
+/* Unity-Standardfeld ist hell – dunkel wie die übrigen Flächen, sonst helle Schrift auf hellem Grund */
+.cb-text-input > .unity-base-text-field__input {
+    min-height: 32px;
+    padding-left: 10px;
+    padding-right: 10px;
+    border-width: 1px;
+    border-radius: var(--cb-radius-button);
+    border-color: var(--cb-border);
+    background-color: var(--cb-surface-2);
+    color: var(--cb-text);
+    font-size: var(--cb-font-m);
+    --unity-cursor-color: var(--cb-text);
+    --unity-selection-color: rgba(43, 179, 163, 0.45);
+    transition-property: border-color, background-color;
+    transition-duration: 0.12s;
+}
+
+.cb-text-input:hover > .unity-base-text-field__input {
+    border-color: var(--cb-text-muted);
+}
+
+.cb-text-input:focus > .unity-base-text-field__input {
+    border-color: var(--cb-action);
+    background-color: #101216;
+}
+
+.cb-text-input .unity-text-element {
+    color: var(--cb-text);
+}
+
+.cb-text-input--large {
+    margin-left: 0;
+}
+
+.cb-text-input--large > .unity-base-text-field__input {
+    min-height: 52px;
+    padding-left: 16px;
+    padding-right: 16px;
+    border-radius: var(--cb-radius-card);
+    font-size: 22px;
+    -unity-font-style: bold;
+}
+
+.cb-big-input {
+    margin-top: 4px;
+    margin-bottom: 10px;
+}
+
+/* ------------------------------------------------------------ Assistent (Neues-Spiel-Fenster): Schritte, Begrüßung, Gruppen, Auswahlkarten */
+
+.cb-steps {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 14px;
+}
+
+.cb-step {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 1;
+    padding-left: 4px;
+    padding-right: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: var(--cb-radius-button);
+    transition-property: background-color;
+    transition-duration: 0.12s;
+}
+
+.cb-step:hover {
+    background-color: var(--cb-card);
+}
+
+.cb-step.cb-disabled {
+    opacity: 0.45;
+}
+
+.cb-step.cb-disabled:hover {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.cb-step__dot {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    border-width: 2px;
+    border-color: var(--cb-border);
+    background-color: var(--cb-surface-2);
+    align-items: center;
+    justify-content: center;
+    transition-property: background-color, border-color;
+    transition-duration: 0.15s;
+}
+
+.cb-step__num {
+    font-size: var(--cb-font-m);
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    color: var(--cb-text-muted);
+}
+
+.cb-step.cb-on > .cb-step__dot {
+    border-color: var(--cb-accent);
+    background-color: var(--cb-accent);
+}
+
+.cb-step.cb-on .cb-step__num {
+    color: var(--cb-on-accent);
+}
+
+.cb-step--done > .cb-step__dot {
+    border-color: var(--cb-action);
+    background-color: var(--cb-ok-surface);
+}
+
+.cb-step--done .cb-step__num {
+    color: var(--cb-action);
+}
+
+.cb-step__text {
+    margin-left: 8px;
+    flex-shrink: 1;
+}
+
+.cb-step__title {
+    font-size: var(--cb-font-m);
+    -unity-font-style: bold;
+    color: var(--cb-text-secondary);
+}
+
+.cb-step.cb-on .cb-step__title {
+    color: var(--cb-text);
+}
+
+.cb-step__hint {
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+}
+
+.cb-steps__line {
+    flex-grow: 1;
+    min-width: 12px;
+    height: 2px;
+    margin-left: 4px;
+    margin-right: 4px;
+    border-radius: 1px;
+    background-color: var(--cb-border);
+}
+
+.cb-steps__line--done {
+    background-color: var(--cb-action);
+}
+
+.cb-hero {
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+    margin-bottom: 12px;
+    border-radius: var(--cb-radius-card);
+    border-width: 1px;
+    border-left-width: 4px;
+    border-color: var(--cb-warn-border);
+    border-left-color: var(--cb-accent);
+    background-color: var(--cb-accent-surface);
+}
+
+.cb-hero__kicker {
+    font-size: var(--cb-font-xs);
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    color: var(--cb-accent);
+    margin-bottom: 4px;
+}
+
+.cb-hero__title {
+    font-size: 24px;
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.cb-hero__text {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--cb-text-secondary);
+    white-space: normal;
+}
+
+.cb-group {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-radius: var(--cb-radius-card);
+    border-width: 1px;
+    border-color: var(--cb-border-soft);
+    background-color: var(--cb-surface);
+}
+
+.cb-group__head {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cb-group__title {
+    font-size: var(--cb-font-l);
+    -unity-font-style: bold;
+    flex-shrink: 0;
+}
+
+.cb-group__hint {
+    flex-grow: 1;
+    margin-left: 10px;
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+    -unity-text-align: middle-right;
+}
+
+.cb-group__desc {
+    margin-top: 2px;
+    margin-bottom: 8px;
+    font-size: var(--cb-font-s);
+    color: var(--cb-text-muted);
+    white-space: normal;
+}
+
+.cb-option-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-left: -4px;
+    margin-right: -4px;
+}
+
+.cb-option-cell {
+    width: 33.333%;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-bottom: 8px;
+}
+
+.cb-option {
+    flex-grow: 1;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    border-radius: var(--cb-radius-button);
+    border-width: 1px;
+    border-color: var(--cb-border);
+    background-color: var(--cb-card);
+    transition-property: background-color, border-color, opacity;
+    transition-duration: 0.12s;
+}
+
+.cb-option:hover {
+    background-color: var(--cb-card-hover);
+    border-color: var(--cb-text-muted);
+}
+
+.cb-option.cb-on {
+    border-color: var(--cb-action);
+    background-color: #1C3431;
+}
+
+.cb-option--rare {
+    border-color: var(--cb-accent);
+}
+
+.cb-option.cb-disabled {
+    opacity: 0.35;
+}
+
+.cb-option.cb-disabled:hover {
+    background-color: var(--cb-card);
+    border-color: var(--cb-border);
+}
+
+.cb-option__head {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cb-option__check {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-right: 8px;
+    border-radius: 7px;
+    border-width: 2px;
+    border-color: var(--cb-text-muted);
+}
+
+.cb-option.cb-on .cb-option__check {
+    border-color: var(--cb-action);
+    background-color: var(--cb-action);
+}
+
+.cb-option__title {
+    flex-grow: 1;
+    flex-shrink: 1;
+    font-size: var(--cb-font-m);
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.cb-option__badge {
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+}
+
+.cb-option--rare .cb-option__badge {
+    color: var(--cb-accent);
+}
+
+.cb-option.cb-on .cb-option__badge {
+    color: var(--cb-action);
+}
+
+.cb-option__text {
+    margin-top: 4px;
+    font-size: var(--cb-font-xs);
+    color: var(--cb-text-muted);
+    white-space: normal;
+}
+
+/* Breiterer Assistent: Karte groß, drei Spalten Auswahl */
+.cb-window--wizard {
+    width: 880px;
 }
 
 /* ------------------------------------------------------------ Spielstart: Neues-Spiel-Fenster (Auswahl-Chips, Schritte) */

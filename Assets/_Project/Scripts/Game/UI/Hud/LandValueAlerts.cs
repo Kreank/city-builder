@@ -15,6 +15,9 @@ namespace CityBuilder.Game.UI.Hud
     {
         SimulationRunner runner;
         LandValueSystem subscribed;
+        CitySystem subscribedCity; // Frei setzen: Gebäude ohne Straße verfallen
+        int noRoad;
+        string noRoadExample;
         int lastDay = -1;
         int upgrades;
         int topLevel;
@@ -25,17 +28,25 @@ namespace CityBuilder.Game.UI.Hud
         public void Init(SimulationRunner r)
         {
             runner = r;
-            r.WorldReplaced += () => { lastDay = -1; decayed = 0; topLevel = 0; }; // Speichern & Laden: nichts aus der alten Welt melden
+            r.WorldReplaced += () => { lastDay = -1; decayed = 0; topLevel = 0; noRoad = 0; }; // Speichern & Laden: nichts aus der alten Welt melden
         }
 
         void OnDestroy() => Unsubscribe();
 
         void Unsubscribe()
         {
+            if (subscribedCity != null) subscribedCity.HouseDecayedWithoutRoad -= OnNoRoad;
+            subscribedCity = null;
             if (subscribed == null) return;
             subscribed.LevelChanged -= OnLevelChanged;
             subscribed.BuildingDecayed -= OnDecayed;
             subscribed = null;
+        }
+
+        void OnNoRoad(Building b)
+        {
+            noRoad++;
+            if (b != null && noRoadExample == null) noRoadExample = HouseCatalog.NameOf(b);
         }
 
         void OnLevelChanged(Building b, int oldLevel)
@@ -59,7 +70,7 @@ namespace CityBuilder.Game.UI.Hud
         {
             var world = runner != null ? runner.World : null;
             var lv = world?.LandValue;
-            if (lv != subscribed)
+            if (lv != subscribed || world?.City != subscribedCity)
             {
                 Unsubscribe();
                 if (lv != null)
@@ -68,6 +79,21 @@ namespace CityBuilder.Game.UI.Hud
                     lv.BuildingDecayed += OnDecayed;
                     subscribed = lv;
                 }
+                if (world?.City != null)
+                {
+                    world.City.HouseDecayedWithoutRoad += OnNoRoad;
+                    subscribedCity = world.City;
+                }
+            }
+            // Frei setzen: sofort melden (der Spieler hat es eben noch gesetzt)
+            if (noRoad > 0)
+            {
+                HudMessages.Warning(noRoad == 1 ? "Gebäude ohne Straße verfallen" : $"{noRoad} Gebäude ohne Straße verfallen",
+                    (noRoadExample != null ? noRoadExample + " abgerissen · " : "") +
+                    $"Ohne Stadtstraße vor der Vorderseite verfällt ein gesetztes Gebäude nach {CitySystem.HouseNoRoadDays} Tagen",
+                    HudIconKind.Warning, "house-no-road");
+                noRoad = 0;
+                noRoadExample = null;
             }
             if (lv == null) return;
 

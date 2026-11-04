@@ -18,7 +18,10 @@ namespace CityBuilder.Simulation.Zoning
         OverlapsStructure,
         /// <summary>Anderes Gebäude im Weg (Zonengebäude werden nicht still abgerissen – erst selbst abreißen).</summary>
         OverlapsBuilding,
-        /// <summary>Keine ebenerdige Stadtstraße vor der Mitte der Vorderseite (Rand ≤ <see cref="CitySystem.HouseRoadReach"/>).</summary>
+        /// <summary>
+        /// Veraltet: Häuser dürfen seit „frei setzen“ auch ohne Straße stehen (<see cref="HousePlan.HasRoadAccess"/> = false,
+        /// Bau ruht, Verfall nach <see cref="CitySystem.HouseNoRoadDays"/> Tagen). Bleibt für alte Aufrufer erhalten.
+        /// </summary>
         NoRoadAccess,
         /// <summary>Zu wenig Geld in der Stadtkasse (Kontostand + Kreditrahmen) oder Baustopp.</summary>
         InsufficientFunds,
@@ -44,6 +47,8 @@ namespace CityBuilder.Simulation.Zoning
         /// <summary>Im Weg: Name des Bauwerks/Gebäudes für den Hinweis.</summary>
         public string BlockerName;
         public bool IsValid => Error == HouseBuildError.None;
+        /// <summary>Stadtstraße vor der Vorderseite gefunden. false = darf trotzdem gebaut werden, wartet aber auf eine Straße.</summary>
+        public bool HasRoadAccess => AccessSegmentId >= 0;
         public Footprint Footprint => new Footprint(Position, Front, Type.Width, Type.Depth);
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
     }
@@ -64,6 +69,36 @@ namespace CityBuilder.Simulation.Zoning
         public const float HouseMaxSlope = 4f;
         /// <summary>Umzugspreis als Anteil der Baukosten.</summary>
         public const float HouseMoveCostShare = 0.1f;
+        /// <summary>
+        /// Frei setzen: So viele Spieltage darf ein gesetztes Gebäude ohne Straßenanbindung stehen (Bau ruht, Zustand sinkt
+        /// gleichmäßig auf 0), dann verfällt es und wird abgerissen – ohne Erstattung.
+        /// </summary>
+        public const int HouseNoRoadDays = 3;
+
+        /// <summary>Gesetztes Gebäude ist ohne Straßenanbindung verfallen (wird direkt danach entfernt).</summary>
+        public event Action<Building> HouseDecayedWithoutRoad;
+
+        /// <summary>Zustandsverlust je Stadt-Tick ohne Straße (in <see cref="HouseNoRoadDays"/> Tagen von 1 auf 0).</summary>
+        float NoRoadDecayPerTick => TickInterval / (float)(HouseNoRoadDays * Core.SimulationClock.TicksPerDay);
+
+        /// <summary>Verbleibende Spieltage bis zum Verfall eines Gebäudes ohne Straße (0 = verfällt gleich; −1 = hat Straße).</summary>
+        public float DaysUntilNoRoadDecay(Building b)
+        {
+            if (b == null || !b.IsPlayerPlaced || HasRoadAccess(b)) return -1f;
+            return MathF.Max(0f, b.Condition) * HouseNoRoadDays;
+        }
+
+        /// <summary>
+        /// Frei setzen: Gesetzte Gebäude ohne Zufahrt bauen nicht weiter und verlieren Zustand; bei 0 verfallen sie.
+        /// Liefert true, wenn das Gebäude in diesem Tick ohne Straße war (Baufortschritt überspringen).
+        /// </summary>
+        bool DecayWithoutRoad(Building b, List<Building> decayed)
+        {
+            if (!b.IsPlayerPlaced || HasRoadAccess(b)) return false;
+            b.Condition = MathF.Max(0f, b.Condition - NoRoadDecayPerTick);
+            if (b.Condition <= 0f) decayed.Add(b);
+            return true;
+        }
 
         Vector2 worldMin, worldMax;
         int playerHouses;
@@ -187,7 +222,13 @@ namespace CityBuilder.Simulation.Zoning
                 return HouseBuildError.OverlapsBuilding;
             }
 
-            if (!RoadFront.FindAccess(network, fp, HouseRoadReach, out int seg, out float t)) return HouseBuildError.NoRoadAccess;
+            // Frei setzen: ohne Straße erlaubt – das Gebäude wartet auf eine Zufahrt (sonst Verfall nach HouseNoRoadDays)
+            if (!RoadFront.FindAccess(network, fp, HouseRoadReach, out int seg, out float t))
+            {
+                plan.AccessSegmentId = -1;
+                plan.AccessT = 0f;
+                return HouseBuildError.None;
+            }
             plan.AccessSegmentId = seg;
             plan.AccessT = t;
             // Bodenplatte auf Höhe der Zufahrt (wie gewachsene Gebäude), nie unter Wasser
@@ -292,11 +333,15 @@ namespace CityBuilder.Simulation.Zoning
             return true;
         }
 
-        /// <summary>Nach Netzänderungen: Zufahrt eines gesetzten Hauses neu suchen; ohne Straße bleibt es stehen (Zufahrt −1).</summary>
+        /// <summary>
+        /// Nach Netzänderungen: Zufahrt eines gesetzten Hauses neu suchen; ohne Straße bleibt es vorerst stehen (Zufahrt −1,
+        /// Verfall über <see cref="DecayWithoutRoad"/>). Eine Baustelle, die ihre Straße bekommt, startet wieder neuwertig.
+        /// </summary>
         void RevalidateHouseAccess(Building b)
         {
             if (RoadFront.FindAccess(network, b.Footprint, HouseRoadReach, out int seg, out float t))
             {
+                if (!b.IsConstructed && !HasRoadAccess(b)) b.Condition = 1f;
                 b.FrontSegmentId = seg;
                 b.FrontT = t;
             }

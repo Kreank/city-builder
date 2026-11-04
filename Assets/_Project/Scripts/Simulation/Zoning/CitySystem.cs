@@ -186,13 +186,22 @@ namespace CityBuilder.Simulation.Zoning
         void UpdateBuildings()
         {
             // Nur Baufortschritt – Einzug und Arbeitsplätze besetzt das Bürgersystem
+            List<Building> decayed = null;
             foreach (var b in buildings.Values)
             {
+                // Frei setzen: gesetzte Gebäude ohne Straße bauen nicht weiter und verfallen nach HouseNoRoadDays
+                if (b.IsPlayerPlaced && DecayWithoutRoad(b, decayed ??= new List<Building>())) continue;
                 if (b.IsConstructed) continue;
                 if (b.OutOfService) continue; // Sicherheit: Brandruine/Sanierung – Baufortschritt ruht
                 b.Construction = MathF.Min(1f, b.Construction + 0.1f);
                 if (b.IsConstructed) Version++;
             }
+            if (decayed != null)
+                foreach (var b in decayed)
+                {
+                    HouseDecayedWithoutRoad?.Invoke(b);
+                    RemoveBuilding(b);
+                }
         }
 
         // ------------------------------------------------------------ Nachfrage

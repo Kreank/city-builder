@@ -8,13 +8,15 @@ using UnityEngine;
 namespace CityBuilder.Game.Persistence
 {
     /// <summary>
-    /// Neues-Spiel-Fenster (Spielstart &amp; Startregion; mittig, breit, Baukasten). Vier Schritte:
+    /// Neues-Spiel-Fenster (Spielstart &amp; Startregion; mittig, breit, Baukasten) als geführter Assistent mit
+    /// Schrittanzeige (<see cref="Ui.WizardSteps"/>). Vier Schritte:
     /// <list type="number">
-    /// <item><b>Welt</b>: Seed eingeben oder „neu würfeln“; kleine Weltkarte – freies Land hell, Länder getönt.</item>
-    /// <item><b>Vorlieben</b>: Chips je Gruppe (Klima, Lage, Gelände, Schwerpunkt, Schwierigkeit, Nachbarn). Was mit der Auswahl
-    /// keine freie Region mehr trifft, ist ausgegraut (Tooltip mit Erklärung, z. B. Erze fast nur in Gebirgen), wenige Treffer = „selten“.</item>
-    /// <item><b>Vorschläge</b>: die besten Regionen mit Begründung und Werten, auf der Karte markiert; Klick wählt – oder jede freie
-    /// Region direkt auf der Karte.</item>
+    /// <item><b>Welt</b>: Begrüßung beim ersten Start, große Weltkarte (freies Land hell, Länder getönt), Seed eingeben oder würfeln.</item>
+    /// <item><b>Wünsche</b> (optional): Auswahlkarten je Gruppe (Klima, Lage, Gelände, Schwerpunkt, Schwierigkeit, Nachbarn) mit
+    /// Beschreibung. Sie filtern nur die freien Regionen und bestimmen die Vorschläge – die Welt bleibt gleich. Was mit der
+    /// Auswahl keine freie Region mehr trifft, ist ausgegraut (Tooltip mit Erklärung), wenige Treffer = „selten“.</item>
+    /// <item><b>Startregion</b>: die besten Regionen mit Begründung und Werten, auf der Karte markiert; Klick wählt – oder jede
+    /// freie Region direkt auf der Karte.</item>
     /// <item><b>Stadtname</b> → „Stadt gründen“ (<see cref="SaveManager.StartNewGame"/> → <c>SimulationRunner.NewGame(settings)</c>).</item>
     /// </list>
     /// Die Vorschau-Welt entsteht im Hintergrund (reines C#, gleicher Seed/gleiche Einstellungen wie das Spiel → gleiche Regions-Ids).
@@ -23,8 +25,10 @@ namespace CityBuilder.Game.Persistence
     public sealed class NewGameWindow : GameWindow
     {
         enum Step { World, Preferences, Suggestions, Name }
-        static readonly string[] StepNames = { "1 Welt", "2 Vorlieben", "3 Startregion", "4 Stadtname" };
-        const float MapScale = 2f;
+        static readonly string[] StepNames = { "Welt", "Wünsche", "Startregion", "Stadtname" };
+        static readonly string[] StepHints = { "Karte & Seed", "optional", "Platz wählen", "und los" };
+        /// <summary>Breite der Weltkarte im Fenster (Referenzpixel); Höhe folgt dem Seitenverhältnis des Planeten.</summary>
+        const float MapWidth = 820f; // Fenster 880 − Innenabstand − Scrollleiste
 
         readonly SaveManager manager;
         bool open, firstStart;
@@ -40,7 +44,7 @@ namespace CityBuilder.Game.Persistence
         StartFinder finder;
         string error;
 
-        // Vorlieben / Vorschläge
+        // Wünsche / Vorschläge
         readonly HashSet<string> selection = new HashSet<string>();
         List<StartOptionState> states;
         List<StartSuggestion> suggestions;
@@ -58,9 +62,11 @@ namespace CityBuilder.Game.Persistence
 
         public NewGameWindow(SaveManager manager) : base(WindowSlot.Center) { this.manager = manager; }
 
-        public override string FrameClass => "cb-window--wide";
+        public override string FrameClass => "cb-window--wizard";
         public override float OpenScore => open ? 2f : 0f; // vor dem Spielmenü
         public bool IsOpen => open;
+
+        bool Locked => firstStart && Runner != null && Runner.AwaitingNewGame;
 
         public void Open(bool firstStart)
         {
@@ -78,7 +84,7 @@ namespace CityBuilder.Game.Persistence
 
         public override void Close()
         {
-            if (firstStart && Runner != null && Runner.AwaitingNewGame) return; // erst eine Stadt gründen
+            if (Locked) return; // erst eine Stadt gründen
             open = false;
             GameKeyboard.TextInputActive = false;
             if (speedBeforeOpen > 0 && Runner != null && Runner.IsPaused) Runner.SetSpeed(speedBeforeOpen);
@@ -148,17 +154,43 @@ namespace CityBuilder.Game.Persistence
 
         public override void DrawHead(Ui ui)
         {
-            string sub = planet == null ? "Welt wird erzeugt …"
-                : $"Welt {seed} · {planet.FreeRegionCount} freie Regionen · {StartFinder.DescribeSelection(selection)}";
-            Head(ui, "Neues Spiel", Tone.Accent, firstStart ? "Willkommen – gründe deine Stadt" : "Neues Spiel", sub,
-                closable: !(firstStart && Runner != null && Runner.AwaitingNewGame));
-            ui.Tabs(StepNames, (int)step, i =>
+            Head(ui, firstStart ? "Willkommen" : "Neues Spiel", Tone.Accent, HeadTitle(), HeadSubtitle(), closable: !Locked);
+            ui.WizardSteps(StepNames, StepHints, (int)step, i => CanEnter((Step)i), i =>
             {
                 var target = (Step)i;
                 if (target > step && !CanEnter(target)) return;
-                step = target;
-                ContentVersion++;
-            }, small: true);
+                Go(target);
+            });
+        }
+
+        string HeadTitle()
+        {
+            switch (step)
+            {
+                case Step.World: return firstStart ? "Gründe deine erste Stadt" : "Neues Spiel";
+                case Step.Preferences: return "Was ist dir wichtig?";
+                case Step.Suggestions: return "Wo willst du beginnen?";
+                default: return "Wie soll deine Stadt heißen?";
+            }
+        }
+
+        string HeadSubtitle()
+        {
+            if (planet == null) return "Welt wird erzeugt …";
+            int free = finder != null ? finder.Candidates.Count : planet.FreeRegionCount;
+            switch (step)
+            {
+                case Step.World:
+                    return $"Welt {seed} · {free} freie Regionen zum Gründen";
+                case Step.Preferences:
+                    return selection.Count == 0
+                        ? $"Noch keine Wünsche – alle {free} freien Regionen kommen in Frage"
+                        : $"{matches} von {free} freien Regionen passen · {StartFinder.DescribeSelection(selection)}";
+                case Step.Suggestions:
+                    return chosen != null ? $"Gewählt: {chosen.Region.Name}" : "Wähle einen Vorschlag oder klicke auf freies Land";
+                default:
+                    return chosen != null ? $"{chosen.Region.Name} · Welt {seed}" : "";
+            }
         }
 
         bool CanEnter(Step s)
@@ -193,35 +225,46 @@ namespace CityBuilder.Game.Persistence
 
         void DrawWorld(Ui ui)
         {
-            ui.Section("Welt", "fiktive Erde – Kontinente, Klima, Bodenschätze aus dem Seed");
-            ui.TextInput("Welt-Seed", seedText, v => seedText = v, ApplySeed, 12);
-            bool seedOk = int.TryParse(seedText.Trim(), out int typed);
-            using (ui.Actions())
-            {
-                ui.ActionButton("Neu würfeln", () => Generate(Random.Range(1, 1000000)), ActionStyle.Secondary, enabled: pending == null,
-                    tip: "Andere Welt mit zufälligem Seed");
-                ui.ActionButton("Seed übernehmen", ApplySeed, ActionStyle.Secondary, enabled: pending == null && seedOk && typed != seed);
-            }
-            if (!seedOk) ui.Message("Eingabe", "Der Seed muss eine ganze Zahl sein.", Tone.Warn);
-            if (planet == null || pending != null) { ui.Note("Welt wird erzeugt … (etwa eine halbe Sekunde)"); if (planet == null) return; }
+            if (firstStart)
+                ui.Hero("WILLKOMMEN", "Vom ersten Haus zum eigenen Reich",
+                    "Du beginnst auf freiem, unbesiedeltem Land einer zufällig erzeugten Erde. In vier kurzen Schritten: " +
+                    "Welt ansehen, sagen was dir wichtig ist, Startregion aussuchen, Stadt benennen. " +
+                    "Keine Lust auf Planung? „Schnellstart“ nimmt die einsteigerfreundlichste freie Region.");
 
-            DrawMap(ui);
-            using (ui.Grid(3))
+            if (planet == null || pending != null) ui.Note("Welt wird erzeugt … (etwa eine halbe Sekunde)");
+            if (planet != null)
             {
-                ui.Stat("Länder", (planet.Countries.Count - (planet.PlayerCityState != null ? 1 : 0)).ToString());
-                ui.Stat("Freie Regionen", finder.Candidates.Count.ToString(), $"von {planet.Regions.Count}");
-                var zones = new HashSet<ClimateZone>();
-                foreach (var f in finder.Candidates) zones.Add(f.Climate);
-                ui.Stat("Klimazonen", zones.Count.ToString(), "mit freiem Land");
+                DrawMap(ui);
+                using (ui.Grid(3))
+                {
+                    ui.Stat("Freie Regionen", finder.Candidates.Count.ToString(), $"von {planet.Regions.Count}");
+                    ui.Stat("Länder (NPC)", (planet.Countries.Count - (planet.PlayerCityState != null ? 1 : 0)).ToString());
+                    var zones = new HashSet<ClimateZone>();
+                    foreach (var f in finder.Candidates) zones.Add(f.Climate);
+                    ui.Stat("Klimazonen", zones.Count.ToString(), "mit freiem Land");
+                }
             }
-            ui.Note("Hell = freies, unbesiedeltes Land – dort gründest du deine Stadt als freier Stadtstaat. Getönt = Länder (NPC). " +
-                    "Mit weiteren Städten kannst du später ein eigenes Land gründen.");
+
+            using (ui.Group("Welt", "optional", "Jede Zahl erzeugt immer dieselbe Erde (Kontinente, Klima, Bodenschätze). " +
+                                                 "Gefällt dir die Welt nicht, würfle eine neue."))
+            {
+                ui.TextInput("Welt-Nummer (Seed)", seedText, v => seedText = v, ApplySeed, 12);
+                bool seedOk = int.TryParse(seedText.Trim(), out int typed);
+                if (!seedOk) ui.Message("Eingabe", "Die Welt-Nummer muss eine ganze Zahl sein.", Tone.Warn);
+                using (ui.Actions())
+                {
+                    ui.ActionButton("Neue Welt würfeln", () => Generate(Random.Range(1, 1000000)), ActionStyle.Secondary, enabled: pending == null,
+                        tip: "Andere Erde mit zufälliger Welt-Nummer");
+                    ui.ActionButton("Nummer übernehmen", ApplySeed, ActionStyle.Secondary, enabled: pending == null && seedOk && typed != seed);
+                }
+            }
+
             using (ui.Actions())
             {
                 if (firstStart)
                     ui.ActionButton("Schnellstart", QuickStart, ActionStyle.Secondary, enabled: suggestions != null && suggestions.Count > 0,
-                        tip: "Ohne Vorlieben: beste freie Region (mild, fruchtbar, Wasser), Stadtname „Neustadt“");
-                ui.ActionButton("Weiter: Vorlieben", () => Go(Step.Preferences), ActionStyle.Primary, enabled: finder != null);
+                        tip: "Ohne Wünsche: beste freie Region (mild, fruchtbar, Wasser), Stadtname „Neustadt“");
+                ui.ActionButton("Weiter: Wünsche", () => Go(Step.Preferences), ActionStyle.Primary, enabled: finder != null);
             }
         }
 
@@ -233,32 +276,41 @@ namespace CityBuilder.Game.Persistence
         void DrawPreferences(Ui ui)
         {
             if (finder == null) { ui.Note("Welt wird erzeugt …"); return; }
+            ui.Message("So funktioniert's",
+                "Alles hier ist freiwillig. Deine Wünsche ändern nichts an der Welt – sie sortieren nur die freien Regionen aus. " +
+                "Im nächsten Schritt bekommst du die passendsten als Vorschlag. Die Zahl oben rechts auf jeder Karte zeigt, " +
+                "wie viele Regionen übrig bleiben, wenn du sie dazunimmst. Ausgegraut = gibt es auf dieser Welt nicht (Maus darüber: warum).",
+                Tone.Info);
+
             foreach (var g in StartCriteria.Groups)
             {
-                ui.Section(g.Name, g.Exclusive ? "eine Wahl" : "mehrere möglich");
-                using (ui.Chips())
+                using (ui.Group(g.Name, g.Exclusive ? "eine Wahl" : "mehrere möglich", g.Description))
+                using (ui.OptionGrid())
                     foreach (var st in states)
                     {
                         if (st.Option.Group != g.Group) continue;
                         var opt = st.Option;
                         bool locked = !st.Selected && st.Availability == OptionAvailability.Unavailable;
                         bool rare = st.Availability == OptionAvailability.Rare;
-                        string badge = locked ? "–" : rare ? $"selten · {st.Matches}" : st.Matches.ToString();
-                        ui.ChoiceChip(opt.Name, st.Selected, () => { StartFinder.Toggle(selection, opt); Recompute(); },
+                        string badge = locked ? "keine" : rare ? $"selten · {st.Matches}" : st.Matches.ToString();
+                        ui.OptionCard(opt.Name, opt.Description, st.Selected, () => { StartFinder.Toggle(selection, opt); Recompute(); },
                             enabled: !locked, rare: rare, badge: badge, tip: st.Tip);
                     }
             }
-            ui.Space(6f);
-            if (matches == 0)
-                ui.Message("Keine freie Region passt", "Nimm eine Vorliebe heraus – oder wähle im nächsten Schritt frei auf der Karte.", Tone.Bad);
-            else
-                ui.Message($"{matches} freie Region{(matches == 1 ? "" : "en")} passen", "Zahlen an den Chips = Treffer, wenn du diese Vorliebe dazunimmst. " +
-                           "Ausgegraut = keine Region auf dieser Welt (Maus darüber: warum).", matches <= StartFinder.RareThreshold ? Tone.Warn : Tone.Good);
+
+            if (selection.Count > 0)
+            {
+                if (matches == 0)
+                    ui.Message("Keine freie Region passt", "Nimm einen Wunsch heraus – oder wähle im nächsten Schritt frei auf der Karte.", Tone.Bad);
+                else
+                    ui.Message($"{matches} freie Region{(matches == 1 ? "" : "en")} passen", StartFinder.DescribeSelection(selection),
+                        matches <= StartFinder.RareThreshold ? Tone.Warn : Tone.Good);
+            }
             using (ui.Actions())
             {
                 ui.ActionButton("Zurück", () => Go(Step.World));
-                ui.ActionButton("Zurücksetzen", () => { selection.Clear(); Recompute(); }, ActionStyle.Secondary, enabled: selection.Count > 0);
-                ui.ActionButton("Weiter: Startregion", () => Go(Step.Suggestions), ActionStyle.Primary);
+                ui.ActionButton("Alle Wünsche löschen", () => { selection.Clear(); Recompute(); }, ActionStyle.Secondary, enabled: selection.Count > 0);
+                ui.ActionButton(selection.Count == 0 ? "Ohne Wünsche weiter" : "Weiter: Startregion", () => Go(Step.Suggestions), ActionStyle.Primary);
             }
         }
 
@@ -266,25 +318,29 @@ namespace CityBuilder.Game.Persistence
         {
             if (finder == null) { ui.Note("Welt wird erzeugt …"); return; }
             DrawMap(ui);
-            ui.Section("Vorschläge", matches > 0 ? $"die besten von {matches} passenden" : "keine passt – frei auf der Karte wählen");
-            if (suggestions != null)
-                for (int i = 0; i < suggestions.Count; i++)
-                {
-                    var s = suggestions[i];
-                    int id = s.Region.Id;
-                    bool on = id == chosenRegion;
-                    ui.ListItem((i + 1).ToString(), on ? new Color(0.17f, 0.70f, 0.64f) : new Color(0.55f, 0.45f, 0.2f), s.Region.Name, s.Reason,
-                        on ? "gewählt" : null, Tone.Good, () => Choose(id));
-                }
+            using (ui.Group("Vorschläge", matches > 0 ? $"die besten von {matches} passenden" : "keine passt",
+                       matches > 0 ? "Klick auf einen Vorschlag – oder direkt auf ein helles Gebiet der Karte (gold = Vorschlag, weiß = gewählt)."
+                                   : "Keine Region erfüllt alle Wünsche. Klicke ein helles Gebiet auf der Karte an oder gehe zurück."))
+            {
+                if (suggestions != null)
+                    for (int i = 0; i < suggestions.Count; i++)
+                    {
+                        var s = suggestions[i];
+                        int id = s.Region.Id;
+                        bool on = id == chosenRegion;
+                        ui.ListItem((i + 1).ToString(), on ? new Color(0.17f, 0.70f, 0.64f) : new Color(0.55f, 0.45f, 0.2f), s.Region.Name, s.Reason,
+                            on ? "gewählt" : i == 0 ? "beste Wahl" : null, on ? Tone.Good : Tone.Accent, () => Choose(id));
+                    }
+            }
             if (chosen != null)
             {
                 bool own = suggestions == null || !suggestions.Exists(x => x.Region.Id == chosenRegion);
-                ui.Section($"Gewählt: {chosen.Region.Name}", own ? "freie Wahl auf der Karte" : null);
-                if (own) ui.Text(chosen.Reason);
-                if (!finder.Matches(chosen.Facts, selection) && selection.Count > 0)
-                    ui.Message("Passt nicht zu allen Vorlieben", "Frei gewählt – du kannst trotzdem hier beginnen.", Tone.Warn);
-                using (ui.Card())
+                using (ui.Group(chosen.Region.Name, own ? "frei auf der Karte gewählt" : "gewählt", own ? chosen.Reason : null))
+                {
+                    if (!finder.Matches(chosen.Facts, selection) && selection.Count > 0)
+                        ui.Message("Passt nicht zu allen Wünschen", "Frei gewählt – du kannst trotzdem hier beginnen.", Tone.Warn);
                     foreach (var v in chosen.Values) ui.Meter(v.Label, v.Text, v.Value, v.Value >= 0.6f ? Tone.Good : v.Value >= 0.3f ? Tone.Accent : Tone.Muted);
+                }
             }
             using (ui.Actions())
             {
@@ -297,24 +353,26 @@ namespace CityBuilder.Game.Persistence
         {
             if (chosen == null) { Go(Step.Suggestions); return; }
             var r = chosen.Region;
-            ui.Section("Deine Stadt", r.Name);
-            using (ui.Fields())
-            {
-                ui.Field("Region", $"{r.Name} · {Biomes.DisplayName(r.DominantBiome)}");
-                ui.Field("Klima", $"{StartCriteria.ClimateWord(chosen.Facts.Climate)} · Ø {r.MeanTemperature:0.0} °C · {r.Precipitation:0} mm/Jahr");
-                ui.Field("Lage", chosen.Reason);
-                ui.Field("Welt-Seed", seed.ToString());
-            }
-            ui.TextInput("Stadtname", cityName, v => cityName = v, StartGame, PlayerRealm.MaxNameLength);
+            ui.BigTextInput(cityName, v => cityName = v, StartGame, PlayerRealm.MaxNameLength, PlayerRealm.DefaultCityName);
             string name = PlayerRealm.Clean(cityName) ?? PlayerRealm.DefaultCityName;
             ui.Note($"Dein Gebiet heißt „{PlayerRealm.CityStateName(name)}“ – ein freier Stadtstaat ohne eigenes Land. " +
-                    "Mit weiteren Städten kannst du später ein Land gründen (eigener Name, eigene Flagge).");
-            if (!(firstStart && Runner != null && Runner.AwaitingNewGame))
+                    "Mit weiteren Städten kannst du später ein Land gründen (eigener Name, eigene Flagge). Leer lassen = „" +
+                    PlayerRealm.DefaultCityName + "“.");
+
+            using (ui.Group("Deine Startregion", r.Name, null))
+            using (ui.Fields())
+            {
+                ui.Field("Landschaft", Biomes.DisplayName(r.DominantBiome));
+                ui.Field("Klima", $"{StartCriteria.ClimateWord(chosen.Facts.Climate)} · Ø {r.MeanTemperature:0.0} °C · {r.Precipitation:0} mm/Jahr");
+                ui.Field("Lage", chosen.Reason);
+                ui.Field("Welt-Nummer", seed.ToString());
+            }
+            if (!Locked)
                 ui.Message("Achtung", "Nicht gespeicherter Fortschritt geht verloren (Autosave bleibt erhalten).", Tone.Warn);
             using (ui.Actions())
             {
                 ui.ActionButton("Zurück", () => Go(Step.Suggestions));
-                ui.ActionButton("Stadt gründen", StartGame, ActionStyle.Primary, enabled: pending == null);
+                ui.ActionButton($"„{name}“ gründen", StartGame, ActionStyle.Primary, enabled: pending == null);
             }
         }
 
@@ -346,7 +404,7 @@ namespace CityBuilder.Game.Persistence
         {
             if (planet == null) return;
             if (textureDirty) RebuildTexture();
-            ui.Image(texture, planet.Width * MapScale, planet.Height * MapScale,
+            ui.Image(texture, MapWidth, MapWidth * planet.Height / planet.Width,
                 uv =>
                 {
                     int i = Cell(uv);
@@ -375,7 +433,7 @@ namespace CityBuilder.Game.Persistence
 
         string HoverText()
         {
-            if (hoverCell < 0) return "Maus über die Karte: Region · Klick auf freies Land wählt die Startregion · gold = Vorschläge, weiß = gewählt";
+            if (hoverCell < 0) return "Hell = freies Land (hier gründest du), getönt = Länder anderer Herrscher · Maus über die Karte zeigt die Region · Klick auf freies Land wählt sie";
             int r = planet.RegionOf[hoverCell];
             if (r < 0) return "Meer";
             var region = planet.Regions[r];
@@ -385,7 +443,7 @@ namespace CityBuilder.Game.Persistence
             bool fits = finder.Matches(f, selection);
             return $"{region.Name} · freies Land · {StartCriteria.ClimateWord(f.Climate)}, {f.TerrainWord}" +
                    $"{(f.CoastScore >= StartCriteria.Fit ? ", Küste" : "")}{(f.RiverScore >= StartCriteria.Fit ? ", großer Fluss" : region.HasRiver ? ", Fluss" : "")}" +
-                   (selection.Count > 0 ? (fits ? " · passt zu deinen Vorlieben" : " · passt nicht zu allen Vorlieben") : "") + " – Klick wählt";
+                   (selection.Count > 0 ? (fits ? " · passt zu deinen Wünschen" : " · passt nicht zu allen Wünschen") : "") + " – Klick wählt";
         }
 
         void RebuildTexture()

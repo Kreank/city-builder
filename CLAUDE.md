@@ -1070,6 +1070,13 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   abgerissen. **Bauwerks-Sperre** wie Dienste: `roads.RegisterStructures` Art „house“ (Name = Bauart). Dienste, Versorger und
   Depots über einem gesetzten Haus → Plan ungültig (`OverlapsFacility`, kleine markierte Zeile in den drei Systemen).
   Zonen wachsen nicht auf/an gesetzten Häusern (`LotFits` prüft auch schräg stehende).
+- **Frei setzen (2026-11-04, Spieler):** gesetzte Gebäude dürfen **ohne Straße** stehen (erst Gebäude, dann Straße).
+  `CheckHouse` liefert dann `None` mit `AccessSegmentId = −1` (`HousePlan.HasRoadAccess` = false; `NoRoadAccess` wird nicht mehr
+  vergeben). Ohne Zufahrt ruht der Bau und der Zustand sinkt in `CitySystem.HouseNoRoadDays` (3) Spieltagen von 1 auf 0
+  (`DecayWithoutRoad` in `UpdateBuildings`), dann Abriss ohne Erstattung + Event `HouseDecayedWithoutRoad` (HUD-Meldung in
+  `LandValueAlerts`). Bekommt eine Baustelle ihre Straße (`RevalidateHouseAccess`), startet sie wieder neuwertig. Gilt auch für
+  fertige Häuser, deren Straße abgerissen wird. Inspektor: „Ohne Straße – verfällt in …“ (`DaysUntilNoRoadDecay`). Kein neues
+  Spielstandfeld (läuft über `Condition`). Dienste/Versorger/Depots verlangen weiter eine Zufahrt.
 - **Bevölkern:** kein Sonderweg – gesetzte Häuser sind normale Wohnungen (Zuzug, Umzug, `HomeScore`, Wohnkomfort je Zone).
 - **Aufstieg nach Bedürfnissen** (`Zoning/HouseRules`, datengetrieben; Auswertung `LandValue/LandValueSystem.Houses.cs`, täglich
   in `EvaluateBuildings` statt der G6-Regeln): je Stufe eine `HouseLevelRule` (neue harte `HouseNeed`s, weiche Zufriedenheit/

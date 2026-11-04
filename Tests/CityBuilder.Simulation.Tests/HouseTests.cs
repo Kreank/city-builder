@@ -64,11 +64,17 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(plan.AccessSegmentId >= 0);
             Assert.Equal(HouseCatalog.Medium.Cost, plan.Cost);
 
-            Assert.Equal(HouseBuildError.NoRoadAccess, c.PlanHouse(HouseCatalog.Low, new Vector2(50, 200)).Error);
+            // Frei setzen: ohne Straße gültig, aber ohne Zufahrt
+            var away = c.PlanHouse(HouseCatalog.Low, new Vector2(50, 200));
+            Assert.True(away.IsValid, away.Error.ToString());
+            Assert.False(away.HasRoadAccess);
+            Assert.False(away.Aligned);
             Assert.Equal(HouseBuildError.OverlapsRoad, c.PlanHouseAt(HouseCatalog.Low, new Vector2(50, 3), new Vector2(0, -1)).Error);
             Assert.Equal(HouseBuildError.OutOfWorld, c.PlanHouseAt(HouseCatalog.Low, w.Max - new Vector2(2, 2), Vector2.UnitY).Error);
-            // Rückseite zur Straße → keine Zufahrt an der Vorderseite
-            Assert.Equal(HouseBuildError.NoRoadAccess, c.PlanHouseAt(HouseCatalog.Low, plan.Position, -plan.Front).Error);
+            // Rückseite zur Straße → keine Zufahrt an der Vorderseite (setzbar, wartet aber auf eine Straße)
+            var back = c.PlanHouseAt(HouseCatalog.Low, plan.Position, -plan.Front);
+            Assert.True(back.IsValid, back.Error.ToString());
+            Assert.False(back.HasRoadAccess);
 
             // Dienstgebäude im Weg → ungültig mit Namen
             var police = w.Services.Build(w.Services.PlanAligned(ServiceCatalog.PoliceStation, new Vector2(150, 20)));
@@ -166,6 +172,45 @@ namespace CityBuilder.Simulation.Tests
             var still = w.City.GetBuilding(b.Id);
             Assert.NotNull(still);
             Assert.False(w.City.HasRoadAccess(still));
+        }
+
+        [Fact]
+        public void FreePlacement_WaitsForRoad_ThenBuilds_OrDecays()
+        {
+            var w = Street();
+            var c = w.City;
+            int decayedEvents = 0;
+            c.HouseDecayedWithoutRoad += _ => decayedEvents++;
+
+            // Zwei Häuser ohne Straße: gültig, Bau ruht
+            var plan = c.PlanHouseAt(HouseCatalog.Low, new Vector2(-100, 100), Vector2.UnitY);
+            Assert.True(plan.IsValid, plan.Error.ToString());
+            Assert.False(plan.HasRoadAccess);
+            var waiting = c.BuildHouse(plan);
+            var lonelyPlan = c.PlanHouse(HouseCatalog.Low, new Vector2(50, 200));
+            Assert.True(lonelyPlan.IsValid, lonelyPlan.Error.ToString());
+            var lonely = c.BuildHouse(lonelyPlan);
+            Assert.NotNull(waiting);
+            Assert.NotNull(lonely);
+
+            Run(w, SimulationClock.TicksPerDay);
+            Assert.False(waiting.IsConstructed);
+            Assert.Equal(0f, waiting.Construction);
+            Assert.InRange(c.DaysUntilNoRoadDecay(waiting), 1.5f, 2.5f);
+
+            // Straße vor die Vorderseite → Zufahrt, Baustelle wieder neuwertig, wird fertig
+            float y = waiting.Position.Y + waiting.Depth * 0.5f + RoadCatalog.CityTwoLane.HalfWidth + 0.5f;
+            Road(w, new Vector2(-160, y), new Vector2(-40, y));
+            Run(w, 2 * SimulationClock.TicksPerDay + 20);
+
+            Assert.NotNull(c.GetBuilding(waiting.Id));
+            Assert.True(c.HasRoadAccess(waiting));
+            Assert.True(waiting.IsConstructed);
+            Assert.Equal(-1f, c.DaysUntilNoRoadDecay(waiting));
+
+            // Ohne Straße nach HouseNoRoadDays verfallen (abgerissen, Ereignis)
+            Assert.Null(c.GetBuilding(lonely.Id));
+            Assert.Equal(1, decayedEvents);
         }
 
         // ------------------------------------------------------------ Bevölkern

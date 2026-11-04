@@ -101,6 +101,10 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Gerade anwesend", citizens.PresentIn(b.Id).ToString());
                 var seg = world.Roads.GetSegment(b.FrontSegmentId);
                 ui.Field("Zufahrt", seg != null ? $"{seg.Type.DisplayName} (Segment {seg.Id})" : "keine", seg != null ? Tone.None : Tone.Warn);
+                // Frei setzen: ohne Straße ruht der Bau, das Gebäude verfällt
+                float left = world.City.DaysUntilNoRoadDecay(b);
+                if (left >= 0f)
+                    ui.Field("Ohne Straße", left >= 1f ? $"verfällt in ≈ {left:0.0} Tagen" : $"verfällt in ≈ {left * 24f:0} Stunden", Tone.Bad);
             }
         }
 

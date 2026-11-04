@@ -140,7 +140,7 @@ namespace CityBuilder.Game.Persistence
         {
             // Spielstart & Startregion: eigenes Fenster (Welt, Vorlieben, Vorschläge, Stadtname) statt Seed/Regionsnummer
             ui.Section("Neues Spiel");
-            ui.Note("Welt würfeln, Vorlieben wählen (Klima, Lage, Gelände, Schwerpunkt …), Startregion aussuchen und die Stadt benennen. " +
+            ui.Note("Welt würfeln, Wünsche angeben (Klima, Lage, Gelände, Schwerpunkt …), Startregion aussuchen und die Stadt benennen. " +
                     "Du beginnst als freie Stadt in unbesiedeltem Land – mit weiteren Städten wirst du später ein eigenes Land.");
             using (ui.Actions())
                 ui.ActionButton("Neues Spiel einrichten …", () => { Close(); manager.OpenNewGame(); }, ActionStyle.Primary);

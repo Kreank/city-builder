@@ -46,6 +46,7 @@ namespace CityBuilder.Game.UI.Windows
             else
             {
                 if (ht.Plan != null && !ht.Plan.IsValid) ui.Message("Hier nicht baubar", HouseTool.ErrorText(ht.Plan), Tone.Warn);
+                else if (ht.Plan != null && !ht.Plan.HasRoadAccess) ui.Message("Noch keine Straße", HouseTool.NoRoadText, Tone.Warn);
                 var levels = HouseRules.LevelsFor(ht.SelectedType.Zone); // Setzen statt Zonen: Regeln je Bauart
                 foreach (var rule in levels)
                 {
