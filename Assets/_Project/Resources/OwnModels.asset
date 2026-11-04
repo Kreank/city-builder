@@ -140,15 +140,6 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 16, y: 8.38, z: 16}
-  - Id: hospital
-    Model: {fileID: 919132149155446097, guid: 4ec80eb8fb0d9a94ba08ba5008b84bf2, type: 3}
-    Folder: Services
-    Role: service
-    Use: 
-    Placement: 
-    Biome: 
-    Tags: []
-    Size: {x: 16, y: 8.38, z: 16}
   - Id: fire_station
     Model: {fileID: 919132149155446097, guid: 17e1a88a9d83eac4c9db24126bcb072f, type: 3}
     Folder: Services
@@ -158,15 +149,6 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 24.849998, y: 18.7, z: 24}
-  - Id: school_primary
-    Model: {fileID: 919132149155446097, guid: 3825902dc5e6b684580328834d6c1b89, type: 3}
-    Folder: Services
-    Role: service
-    Use: 
-    Placement: 
-    Biome: 
-    Tags: []
-    Size: {x: 40.11, y: 12.027001, z: 32}
   - Id: school_high
     Model: {fileID: 919132149155446097, guid: 3825902dc5e6b684580328834d6c1b89, type: 3}
     Folder: Services
@@ -176,15 +158,15 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 40.11, y: 12.027001, z: 32}
-  - Id: landfill
-    Model: {fileID: 919132149155446097, guid: 7c5591ccbed342845aed34126651a821, type: 3}
+  - Id: hospital
+    Model: {fileID: 919132149155446097, guid: 374dc33b826a815468a56da2ca282737, type: 3}
     Folder: Services
     Role: service
     Use: 
     Placement: 
     Biome: 
     Tags: []
-    Size: {x: 32, y: 54.3, z: 25.399544}
+    Size: {x: 32, y: 24.449999, z: 33.7}
   - Id: incinerator
     Model: {fileID: 919132149155446097, guid: 7c5591ccbed342845aed34126651a821, type: 3}
     Folder: Services
@@ -194,6 +176,15 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 32, y: 54.3, z: 25.399544}
+  - Id: landfill
+    Model: {fileID: 919132149155446097, guid: 1e9af3de5fb3f1a43a70b696e58982bf, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 7.952777, z: 40}
   - Id: library
     Model: {fileID: 919132149155446097, guid: 7349e782a44c6114b8b0381f0f69ecea, type: 3}
     Folder: Services
@@ -212,24 +203,6 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 24, y: 15.65, z: 16}
-  - Id: media_radio
-    Model: {fileID: 919132149155446097, guid: 11b87c7493e67044db82907edeb689cb, type: 3}
-    Folder: Services
-    Role: service
-    Use: 
-    Placement: 
-    Biome: 
-    Tags: []
-    Size: {x: 24, y: 15.65, z: 16}
-  - Id: media_tv
-    Model: {fileID: 919132149155446097, guid: 11b87c7493e67044db82907edeb689cb, type: 3}
-    Folder: Services
-    Role: service
-    Use: 
-    Placement: 
-    Biome: 
-    Tags: []
-    Size: {x: 24, y: 15.65, z: 16}
   - Id: park_small
     Model: {fileID: 919132149155446097, guid: eae500134a8d65b40a98f38ebe312887, type: 3}
     Folder: Services
@@ -240,14 +213,14 @@ MonoBehaviour:
     Tags: []
     Size: {x: 24.54662, y: 7.592, z: 24.439827}
   - Id: park_large
-    Model: {fileID: 919132149155446097, guid: eae500134a8d65b40a98f38ebe312887, type: 3}
+    Model: {fileID: 919132149155446097, guid: 1548c6e61f058ed45977fc3cd682d20d, type: 3}
     Folder: Services
     Role: service
     Use: 
     Placement: 
     Biome: 
     Tags: []
-    Size: {x: 24.54662, y: 7.592, z: 24.439827}
+    Size: {x: 48, y: 8.499691, z: 40}
   - Id: police_station
     Model: {fileID: 919132149155446097, guid: 71cd2a6d923be7542a62b1e1153eac20, type: 3}
     Folder: Services
@@ -257,6 +230,33 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 24, y: 16.85, z: 16}
+  - Id: school_primary
+    Model: {fileID: 919132149155446097, guid: 13ba67af2a2bcfe44bfbcf72577bc8e9, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32.14662, y: 7.22, z: 24.1}
+  - Id: media_radio
+    Model: {fileID: 919132149155446097, guid: 7fc412d82b4f4e14a89cd8e07603cd4c, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 42.8, z: 16}
+  - Id: media_tv
+    Model: {fileID: 919132149155446097, guid: 5cfc7b1b07ede4c4d93da63c00a312e0, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 17.383314, y: 148.8, z: 17.891657}
   - Id: leisure_playground
     Model: {fileID: 919132149155446097, guid: 1522057bc44b08d4da7674a9971d57cf, type: 3}
     Folder: Leisure
@@ -1044,4 +1044,4 @@ MonoBehaviour:
     Tags: []
     Size: {x: 17.939665, y: 22.969833, z: 12}
   Palette: {fileID: 2100000, guid: 30eaef96c71f7e145ab463ee8df76c51, type: 2}
-  SourceStamp: 7510ca96e7fce643
+  SourceStamp: b70fb2e944da4d37

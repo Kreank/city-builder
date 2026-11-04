@@ -31,7 +31,7 @@ namespace CityBuilder.Simulation.Trade
         /// <summary>Lagerreserve in Tagen Bedarf, unter die das Land für Exportverträge nicht geht.</summary>
         public double ReserveDays => 3.0 + 12.0 * (1.0 - Reliability);
 
-        internal static NationPersonality For(int seed, Country c)
+        internal static NationPersonality For(int seed, Country c, GovernmentForm government)
         {
             var rng = new SimRandom(unchecked(seed * 92821 + c.Id * 7907 + 17));
             var p = new NationPersonality
@@ -46,8 +46,17 @@ namespace CityBuilder.Simulation.Trade
             if (pr.Primary == Strength.RawMaterials || pr.Primary == Strength.Agriculture) p.Protectionism *= 0.75f;
             if (pr.Primary == Strength.Industry) p.Protectionism = MathF.Min(1f, p.Protectionism * 1.15f + 0.05f);
             if (pr.Primary == Strength.Technology) p.Thrift = MathF.Min(1f, p.Thrift + 0.1f);
+            // Handel 2: Regierungsform prägt (kleine Verschiebung, s. Governments.Nudge)
+            var (dr, dp, dl, dt) = Governments.Nudge(government);
+            p.Risk = Math.Clamp(p.Risk + dr, 0f, 1f);
+            p.Protectionism = Math.Clamp(p.Protectionism + dp, 0f, 1f);
+            p.Reliability = Math.Clamp(p.Reliability + dl, 0.2f, 1f);
+            p.Thrift = Math.Clamp(p.Thrift + dt, 0f, 1f);
             return p;
         }
+
+        /// <summary>Handel 2: Geduld in Verhandlungen = Gegenangebote, die das Land höchstens macht (2–4; verlässlich/vorsichtig = geduldiger).</summary>
+        public int Patience => 1 + (int)MathF.Round(3f * (0.3f + 0.4f * Reliability + 0.3f * (1f - Risk)));
 
         public string Describe()
         {
@@ -100,6 +109,15 @@ namespace CityBuilder.Simulation.Trade
         public NationEconomy Economy => Country.Economy;
         public bool IsPlayer => Country.IsPlayer;
         public NationPersonality Personality { get; }
+        /// <summary>Handel 2: Regierungsform (aus Seed + Profil, Spieler Republik).</summary>
+        public GovernmentForm Government { get; }
+        /// <summary>Handel 2: Tourismus gestern (Kategorie-Einheiten): eingereist (Export) bzw. ausgereist (Import), Wert seit Beginn.</summary>
+        public double TourismInYesterday { get; internal set; }
+        public double TourismOutYesterday { get; internal set; }
+        public double TourismExportValue { get; internal set; }
+        public double TourismImportValue { get; internal set; }
+        /// <summary>Handel 2: verschenkt seit Beginn (€).</summary>
+        public double GiftsGiven { get; internal set; }
         public TariffSchedule Tariffs { get; }
         /// <summary>Vertrauen in andere Länder (0..1).</summary>
         public readonly float[] Trust;
@@ -120,8 +138,9 @@ namespace CityBuilder.Simulation.Trade
         {
             Id = c.Id;
             Country = c;
-            Personality = NationPersonality.For(seed, c);
-            double general = c.IsPlayer ? 0.0 : Math.Round(Personality.Protectionism * 0.2, 2);
+            Government = Governments.For(seed, c); // Handel 2
+            Personality = NationPersonality.For(seed, c, Government);
+            double general = c.IsPlayer ? 0.0 : Math.Round(Math.Min(TradeRules.MaxTariff, Personality.Protectionism * 0.2 * Governments.TariffFactor(Government)), 2);
             Tariffs = new TariffSchedule(countries, general);
             Trust = new float[countries];
             for (int i = 0; i < countries; i++) Trust[i] = TradeRules.TrustStart;

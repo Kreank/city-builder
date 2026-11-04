@@ -99,6 +99,10 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Kauf weiterer Kacheln (Bauland) der Stadtkarte.</summary>
         TilePurchase,
         // --- Ende Kacheln
+        // --- Handel 2 (hinten angefügt)
+        /// <summary>Ausgabe: Diplomatie (Geschenke an andere Länder).</summary>
+        Diplomacy,
+        // --- Ende Handel 2
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -112,7 +116,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.TilePurchase + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, Reich, dann Kacheln)
+        public const int Count = (int)BudgetCategory.Diplomacy + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, Reich, Kacheln, dann Handel 2)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -175,6 +179,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.RealmIncome: return "Reich: Einnahmen";          // Etappe 7 Reich
                 case BudgetCategory.RealmExpenses: return "Reich: Ausgaben";         // Etappe 7 Reich
                 case BudgetCategory.TilePurchase: return "Kauf von Kacheln";         // Kacheln
+                case BudgetCategory.Diplomacy: return "Diplomatie: Geschenke";        // Handel 2
                 default: return c.ToString();
             }
         }

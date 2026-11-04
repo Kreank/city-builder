@@ -92,12 +92,33 @@ namespace CityBuilder.Simulation.Aviation
             int office = 0;
             if (city != null) foreach (var b in city.Buildings) if (b.Zone == ZoneType.Office) office += b.Jobs;
             officeJobs = office;
-            float attract = world.Services?.Attractiveness ?? 0f;
             demandResidents = pop * AviationRules.ResidentTripsPerDay;
             demandBusiness = office * AviationRules.BusinessTripsPerOfficeJob + Math.Max(0, jobs - office) * AviationRules.BusinessTripsPerJob;
-            float size = MathF.Min(1f, MathF.Sqrt(pop / 5000f));
-            demandTourists = AviationRules.TouristBase * TourismStrength * (1f + attract / AviationRules.AttractivenessDoubling) * (0.4f + 0.6f * size);
+            // Handel 2: mit Weltkarte kommt die Touristen-Nachfrage aus dem Tourismus-Handel der Länder (Anteil per Flugzeug)
+            demandTourists = TouristDemandSource != null ? MathF.Max(0f, TouristDemandSource()) : BaseTouristPotential();
         }
+
+        // --- Handel 2: Tourismus als Dienstleistungshandel (TradeSystem.Tourism)
+        /// <summary>Touristen je Tag per Flugzeug aus dem Handel (null = eigene Formel <see cref="BaseTouristPotential"/>).</summary>
+        public Func<float> TouristDemandSource { get; set; }
+
+        /// <summary>Besucher-Potenzial der Stadt je Tag: Tourismus-Stärke × (1 + Attraktivität/60) × Stadtgröße (Grundstufe).</summary>
+        public float BaseTouristPotential()
+        {
+            int pop = world.City?.Stats.Population ?? 0;
+            float attract = world.Services?.Attractiveness ?? 0f;
+            float size = MathF.Min(1f, MathF.Sqrt(pop / 5000f));
+            return AviationRules.TouristBase * TourismStrength * (1f + attract / AviationRules.AttractivenessDoubling) * (0.4f + 0.6f * size);
+        }
+
+        /// <summary>Besucher, die per Straße/Bahn/Schiff ankommen (aus dem Tourismus-Handel) – gleiche Besucherliste wie Flugtouristen.</summary>
+        public void AddGroundVisitors(int count, int salt)
+        {
+            if (count <= 0) return;
+            AddVisitors(count, unchecked(salt * 7919 + 13));
+            Version++;
+        }
+        // --- Ende Handel 2
 
         /// <summary>Fluggäste je Richtung und Tag für diesen Flughafen (Anteil an der Stadt-Nachfrage + Umland).</summary>
         public float DailyDemand(Airport a)

@@ -119,8 +119,11 @@ namespace CityBuilder.Simulation.Trade
             int p = o.From;
             var t = o.Terms;
             float rel = Relation(n, p);
+            evSupply = false; // Handel 2: Einzelwerte für Gegenangebote
             if (rel < TradeRules.RelationEmbargo)
                 return new OfferEvaluation(-5f, 0f, $"Beziehung zu schlecht ({rel:+0;−0}): kein Handel");
+            if (IsSanctioned(n, p)) return new OfferEvaluation(-5f, 0f, SanctionText(n, p)); // Handel 2
+            if (SameBloc(n, p)) AddPart(DiplomacyRules.BlocPartnerBonus, null, "Bündnispartner"); // Handel 2
 
             if (t.Kind == ContractKind.Agreement)
             {
@@ -144,12 +147,15 @@ namespace CityBuilder.Simulation.Trade
                     double tariff = TariffRate(n, p);
                     double landed = price * (1.0 + tariff);
                     double maxPrice = domestic / (1.0 + tariff);
-                    AddPart((float)Math.Clamp(3.0 * (domestic - landed) / domestic * thrift, -1.5, 1.0),
+                    float pricePart = (float)Math.Clamp(3.0 * (domestic - landed) / domestic * thrift, -1.5, 1.0);
+                    AddPart(pricePart,
                         $"zu teuer: höchstens {maxPrice:0.0} €/E (bei uns {domestic:0.0} €{(tariff > 0 ? $", Zoll {tariff * 100:0} %" : "")})", "günstiger als bei uns");
                     double needWeek = importNeed[n, c] * TradeRules.DaysPerWeek / upg;
                     AddPart(0.6f * (float)(need[n, c] - 0.15), $"Bedarf gedeckt: Lager reicht {cover[n, c]:0} Tage", "wir brauchen die Ware");
                     double ratio = t.UnitsPerWeek / Math.Max(1e-6, needWeek);
-                    if (ratio > 1.5) AddPart(-(float)Math.Min(1.0, (ratio - 1.5) * 0.5), $"Menge zu groß: wir brauchen höchstens {needWeek:0} E/Woche", null);
+                    float qtyPart = ratio > 1.5 ? -(float)Math.Min(1.0, (ratio - 1.5) * 0.5) : 0f;
+                    if (ratio > 1.5) AddPart(qtyPart, $"Menge zu groß: wir brauchen höchstens {needWeek:0} E/Woche", null);
+                    SetEvalDetail(true, pricePart, domestic, tariff, 0.0, thrift, qtyPart, needWeek * 1.45, 0f);
                     if (TradeGoods.Supports(profile.Primary, (GoodsCategory)c) || TradeGoods.Supports(profile.Secondary, (GoodsCategory)c))
                         AddPart(-0.4f * pers.Protectionism, "Schutz der eigenen Produktion", null);
                 }
@@ -158,19 +164,27 @@ namespace CityBuilder.Simulation.Trade
                     var route = Geography.Route(n, p);
                     double freight = route != null ? route.UnitCost(g) : 0.0;
                     double net = price - freight;
-                    AddPart((float)Math.Clamp(3.0 * (net - domestic) / domestic * thrift, -1.5, 1.0),
+                    float pricePart = (float)Math.Clamp(3.0 * (net - domestic) / domestic * thrift, -1.5, 1.0);
+                    AddPart(pricePart,
                         $"Preis zu niedrig: mindestens {domestic + freight:0.0} €/E (Inlandspreis {domestic:0.0} € + Fracht {freight:0.0} €)", "guter Preis");
                     double capWeek = exportCap[n, c] * TradeRules.DaysPerWeek / upg;
                     double ratio = t.UnitsPerWeek / Math.Max(1e-6, capWeek);
-                    if (ratio > 1.1) AddPart(-(float)Math.Min(1.5, ratio - 1.1), $"Menge zu groß: wir können höchstens {capWeek:0} E/Woche liefern", null);
+                    float qtyPart = ratio > 1.1 ? -(float)Math.Min(1.5, ratio - 1.1) : 0f;
+                    if (ratio > 1.1) AddPart(qtyPart, $"Menge zu groß: wir können höchstens {capWeek:0} E/Woche liefern", null);
                     AddPart(-0.8f * (float)need[n, c] * pers.Protectionism, "wir brauchen die Ware selbst", null);
                     AddPart(0.4f * (float)Math.Min(1.0, surplus[n, c]), null, "Überschuss abbauen");
-                    AddPart(-0.6f * (1f - pers.Reliability) * (float)t.PenaltyShare, "Vertragsstrafe zu hoch", null);
+                    float penaltyPart = -0.6f * (1f - pers.Reliability) * (float)t.PenaltyShare;
+                    AddPart(penaltyPart, "Vertragsstrafe zu hoch", null);
+                    SetEvalDetail(false, pricePart, domestic, 0.0, freight, thrift, qtyPart, capWeek * 1.05, penaltyPart);
                 }
                 AddPart(0.6f * rel / 100f, $"Beziehung zu schlecht ({rel:+0;−0})", "gute Beziehungen");
                 AddPart(1.5f * (me.Trust[p] - TradeRules.TrustStart), $"kein Vertrauen nach Vertragsbruch ({me.Trust[p] * 100:0} %)", "verlässlicher Partner");
                 if (t.PriceMode == PriceMode.Fixed)
-                    AddPart(-0.3f * (1f - pers.Risk) * t.Weeks / 52f, "Festpreis-Laufzeit zu lang", null);
+                {
+                    evTermPart = -0.3f * (1f - pers.Risk) * t.Weeks / 52f;
+                    AddPart(evTermPart, "Festpreis-Laufzeit zu lang", null);
+                }
+                else evTermPart = 0f;
             }
 
             float u = TradeRules.AcceptBias;
@@ -209,7 +223,7 @@ namespace CityBuilder.Simulation.Trade
                     if (IsPlayer(o.To)) continue; // der Spieler entscheidet selbst
                     var ev = Evaluate(o.To, o);
                     if (rng.NextDouble() < ev.Probability) DoAccept(o.To, o.Id, "angenommen: " + ev.Reason);
-                    else DoReject(o.To, o.Id, ev.Reason);
+                    else if (!TryCounter(o.To, o, ev)) DoReject(o.To, o.Id, ev.Reason); // Handel 2: Gegenangebot
                     LogAi(o.To, o, ev);
                     continue;
                 }
@@ -262,6 +276,7 @@ namespace CityBuilder.Simulation.Trade
                 if (IsPlayer(n) || (n + Day) % TradeRules.DaysPerWeek != 0) continue;
                 DecideNation(n);
                 CancelHostile(n);
+                DecideDiplomacy(n); // Handel 2: Bündnisse, Abstimmungen, Proteste
             }
         }
 
@@ -362,7 +377,7 @@ namespace CityBuilder.Simulation.Trade
             candidates.Clear();
             for (int m = 0; m < nations.Count; m++)
             {
-                if (m == n || Relation(n, m) < TradeRules.RelationEmbargo) continue;
+                if (m == n || Relation(n, m) < TradeRules.RelationEmbargo || IsSanctioned(n, m)) continue; // Handel 2: Sanktionen
                 GoodType g;
                 double partnerDrive;
                 if (IsPlayer(m))

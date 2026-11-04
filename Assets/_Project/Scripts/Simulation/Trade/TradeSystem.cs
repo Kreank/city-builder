@@ -67,6 +67,7 @@ namespace CityBuilder.Simulation.Trade
             worldPrice = new double[GoodsCatalog.Count];
             worldPriceWeekAgo = new double[GoodsCatalog.Count];
             AllocateAi(n);
+            AllocateStage2(n); // Handel 2: Bündnisse beim Erzeugen, Tourismus-Entfernungen, Diplomatie
             UpdateWorldPrices();
             Array.Copy(worldPrice, worldPriceWeekAgo, worldPrice.Length);
         }
@@ -119,6 +120,8 @@ namespace CityBuilder.Simulation.Trade
         {
             if (importer == exporter || importer < 0 || exporter < 0) return 0.0;
             if (HasAgreement(importer, exporter)) return 0.0;
+            double? bloc = BlocTariff(importer, exporter); // Handel 2: Binnenzoll 0, Außenzoll, Sanktion
+            if (bloc.HasValue) return bloc.Value;
             return nations[importer].Tariffs.RateFor(exporter);
         }
 
@@ -269,6 +272,7 @@ namespace CityBuilder.Simulation.Trade
             if (t == null) return TradeResult.Fail("keine Bedingungen");
             if (to == from) return TradeResult.Fail("nicht an sich selbst");
             if (to >= nations.Count || to < -1) return TradeResult.Fail("unbekanntes Zielland");
+            if (to >= 0 && IsSanctioned(from, to)) return TradeResult.Fail(SanctionText(from, to)); // Handel 2
             if (t.Weeks < TradeRules.MinWeeks || t.Weeks > TradeRules.MaxWeeks) return TradeResult.Fail($"Laufzeit {TradeRules.MinWeeks}–{TradeRules.MaxWeeks} Wochen");
             if (t.Kind == ContractKind.Agreement)
             {
@@ -303,6 +307,7 @@ namespace CityBuilder.Simulation.Trade
             if (o.From == party) return TradeResult.Fail("eigenes Angebot");
             if (o.To >= 0 && o.To != party) return TradeResult.Fail("Angebot gilt einem anderen Land");
             if (o.Terms.Kind == ContractKind.Agreement && HasAgreement(o.From, party)) return TradeResult.Fail("Abkommen besteht bereits");
+            if (IsSanctioned(o.From, party)) return TradeResult.Fail(SanctionText(o.From, party)); // Handel 2
             int seller = o.Side == TradeSide.Sell ? o.From : party;
             int buyer = seller == o.From ? party : o.From;
             // Vorlauf: der Spieler als Verkäufer braucht eine Woche, um Ware am Außenanschluss zu sammeln
@@ -391,6 +396,8 @@ namespace CityBuilder.Simulation.Trade
                 if (target < 0) return TradeResult.Fail("Grundzoll braucht einen Satz");
             }
             else rate = Math.Round(Math.Clamp(rate, 0.0, TradeRules.MaxTariff), 3);
+            if (target < 0 && BlocOf(party)?.Kind == BlocKind.CustomsUnion && BlocOf(party).Active) // Handel 2
+                return TradeResult.Fail($"Zollunion {BlocOf(party).Name}: es gilt der gemeinsame Außenzoll");
             double before = TariffRate(party, PlayerId);
             nations[party].Tariffs.Set(target, rate);
             double after = TariffRate(party, PlayerId);
@@ -423,8 +430,12 @@ namespace CityBuilder.Simulation.Trade
             CloseContracts();
             UpdateSituation();
             RespondToOffers();
+            RespondToInvitations(); // Handel 2: Einladungen, Abstimmungen (NPC-Stimmen, Ergebnis)
             if (AiEnabled) Decide();
+            UpdateVotes();
             ExpireOffers();
+            ExpireBlocs();
+            TourismDay();          // Handel 2: Tourismus als Dienstleistungshandel (vor dem Glätten des Handelsvolumens)
             UpdateTradeVolume();
             UpdateWorldPrices();
             if (Day % TradeRules.DaysPerWeek == TradeRules.DaysPerWeek - 1)
@@ -676,7 +687,8 @@ namespace CityBuilder.Simulation.Trade
                 for (int b = a + 1; b < n; b++)
                 {
                     float noise = (SimRandom.Hash(seed * 131 + a, b) & 0xFFFF) / 32767.5f - 1f;
-                    float v = 10f + 25f * noise - (neighbors[a, b] ? 8f : 0f);
+                    float v = 10f + 25f * noise - (neighbors[a, b] ? 8f : 0f)
+                              + Governments.Affinity(nations[a].Government, nations[b].Government); // Handel 2
                     relation[a, b] = relation[b, a] = relationBase[a, b] = relationBase[b, a] = v;
                 }
         }
@@ -717,11 +729,12 @@ namespace CityBuilder.Simulation.Trade
                         float v = relation[a, b];
                         v += (relationBase[a, b] - v) * TradeRules.RelationDrift;
                         if (HasAgreement(a, b)) v += TradeRules.RelationAgreementWeekly;
+                        if (SameBloc(a, b)) v += DiplomacyRules.RelationBlocWeekly; // Handel 2
                         relation[a, b] = relation[b, a] = Math.Clamp(v, TradeRules.RelationMin, TradeRules.RelationMax);
                     }
                     // Zölle von a gegen b verärgern b
                     double rate = TariffRate(a, b);
-                    if (rate > TradeRules.TariffAnnoyanceFrom)
+                    if (rate > TradeRules.TariffAnnoyanceFrom && !IsSanctioned(a, b)) // Handel 2: Sanktionszoll verärgert nicht jede Woche erneut
                     {
                         AddRelation(a, b, -(float)(rate - TradeRules.TariffAnnoyanceFrom) * TradeRules.TariffAnnoyance);
                         nations[b].Remember(new TradeMemory(TradeMemoryKind.Tariff, a, Day, (float)rate));

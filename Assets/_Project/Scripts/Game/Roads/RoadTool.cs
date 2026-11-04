@@ -215,6 +215,7 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Environment.EnvironmentAlerts>().Init(runner);
             Ensure<CityBuilder.Game.Environment.SmogHazeView>().Init(runner, cam);
             // --- Ende Umwelt
+            Ensure<CityBuilder.Game.UI.Hud.TradeAlerts>().Init(runner); // Handel 2: Gegenangebot, Bündnis, Sanktion
             // --- Ende Sicherheit
 
             // --- Wohnhäuser setzen (Anno-Stil): Werkzeug (Modus House, Taste 6) mit Anforderungs-Vorschau
