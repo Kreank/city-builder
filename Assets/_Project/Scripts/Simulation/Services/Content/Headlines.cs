@@ -39,6 +39,10 @@ namespace CityBuilder.Simulation.Services.Content
         Smog,
         FishKill,
         EnvironmentRules,
+        // --- Handel 2 (Bündnis, Sanktion, Gegenangebot)
+        Alliance,
+        Sanction,
+        CounterOffer,
     }
 
     /// <summary>
@@ -222,6 +226,23 @@ namespace CityBuilder.Simulation.Services.Content
                 ("Filterpflicht beschlossen", "Neue Regeln für Schornsteine: {Name}. Umweltverbände jubeln, Unternehmen rechnen nach."),
             },
             // --- Ende Umwelt
+            // --- Handel 2
+            /* Alliance */ new[]
+            {
+                ("{Name}", "Bündnispolitik: {Land} – {Name}. {Medium} fragt, was das für unsere Exporte bedeutet."),
+                ("Neue Partner: {Name}", "{Name}: die Stadt rückt mit {Land} enger zusammen."),
+            },
+            /* Sanction */ new[]
+            {
+                ("Sanktionen! {Name}", "{Name}. Betroffene Verträge enden sofort, der Handel mit {Land} ruht."),
+                ("Handelsstreit eskaliert", "{Name} – Exporteure und Importeure suchen neue Partner."),
+            },
+            /* CounterOffer */ new[]
+            {
+                ("{Land} verhandelt nach", "{Land} lehnt unser Angebot über {Name} ab und macht ein Gegenangebot (Runde {Anzahl})."),
+                ("Feilschen um {Name}", "Gegenangebot aus {Land}: Die Stadt muss entscheiden, ob sie einschlägt."),
+            },
+            // --- Ende Handel 2
         };
 
         public static int TopicCount => ByTopic.Length;
@@ -263,6 +284,9 @@ namespace CityBuilder.Simulation.Services.Content
                 case HeadlineTopic.Smog: return -0.7f;             // Umwelt
                 case HeadlineTopic.FishKill: return -0.8f;
                 case HeadlineTopic.EnvironmentRules: return 0.2f;
+                case HeadlineTopic.Alliance: return 0.3f;          // Handel 2
+                case HeadlineTopic.Sanction: return -0.6f;
+                case HeadlineTopic.CounterOffer: return 0.0f;
                 default: return 0.5f; // Eröffnungen
             }
         }

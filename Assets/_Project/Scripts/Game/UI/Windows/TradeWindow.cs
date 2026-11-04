@@ -16,10 +16,11 @@ namespace CityBuilder.Game.UI.Windows
     /// Verträge (Lieferstatus, Ware unterwegs, Grenzlager, Kündigen) und Zölle (Grundzoll, Satz je Land, Einnahmen).
     /// Alle Aktionen gehen als <see cref="TradeCommand"/> an das <see cref="TradeSystem"/> – dieselben Klassen wie bei der NPC-KI.
     /// </summary>
-    public sealed class TradeWindow : GameWindow
+    public sealed partial class TradeWindow : GameWindow
     {
-        static readonly string[] TabNames = { "Länder", "Weltpreise", "Angebote", "Verträge", "Zölle" };
-        const int Countries = 0, Prices = 1, Offers = 2, Contracts = 3, Tariffs = 4;
+        // Handel 2: Reiter Verhandlung, Bündnisse, Diplomatie, Tourismus hinten angefügt (TradeWindow.Stage2.cs)
+        static readonly string[] TabNames = { "Länder", "Weltpreise", "Angebote", "Verträge", "Zölle", "Verhandlung", "Bündnisse", "Diplomatie", "Tourismus" };
+        const int Countries = 0, Prices = 1, Offers = 2, Contracts = 3, Tariffs = 4, Negotiation = 5, Blocs = 6, Diplomacy = 7, Tourism = 8;
 
         /// <summary>Zuletzt angemeldetes Handelsfenster (für den Knopf „Handel“ in der Weltkarte).</summary>
         public static TradeWindow Current { get; private set; }
@@ -77,8 +78,12 @@ namespace CityBuilder.Game.UI.Windows
             foreach (var o in t.Offers) if (o.IsOpen && o.To == Player) toMe++;
             int active = 0;
             foreach (var c in t.Contracts) if (c.IsActive && c.Involves(Player)) active++;
-            Head(ui, "Handel (F11)", toMe > 0 ? Tone.Accent : Tone.Info, me != null ? $"Handel · {me.Country.Name}" : "Handel",
-                $"Tag {t.Day} · {active} Verträge · {toMe} neue Angebote · Grundzoll {(me != null ? me.Tariffs.General * 100 : 0):0} %");
+            int invites = 0; // Handel 2: Einladungen in Bündnisse
+            foreach (var x in t.Invitations) if (x.IsOpen && x.To == Player) invites++;
+            var bloc = t.BlocOf(Player);
+            Head(ui, "Handel (F11)", toMe + invites > 0 ? Tone.Accent : Tone.Info, me != null ? $"Handel · {me.Country.Name}" : "Handel",
+                $"Tag {t.Day} · {active} Verträge · {toMe} neue Angebote · Grundzoll {(me != null ? t.GeneralTariff(Player) * 100 : 0):0} %" +
+                (bloc != null ? $" · {bloc.Name}" : "") + (invites > 0 ? $" · {invites} Einladung(en)" : ""));
             ui.Tabs(TabNames, tab, i => { tab = i; ContentVersion++; });
         }
 
@@ -97,6 +102,10 @@ namespace CityBuilder.Game.UI.Windows
                 case Prices: DrawPrices(ui, t); break;
                 case Offers: DrawOffers(ui, t); break;
                 case Contracts: DrawContracts(ui, t); break;
+                case Negotiation: DrawNegotiation(ui, t); break; // Handel 2
+                case Blocs: DrawBlocs(ui, t); break;
+                case Diplomacy: DrawDiplomacy(ui, t); break;
+                case Tourism: DrawTourism(ui, t); break;
                 default: DrawTariffs(ui, t); break;
             }
         }
@@ -146,6 +155,10 @@ namespace CityBuilder.Game.UI.Windows
             using (ui.Fields())
             {
                 ui.Field("Persönlichkeit", n.Personality.Describe());
+                ui.Field("Regierung", Governments.DisplayName(n.Government)); // Handel 2
+                var bloc = t.BlocOf(n.Id);
+                if (bloc != null) ui.Field("Bündnis", $"{bloc.Name} ({bloc.KindText}{(bloc.Active ? "" : ", im Aufbau")})", t.SameBloc(Player, n.Id) ? Tone.Good : Tone.None);
+                if (t.IsSanctioned(Player, n.Id)) ui.Field("Sanktionen", t.SanctionText(Player, n.Id), Tone.Bad);
                 ui.Field("Stärken", $"{CountryProfile.DisplayName(c.Profile.Primary)} / {CountryProfile.DisplayName(c.Profile.Secondary)}");
                 if (route != null) ui.Field("Handelsweg", route.ToString());
                 if (World?.Gateways != null && World.Gateways.HasHighway) ui.Field("In der Stadt", World.Gateways.TradeRouteText(n.Id)); // Außenanbindung
@@ -245,7 +258,13 @@ namespace CityBuilder.Game.UI.Windows
                     {
                         ui.ActionButton("Annehmen", () => Run(new AcceptOfferCommand(Player, id)), ActionStyle.Primary);
                         ui.ActionButton("Ablehnen", () => Run(new RejectOfferCommand(Player, id, "vom Spieler abgelehnt")), ActionStyle.Danger);
+                        // Handel 2: Gegenangebot (nur Lieferverträge, an uns gerichtet, Runden frei)
+                        bool canCounter = o.To == Player && o.Terms.Kind == ContractKind.Supply && o.Round < DiplomacyRules.MaxNegotiationRounds;
+                        var offer = o;
+                        ui.ActionButton("Gegenangebot …", () => StartCounter(t, offer), ActionStyle.Secondary, false, canCounter,
+                            "Bedingungen ändern und zurückschicken (Verhandlung)");
                     }
+                    if (o.IsCounter) ui.Note($"Gegenangebot auf #{o.CounterOf} · Runde {o.Round} von höchstens {DiplomacyRules.MaxNegotiationRounds}");
                 }
             }
 

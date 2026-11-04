@@ -271,6 +271,7 @@ namespace CityBuilder.Simulation.Core
             world.Aviation = new Aviation.AviationSystem(world);
             world.AddSystem(world.Aviation);
             world.Aviation.Connect();
+            CityBuilder.Simulation.Trade.TradeTourism.Connect(world); // Handel 2: Tourismus-Handel → Besucher der Stadt (nur mit Weltkarte)
             // --- Ende Flughafen
 
             if (newGame && world.Settings.PrebuiltConnections)

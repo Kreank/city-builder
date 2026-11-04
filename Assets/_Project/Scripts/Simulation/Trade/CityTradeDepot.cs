@@ -138,7 +138,11 @@ namespace CityBuilder.Simulation.Trade
             ExportStock[k] += amount;
         }
 
-        public double SpotTariffRate(GoodType g) => Player >= 0 ? trade.Nation(Player).Tariffs.General : 0.0;
+        /// <summary>Grundzoll des Spielers auf Weltmarkt-Importe (Handel 2: in einer Zollunion der gemeinsame Außenzoll).</summary>
+        public double SpotTariffRate(GoodType g) => Player >= 0 ? trade.GeneralTariff(Player) : 0.0;
+
+        /// <summary>Handel 2: reicht die Stadtkasse (Geschenke)? Ohne Kasse immer.</summary>
+        internal bool CanAfford(double amount) => treasury == null || treasury.CanAfford(amount);
 
         public void BookTariff(double amount)
         {

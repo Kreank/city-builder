@@ -1642,6 +1642,90 @@ intern und extern.“ Keine echten Ländernamen; der Spieler benennt sein Land.
   Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
   Städten (✅ Etappe 7: interne Lieferungen, s. „Reich“), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
+## Handel Stufe 2 (Etappe 8: Verhandlung, Regierungen & Bündnisse, Diplomatie, Tourismus)
+- Neue Dateien in `Simulation/Trade` (alles „Handel 2“ markiert): `TradeDiplomacy.cs` (Typen + `DiplomacyRules` = alle Zahlen,
+  `Governments`), `TradeCommands.Stage2.cs`, `TradeSystem.Negotiation.cs`, `.Blocs.cs` (Bündnisse, Abstimmungen, KI, Diplomatie),
+  `.Tourism.cs`, `.Save2.cs`, `TradeTourism.cs` (Bindung Stadt ↔ Tourismus). Kleine markierte Stellen in `TradeSystem.cs`/`.Ai.cs`
+  (Zoll, Sanktionsprüfung, Tageslauf, Bewertung), `NationTrade`, `CityTradeDepot.SpotTariffRate`, `AviationSystem.Passengers`,
+  `SimulationWorld.CreateDefault` (eine Zeile), `BudgetCategory` (hinten `Diplomacy` „Diplomatie: Geschenke“), `Headlines` (hinten
+  `Alliance`, `Sanction`, `CounterOffer`). Ohne Weltkarte gibt es keinen Handel → nichts ändert sich.
+- **Gegenangebote** (`CounterOfferCommand(party, offerId, terms)`, gleich für Spieler und NPC): lehnt das Angebot ab (Grund bleibt,
+  „· Gegenangebot #n“) und schickt dem Anbieter neue Bedingungen mit gedrehter Seite; `TradeOffer.CounterOf`/`Round`, höchstens
+  `MaxNegotiationRounds` 6, `NegotiationChain`. NPC-Antwort: statt Ablehnung mit Chance 0,55 + 0,4 × Geschäftssinn ein Gegenangebot,
+  solange `Round` < `Patience` (2–4: verlässlich/vorsichtig = geduldiger) und der Nutzen nicht hoffnungslos ist (> −2,5).
+  **`SuggestCounter(n, offer)`** (rein, auch UI „Vorschlag übernehmen“): Evaluate liefert Einzelwerte; zuerst Menge auf Bedarf × 1,45 bzw.
+  Lieferfähigkeit × 1,05, dann Strafe auf 10 %, Festpreis-Laufzeit halbieren, zuletzt Preis **ausgerechnet** (Preisbaustein ist linear):
+  eigener Nutzen ≥ `CounterMargin` 0,12; Gegengründe ohne Bedingung (kein Bedarf, Beziehung, Vertrauen) oder Preis > 60 % daneben → keins.
+  Nur gerichtete Lieferangebote (nicht „an alle“, keine Abkommen). Nachricht `CounterOffer` an den Spieler.
+- **Regierungen:** `GovernmentForm` (Republik, Monarchie, Technokratie, Räterat, Autokratie; Hash aus Seed + Land, Profil prägt:
+  Rohstoffe → Autokratie, Technik → Technokratie …; Spieler Republik). Verschiebt die Persönlichkeit (z. B. Autokratie Risiko +0,1,
+  Protektionismus +0,15, Verlässlichkeit −0,1), Grundzoll × 1,3 (Autokratie) / 1,15 (Räterat) / 0,8 (Technokratie), Grundbeziehung
+  gleiche Form +5, Autokratie ↔ Republik −6, Räterat ↔ Monarchie −4. **Bewusste Verhaltensänderung:** dadurch handeln die NPC-Länder
+  anders als in Stufe 1 (alle alten Handelstests bleiben grün, Zahlen der Info-Tests verschieben sich leicht).
+- **Bündnisse** (`TradeBloc`, ein Land höchstens in einem; wirksam ab 2 Mitgliedern): **Handelsbündnis** (zollfrei untereinander, eigene
+  Außenzölle) und **Zollunion** (zusätzlich gemeinsamer Außenzoll `ExternalTariff` = Mittel der Grundzölle, setzt der Vorsitz per
+  `SetBlocTariffCommand`; eigener Grundzoll gesperrt, Sonderzölle zählen nur, wenn höher; `GeneralTariff(n)` gilt auch für die
+  Weltmarkt-Importe der Stadt). `TariffRate`: Abkommen → Bündnis (Sanktion 50 % / Mitglied 0 / Zollunion Außenzoll) → eigener Satz.
+  Mitglieder: Beziehung +0,3/Woche, Bewertung +0,15 „Bündnispartner“, Tourismus × 1,25. **Beim Erzeugen** bis 3 Bündnisse aus den
+  Grundbeziehungen (Gründer mit den meisten Beziehungen über 18, bis 4 Mitglieder, das erste ist eine Zollunion; Name „Zollunion/Liga/
+  Pakt/Handelsbund von {Hauptstadt}“). Höchstens 6 Bündnisse, 8 Mitglieder.
+- **Commands:** `FoundBlocCommand` (gründen + Partner einladen; im Aufbau bis zum Beitritt, sonst Auflösung), `InviteToBlocCommand` →
+  `AnswerInvitationCommand` (Annahme = Beitritt, NPC nach `JoinUtility`: 0,9 × Ø Beziehung/100 + 0,5 × (Ø Vertrauen − 0,6) + Freihandel
+  (Zollunion stärker gegen Protektionisten) + 0,08 je gleicher Regierung − 0,1), `ApplyToBlocCommand` (Abstimmung „Aufnahme“, ⅔ der
+  abgegebenen Stimmen), `LeaveBlocCommand` (Beziehung −4 je Mitglied, unter 2 Mitgliedern Auflösung), `ProposeVoteCommand` (Sanktion /
+  Aufhebung, einfache Mehrheit; Antragsteller stimmt Ja), `CastVoteCommand` (Spieler; NPC stimmen ab dem Tag nach dem Antrag per Utility
+  AI: Aufnahme aus Beziehung/Vertrauen/Regierung, Sanktion −Beziehung − 0,45 + Vertragsbruch/Drohung − Verträge mit dem Ziel; Ende wenn
+  alle gestimmt haben bzw. nach 7 Tagen, Nichtwähler = Enthaltung).
+- **Sanktionen** (beschlossen): Zoll aller Mitglieder 50 %, keine neuen Angebote/Verträge (`IsSanctioned` in Propose/Accept/Evaluate/
+  KI-Partnerwahl), laufende Verträge mit Mitgliedern enden **ohne Gebühr** (`CancelledBy` −2), offene Angebote verfallen, Beziehung −12
+  je Mitglied (der Sanktionszoll verärgert danach nicht jede Woche erneut), Reiseverkehr 0. Aufhebung per Abstimmung (+4 Beziehung).
+- **KI** (`DecideDiplomacy`, in der Wochenentscheidung, Chance 35 %, eine Aktion): ohne Bündnis Beitritt beantragen (Nutzen > 0,1, nach
+  Ablehnung 60 Tage Pause) oder mit dem besten Partner (Beziehung ≥ 40) gründen (Protektionisten: Zollunion); im Bündnis austreten
+  (Ø Beziehung < −10), Sanktion beantragen (Beziehung < −55 **und** Vertragsbruch/Drohung im Gedächtnis oder < −75; je Bündnis höchstens
+  alle 28 Tage), aufheben (> −15) oder ein Land einladen (Ø Beziehung der Mitglieder ≥ 32 – **auch den Spieler**); sonst Protest gegen
+  Zölle ≥ 25 %.
+- **Diplomatie** (`DiplomacyCommand`): **Geschenk** (ab 1 000 €, Spieler aus der Stadtkasse „Diplomatie: Geschenke“; Beziehung + 8 ×
+  (log10(1 + (vorher + Betrag)/10 000) − log10(1 + vorher/10 000)), vorher = Geschenke der letzten 30 Tage → abnehmend; Vertrauen +0,01),
+  **Protest** (Beziehung −3, Chance 0,3 + 0,4 × (1 − Protektionismus), dass das Land seinen Sonderzoll gegen uns aufhebt), **Drohung**
+  (Beziehung −8, Vertrauen −0,05; Nachgeben mit (0,15 + 0,25 × log10(Einwohner-Verhältnis)) × (1 − 0,5 × Risiko), 2–80 % – ein Stadtstaat
+  hat kaum Macht; sonst Gegenzoll +5 Punkte bei Protektionismus ≥ 0,3). Protest/Drohung höchstens 1× je Woche und Land.
+- **Tourismus als Dienstleistungshandel** (`TradeSystem.Tourism.cs`, täglich): jedes Land verbringt 25 % seines Tourismus-Haushaltsbedarfs
+  im Ausland; Ziel-Gewicht = (0,05 + Tourismus-Stärke^1,5) × e^(−km/3000) × clamp(1 + Beziehung/150) × (Preis Herkunft/Ziel)^0,6 ×
+  1,25 im Bündnis, Sanktion/Embargo 0; ein Ziel bedient je Tag höchstens 25 % seines Lagers über 10 Tagen Eigenbedarf. Tourismus-Lager
+  wandert vom Ziel zur Herkunft, Wert = Menge × Tourismuspreis des Ziels (Ausfuhr/Einfuhr, Handelsvolumen, `TourismExportValue`).
+  **Spielerstadt** (`TradeTourism.Connect` in `CreateDefault`): Potenzial = vorhandene Flughafen-Formel `AviationSystem.BaseTouristPotential`
+  (Tourismus-Stärke × (1 + Attraktivität/60) × Stadtgröße) × `EcologySystem.TourismFactor` (wenn das Umweltmodell läuft) × Marktfaktor
+  (Beziehungen/Preise/Bündnis der Herkunftsländer gegen neutral, 0,25–1,6), aufgeteilt nach √Einwohner × Reiselust. **Anreise:** bis 1 500 km
+  über Land per Bahn (Rail-Gateway in Betrieb) bzw. Straße (Wohngebiet am Anschluss), weiter per Flugzeug (Flughafen), ohne Flughafen
+  Übersee zur Hälfte per Schiff (Wasser-Gateway in Betrieb) bzw. lange Autofahrt, sonst gar nicht („ohne passende Anreise“).
+  Flugtouristen = Nachfrage des Flughafens (`AviationSystem.TouristDemandSource` ersetzt die eigene Formel), Bodenreisende direkt in die
+  Besucherliste (`AddGroundVisitors`, gleiche Ausgaben/Kurtaxe/Ladenumsatz) – **erweitert statt doppelt**. 25 Kategorie-Einheiten je Besucher.
+- **Medien/HUD:** Nachrichten `CounterOffer`, `BlocJoined`, `BlocInvitation`, `BlocLeft`, `Sanction` (hinten angefügt) → Schlagzeilen
+  `CounterOffer`, `Alliance`, `Sanction` (nur mit Medienhaus) und `Game/UI/Hud/TradeAlerts` (Begleiter am RoadTool, gesammelt je Frame).
+  Handelsfenster (F11) Reiter **Verhandlung** (Gegenangebot-Entwurf mit Einschätzung + „Vorschlag übernehmen“, Verläufe je Runde),
+  **Bündnisse** (Einladungen, eigenes Bündnis mit Außenzoll/Einladen/Sanktion beantragen/Austreten, Abstimmungen Ja/Nein/Enthaltung,
+  alle Bündnisse mit „Aufnahme beantragen“, gründen), **Diplomatie** (Geschenk-Stepper, Protest, Drohen, Gedächtnis), **Tourismus**
+  (Besucher je Anreise, Potenzial, Marktfaktor, Herkunft, Weltrangliste); Reiter Angebote: „Gegenangebot …“; Länder: Regierung, Bündnis,
+  Sanktionen; Kopfzeile: Bündnis, Einladungen. Neue Reiter hinten (`TradeWindow.Stage2.cs`).
+- **Spielstand** „trade“ **v2** (Handel-2-Teil hinten): Runden der Angebote, Bündnisse, Abstimmungen mit Stimmen, Einladungen, letzte
+  Diplomatie, Tourismusflüsse/Besucher gestern/Rest/Summen, neue Commands im Log/in der Warteschlange. **v1 lädt** (Bündnisse wie beim
+  Erzeugen der Welt, keine Abstimmungen, Tourismus ab dem nächsten Tag). Regierungen/Entfernungen entstehen neu.
+- **Tests** `TradeStage2Tests` (11): Regierungen + Startbündnisse (Binnenzoll 0, Außenzoll, deterministisch), Gegenangebot (Käufer bietet
+  weniger, aus seiner Sicht annehmbar, Spieler nimmt an, 6 Runden Grenze, Verlauf), Menge zu groß → gekürzt / dreifacher Preis bei vollem
+  Lager → keins, Zollunion des Spielers (Außenzoll, Vorsitz, Grundzoll gesperrt, Austritt löst auf), Aufnahme per Abstimmung (+70 → 4 Ja,
+  −70 → 4 Nein), Sanktion per Abstimmung (Zoll 50 %, Vertrag ohne Gebühr beendet, kein Handel, kein Reiseverkehr, Aufhebung), Diplomatie
+  (Geschenk −6,6 → −0,4 → +1,7, Protest, Abkühlzeit, Drohung), Tourismus (starke Länder 17,8 ‰ Einreisen je Kopf/Tag vs. schwache 4,6 ‰,
+  Embargo stoppt), Stadt (Potenzial ≈ 5,7/Tag ohne Sehenswürdigkeiten, ohne Flughafen kommen nur Nahreisende), Speichern/Laden bitgleich
+  (9 Tage) + v1 lädt. **Info** (37 Länder, 1 Jahr, KI an): 682 Verträge, 209 Gegenangebote (117 angenommen), 8 Aufnahmen, 11 Sanktionen,
+  23 abgelehnte Abstimmungen, 24 von 37 Ländern in 6 Bündnissen, Tourismus 2 % der Ausfuhr; Handel ≈ 0,5 ms je Tag.
+- **Optisch ungeprüft** (Unity nicht gestartet): neue Reiter (9 Reiter in einer Zeile), Karten/Stepper der Verhandlung, Abstimmungsknöpfe,
+  HUD-Meldungen.
+- **Offen:** NPC-Gegenangebote auf Spieler-Gegenangebote nutzen die gleiche Logik, aber kein „Feilschen in der Mitte“ (sie rechnen nur ihre
+  Grenze aus); Gegenangebote auf Angebote „an alle“; Abstimmungen über Außenzoll/Ausschluss, Bündnis-Vorsitz wechselt; Regierungswechsel/
+  Wahlen (Medien), Spieler wählt seine Regierungsform; Diplomatie der NPC untereinander (Geschenke/Drohungen), Bündnisse als Verteidigung;
+  Tourismus: Hotels/Übernachtung als Kapazität der Stadt, Reisebusse/Züge sichtbar, Saisonkurve je Herkunft, eigene Ausreisen der Einwohner
+  als Tourismus-Import, Kreuzfahrt im Hafen; Pendel-/Grenzverkehr zwischen Reichsstädten.
+
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
   in `blender/` im Projektordner). Die `.gitignore` versioniert unter `Assets/` nur `_Project`, `Scenes`, `Settings`
@@ -2183,7 +2267,7 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
   Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
   Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0;
-  `aviation` v1 fehlt → kein Flughafen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
+  `aviation` v1 fehlt → kein Flughafen; `trade` v2 = Handel 2, v1 → Startbündnisse aus der Welt, keine Abstimmungen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
   das Spiel schaltet sie ein).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
@@ -2347,5 +2431,11 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
      Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit
      Persönlichkeit/Gedächtnis, Beziehungen, Vertrauen, Zölle, Handelsabkommen, Stadtkasse (Zölle, Strafen, Vertragshandel),
      Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
-     Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
+     Schlagzeilen zum Handel.
+   - ✅ Stufe 2 (s. „Handel Stufe 2“): Gegenangebote/Verhandlung (begrenzte Runden, Geduld je Persönlichkeit, Vorschlag aus der Bewertung),
+     Regierungsformen (prägen Persönlichkeit/Zölle/Beziehungen), Bündnisse (Handelsbündnis, Zollunion mit gemeinsamem Außenzoll) mit Antrag/
+     Einladung/Austritt und Abstimmungen (Aufnahme, Sanktionen, Aufheben) per Utility AI, Sanktionen (Zoll 50 %, kein Handel), Diplomatie
+     (Geschenk, Protest, Drohung), Tourismus als Dienstleistungshandel der Länder + Besucher der Stadt nach Herkunft und Anreise
+     (Straße/Bahn/Schiff/Flug, an Flughafen-Besucher gekoppelt), Schlagzeilen/HUD, Handelsfenster-Reiter, Spielstand trade v2 (im Editor noch
+     nicht visuell abgenommen). Später: Wahlen/Regierungswechsel, Abstimmungen über Außenzoll, Hotels, NPC-Diplomatie untereinander
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port

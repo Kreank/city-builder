@@ -77,6 +77,13 @@ namespace CityBuilder.Simulation.Trade
         /// <summary>Wer angenommen/abgelehnt hat.</summary>
         public int RespondedBy { get; internal set; } = -1;
         public int ContractId { get; internal set; }
+        // --- Handel 2: Verhandlung
+        /// <summary>Gegenangebot auf dieses Angebot (0 = Erstangebot).</summary>
+        public int CounterOf { get; internal set; }
+        /// <summary>Verhandlungsrunde (0 = Erstangebot, 1 = erstes Gegenangebot …).</summary>
+        public int Round { get; internal set; }
+        public bool IsCounter => CounterOf > 0;
+        // --- Ende Handel 2
 
         public bool IsOpen => Status == OfferStatus.Open;
         public override string ToString() => $"#{Id} {From}→{To} {Side} {Terms.Describe()} [{Status}]";
@@ -137,7 +144,12 @@ namespace CityBuilder.Simulation.Trade
         public override string ToString() => $"V#{Id} {Seller}→{Buyer} {Terms.Describe()} [{Status}]";
     }
 
-    public enum TradeMemoryKind : byte { OnTime, Breach, Cancelled, Completed, Rejected, Agreement, Tariff }
+    public enum TradeMemoryKind : byte
+    {
+        OnTime, Breach, Cancelled, Completed, Rejected, Agreement, Tariff,
+        // --- Handel 2 (hinten angefügt)
+        Sanction, Gift, Protest, Threat, BlocJoined, BlocLeft,
+    }
 
     /// <summary>Erinnerung eines Landes an ein anderes (Gedächtnis der Utility AI; Vertrauen ist der verdichtete Wert).</summary>
     public readonly struct TradeMemory
@@ -158,12 +170,25 @@ namespace CityBuilder.Simulation.Trade
                 case TradeMemoryKind.Completed: return $"Vertrag mit {partnerName} erfüllt";
                 case TradeMemoryKind.Rejected: return $"{partnerName} hat unser Angebot abgelehnt";
                 case TradeMemoryKind.Agreement: return $"Handelsabkommen mit {partnerName}";
+                // --- Handel 2
+                case TradeMemoryKind.Sanction: return $"Sanktionen zwischen uns und {partnerName}";
+                case TradeMemoryKind.Gift: return $"{partnerName} hat uns {Magnitude:N0} € geschenkt";
+                case TradeMemoryKind.Protest: return $"{partnerName} hat gegen unsere Zölle protestiert";
+                case TradeMemoryKind.Threat: return $"{partnerName} hat uns gedroht";
+                case TradeMemoryKind.BlocJoined: return $"{partnerName} ist unserem Bündnis beigetreten";
+                case TradeMemoryKind.BlocLeft: return $"{partnerName} hat unser Bündnis verlassen";
+                // --- Ende Handel 2
                 default: return $"{partnerName} erhebt hohe Zölle ({Magnitude * 100:0} %)";
             }
         }
     }
 
-    public enum TradeNewsKind : byte { ContractSigned, Embargo, TariffRaised }
+    public enum TradeNewsKind : byte
+    {
+        ContractSigned, Embargo, TariffRaised,
+        // --- Handel 2 (hinten angefügt): Gegenangebot an uns, Bündnis (Beitritt/Einladung/Austritt), Sanktion
+        CounterOffer, BlocJoined, BlocInvitation, BlocLeft, Sanction,
+    }
 
     /// <summary>Nachricht des Handels an den Spieler (Medien, HUD).</summary>
     public readonly struct TradeNews

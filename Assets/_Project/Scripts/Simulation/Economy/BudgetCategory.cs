@@ -95,6 +95,10 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Stadtgründung, interne Lieferungen (Einkauf, Fracht), Landesabgabe, Kassenausgleich beim Stadtwechsel.</summary>
         RealmExpenses,
         // --- Ende Etappe 7
+        // --- Handel 2 (hinten angefügt)
+        /// <summary>Ausgabe: Diplomatie (Geschenke an andere Länder).</summary>
+        Diplomacy,
+        // --- Ende Handel 2
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -108,7 +112,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.RealmExpenses + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, dann Reich)
+        public const int Count = (int)BudgetCategory.Diplomacy + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, Reich, dann Handel 2)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -170,6 +174,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.TourismIncome: return "Tourismus: Kurtaxe & Eintritt";       // Flughafen (Tourismus)
                 case BudgetCategory.RealmIncome: return "Reich: Einnahmen";          // Etappe 7 Reich
                 case BudgetCategory.RealmExpenses: return "Reich: Ausgaben";         // Etappe 7 Reich
+                case BudgetCategory.Diplomacy: return "Diplomatie: Geschenke";        // Handel 2
                 default: return c.ToString();
             }
         }

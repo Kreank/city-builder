@@ -14,7 +14,8 @@ namespace CityBuilder.Simulation.Trade
     public sealed partial class TradeSystem : Persistence.ISaveable
     {
         public string SaveId => "trade";
-        public int SaveVersion => 1;
+        /// <summary>v2 = Handel 2 (Gegenangebote, Bündnisse, Abstimmungen, Einladungen, Diplomatie, Tourismus).</summary>
+        public int SaveVersion => 2;
 
         public void Write(SaveWriter w)
         {
@@ -60,6 +61,7 @@ namespace CityBuilder.Simulation.Trade
 
             w.Bool(City != null);
             City?.WriteState(w);
+            WriteStage2(w); // Handel 2 (v2)
         }
 
         public void Read(SaveReader r, int version)
@@ -121,6 +123,9 @@ namespace CityBuilder.Simulation.Trade
                 if (City == null) throw new SaveFormatException("Grenzlager gespeichert, aber keine Stadt angebunden.");
                 City.ReadState(r);
             }
+            if (version >= 2) ReadStage2(r);
+            // v1 (vor Handel 2): Bündnisse wie beim Erzeugen der Welt (Konstruktor), keine Abstimmungen/Einladungen,
+            // Tourismus beginnt mit dem nächsten Handelstag
         }
 
         // ------------------------------------------------------------ Bausteine
@@ -238,6 +243,18 @@ namespace CityBuilder.Simulation.Trade
                 case WithdrawOfferCommand x: w.String("withdraw"); w.Int(x.Party); w.Int(x.OfferId); break;
                 case CancelContractCommand c: w.String("cancel"); w.Int(c.Party); w.Int(c.ContractId); break;
                 case SetTariffCommand t: w.String("tariff"); w.Int(t.Party); w.Int(t.Target); w.Double(t.Rate); break;
+                // --- Handel 2
+                case CounterOfferCommand k: w.String("counter"); w.Int(k.Party); w.Int(k.OfferId); WriteTerms(w, k.Terms); w.String(k.Reason); break;
+                case FoundBlocCommand f: w.String("foundbloc"); w.Int(f.Party); w.Name(f.Kind); w.String(f.Name); w.Int(f.Partner); break;
+                case ApplyToBlocCommand a: w.String("applybloc"); w.Int(a.Party); w.Int(a.BlocId); break;
+                case InviteToBlocCommand i: w.String("invitebloc"); w.Int(i.Party); w.Int(i.BlocId); w.Int(i.Target); break;
+                case AnswerInvitationCommand an: w.String("answerinv"); w.Int(an.Party); w.Int(an.InvitationId); w.Bool(an.Accept); w.String(an.Reason); break;
+                case LeaveBlocCommand l: w.String("leavebloc"); w.Int(l.Party); w.Int(l.BlocId); break;
+                case ProposeVoteCommand pv: w.String("proposevote"); w.Int(pv.Party); w.Int(pv.BlocId); w.Name(pv.Kind); w.Int(pv.Subject); break;
+                case CastVoteCommand cv: w.String("castvote"); w.Int(cv.Party); w.Int(cv.VoteId); w.Name(cv.Choice); break;
+                case SetBlocTariffCommand bt: w.String("bloctariff"); w.Int(bt.Party); w.Int(bt.BlocId); w.Double(bt.Rate); break;
+                case DiplomacyCommand d: w.String("diplomacy"); w.Int(d.Party); w.Int(d.Target); w.Name(d.Action); w.Double(d.Amount); break;
+                // --- Ende Handel 2
                 default: w.String(null); break; // unbekannter Command-Typ: nicht speicherbar (neue Typen hier ergänzen)
             }
         }
@@ -252,6 +269,18 @@ namespace CityBuilder.Simulation.Trade
                 case "withdraw": { int party = r.Int(); return new WithdrawOfferCommand(party, r.Int()); }
                 case "cancel": { int party = r.Int(); return new CancelContractCommand(party, r.Int()); }
                 case "tariff": { int party = r.Int(), target = r.Int(); return new SetTariffCommand(party, target, r.Double()); }
+                // --- Handel 2 (unbekannte Enum-Werte → Command entfällt)
+                case "counter": { int party = r.Int(), offer = r.Int(); var terms = ReadTerms(r); return new CounterOfferCommand(party, offer, terms, r.String()); }
+                case "foundbloc": { int party = r.Int(); bool ok = r.TryName<BlocKind>(out var kind); string name = r.String(); int partner = r.Int(); return ok ? new FoundBlocCommand(party, kind, name, partner) : null; }
+                case "applybloc": { int party = r.Int(); return new ApplyToBlocCommand(party, r.Int()); }
+                case "invitebloc": { int party = r.Int(), bloc = r.Int(); return new InviteToBlocCommand(party, bloc, r.Int()); }
+                case "answerinv": { int party = r.Int(), inv = r.Int(); bool acc = r.Bool(); return new AnswerInvitationCommand(party, inv, acc, r.String()); }
+                case "leavebloc": { int party = r.Int(); return new LeaveBlocCommand(party, r.Int()); }
+                case "proposevote": { int party = r.Int(), bloc = r.Int(); bool ok = r.TryName<VoteKind>(out var kind); int subject = r.Int(); return ok ? new ProposeVoteCommand(party, bloc, kind, subject) : null; }
+                case "castvote": { int party = r.Int(), vote = r.Int(); bool ok = r.TryName<VoteChoice>(out var choice); return ok ? new CastVoteCommand(party, vote, choice) : null; }
+                case "bloctariff": { int party = r.Int(), bloc = r.Int(); return new SetBlocTariffCommand(party, bloc, r.Double()); }
+                case "diplomacy": { int party = r.Int(), target = r.Int(); bool ok = r.TryName<DiplomacyAction>(out var action); double amount = r.Double(); return ok ? new DiplomacyCommand(party, target, action, amount) : null; }
+                // --- Ende Handel 2
                 case null: return null;
                 default: throw new SaveFormatException("Unbekannter Handels-Command.");
             }
