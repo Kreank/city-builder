@@ -290,6 +290,11 @@ namespace CityBuilder.Simulation.Core
             // --- Umwelt (Etappe 6): Wirkungen über die Hooks der anderen Systeme (Ernte, Brunnen, Gesundheit, Bodenwert, Kosten)
             world.Ecology.Connect();
             // --- Ende Umwelt
+
+            // --- Etappe 7 Reich: mehrere Städte (aggregiert), interne Lieferungen, Land gründen, NPC-Expansion. Läuft zuletzt
+            // (liest die fertige Stadtkasse/Märkte des Tages; Zustand in world.Realm, Logik in world.Realm.System)
+            world.AddSystem(new CityBuilder.Simulation.Realm.RealmSystem(world));
+            // --- Ende Etappe 7
             return world;
         }
 

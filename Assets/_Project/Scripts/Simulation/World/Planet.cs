@@ -196,10 +196,14 @@ namespace CityBuilder.Simulation.World
                 Countries[region.CountryId].IsPlayer = true;
         }
 
+        /// <summary>Etappe 7 Reich: zählt Änderungen an Besitz, Namen und Farben der Länder (Weltkarte färbt neu). Nicht gespeichert.</summary>
+        public int PoliticalVersion { get; internal set; }
+
         /// <summary>Region einem Land zuordnen (null = frei); hält <see cref="Region.CountryId"/>/<see cref="Region.Country"/> und <see cref="Country.Regions"/> gleich.</summary>
         internal void AssignRegion(Region r, Country c)
         {
             if (r.Country == c && r.CountryId == (c?.Id ?? -1)) return;
+            PoliticalVersion++; // Etappe 7: Weltkarte färbt neu
             r.Country?.Regions.Remove(r.Id);
             r.Country = c;
             r.CountryId = c?.Id ?? -1;

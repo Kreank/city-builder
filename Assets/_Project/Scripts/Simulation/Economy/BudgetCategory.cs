@@ -80,6 +80,13 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Umweltschutz – Bäume pflanzen (Aufforstung).</summary>
         Environment,
         // --- Ende Umwelt
+
+        // --- Etappe 7 Reich (hinten angefügt; Einnahme/Ausgabe s. Budget.IsIncome)
+        /// <summary>Einnahme: interne Lieferungen (Verrechnung), Zuschüsse der Landeskasse, Kassenausgleich beim Stadtwechsel.</summary>
+        RealmIncome,
+        /// <summary>Ausgabe: Stadtgründung, interne Lieferungen (Einkauf, Fracht), Landesabgabe, Kassenausgleich beim Stadtwechsel.</summary>
+        RealmExpenses,
+        // --- Ende Etappe 7
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -93,14 +100,15 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.Environment + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, dann Umwelt)
+        public const int Count = (int)BudgetCategory.RealmExpenses + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, dann Reich)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
             c < BudgetCategory.RoadConstruction
             || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived // Etappe 8
             || c == BudgetCategory.RailFares  // Bahn
-            || c == BudgetCategory.HarborFees; // Wasserstraße & Hafen
+            || c == BudgetCategory.HarborFees  // Wasserstraße & Hafen
+            || c == BudgetCategory.RealmIncome; // Etappe 7 Reich
 
         public static BudgetCategory TaxCategory(TaxKind kind)
         {
@@ -148,6 +156,8 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.HarborConstruction: return "Bau Hafen & Klappbrücken"; // Wasserstraße & Hafen
                 case BudgetCategory.HarborFees: return "Hafen: Hafengeld & Umschlag";      // Wasserstraße & Hafen
                 case BudgetCategory.Environment: return "Umweltschutz (Bäume)";      // Umwelt
+                case BudgetCategory.RealmIncome: return "Reich: Einnahmen";          // Etappe 7 Reich
+                case BudgetCategory.RealmExpenses: return "Reich: Ausgaben";         // Etappe 7 Reich
                 default: return c.ToString();
             }
         }
