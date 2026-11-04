@@ -8,9 +8,10 @@ using CityBuilder.Simulation.Traffic;
 namespace CityBuilder.Simulation.Rail
 {
     /// <summary>
-    /// Fernbahn-Hauptstrecke auf dem Bahnkorridor der Gateways: zweigleisig (Rechtsverkehr: Gleis 1 von A nach B rechts der
-    /// Achse, Gleis 2 zurück), Gradiente auf dem geglätteten Gelände mit 2 % Steigung, Brücken über Wasser und über Straßen
-    /// (Autobahn) mit lichter Höhe, Stücke à ~260 m = Blockabschnitte. Gehört der Welt (gesperrt, Kosten/Unterhalt trägt sie).
+    /// Fernbahn-Hauptstrecke auf der Bahntrasse der Gateways (geschwungen: Geraden + Bögen R ≥ 1 000 m, s. RoutePlanner):
+    /// zweigleisig (Rechtsverkehr: Gleis 1 von A nach B rechts der Achse, Gleis 2 zurück), Gradiente auf dem geglätteten
+    /// Gelände mit 2 % Steigung, Brücken über Wasser und über Straßen (Autobahn) mit lichter Höhe, Stücke à ≤ ~260 m =
+    /// Blockabschnitte. Gehört der Welt (gesperrt, Kosten/Unterhalt trägt sie).
     /// </summary>
     public sealed partial class RailSystem
     {
@@ -28,84 +29,108 @@ namespace CityBuilder.Simulation.Rail
         /// <summary>Bericht der Erzeugung (nicht gespeichert).</summary>
         public string MainlineReport { get; private set; }
 
-        /// <summary>Baut die Hauptstrecke auf dem Korridor (nur neue Welt, nach <c>Gateways.Generate</c>). Kosten trägt die Welt.</summary>
+        /// <summary>
+        /// Baut die Hauptstrecke auf der Trasse (nur neue Welt, nach <c>Gateways.Generate</c>): Stücke der geplanten Mittellinie
+        /// (Geraden + weite Bögen), je Gleis um ±2,25 m versetzt. Kosten trägt die Welt.
+        /// </summary>
         public bool BuildMainline()
         {
             var gw = world.Gateways;
             if (gw == null || !gw.HasRailCorridor) { MainlineReport = "kein Bahnkorridor"; return false; }
             var a = gw.RailStart;
             var b = gw.RailEnd;
-            float length = Vector2.Distance(a, b);
+            var center = gw.RailPieces != null && gw.RailPieces.Count > 0 ? new List<RoutePiece>(gw.RailPieces) : StraightPieces(a, b);
+            float length = 0f;
+            foreach (var p in center) length += p.Length;
             if (length < 200f) { MainlineReport = "Korridor zu kurz"; return false; }
-            var u = Vector2.Normalize(b - a);
-            var right = new Vector2(u.Y, -u.X);
 
-            // --- Gradiente entlang der Achse (alle 4 m)
+            // --- Gradiente entlang der Mittellinie (alle ≈ 4 m)
             const float ds = 4f;
-            int count = (int)MathF.Ceiling(length / ds) + 1;
+            var starts = new List<int>();
+            var pts = RoutePlanner.Sample(center, ds, starts);
+            int count = pts.Count;
+            var dist = new float[count];
+            for (int k = 1; k < count; k++) dist[k] = dist[k - 1] + Vector2.Distance(pts[k - 1], pts[k]);
             var raw = new float[count];
             var water = new bool[count];
+            var floor = new float[count];
             for (int k = 0; k < count; k++)
             {
-                var p = a + u * MathF.Min(length, k * ds);
+                var p = pts[k];
                 water[k] = terrain.IsWater(p);
                 raw[k] = water[k] ? Profiles.WaterFloor(terrain, p, Profiles.WaterClearance + 2f) : terrain.HeightAt(p); // Wasserstraße: Fahrrinne
+                floor[k] = water[k] ? raw[k] : float.MinValue;
             }
             var grade = BoxSmooth(raw, Math.Max(1, (int)(RailRules.MainlineSmoothing / ds)));
-            var floor = new float[count];
-            for (int k = 0; k < count; k++) floor[k] = water[k] ? Profiles.WaterFloor(terrain, a + u * MathF.Min(length, k * ds), Profiles.WaterClearance + 2f) : float.MinValue; // Wasserstraße
 
-            // Straßen (Autobahn, Zubringer), die den Korridor kreuzen: Gleis darüber mit lichter Höhe
-            var crossings = new List<float>(); // Achsen-Strecke der Kreuzungen
+            // Straßen (Autobahn, Zubringer), die die Trasse kreuzen: Gleis darüber mit lichter Höhe
+            var crossings = new List<float>(); // Strecke der Kreuzungen entlang der Mittellinie
             foreach (var seg in roads.Segments)
             {
-                if (!CrossesAxis(seg, a, u, length, out float along, out float roadH, out float angle)) continue;
+                if (!CrossesPath(seg, pts, dist, out float along, out float roadH, out float angle)) continue;
                 float sin = MathF.Max(0.3f, MathF.Sin(angle * MathF.PI / 180f));
                 float half = (seg.Type.HalfWidth + RoadCatalog.RailMain.HalfWidth + RailRules.TrackSpacing) / sin + 6f;
                 float need = roadH + RailRules.RailOverRoadClearance + 1.2f; // Konstruktionshöhe der Brücke
                 for (int k = 0; k < count; k++)
-                    if (MathF.Abs(k * ds - along) <= half) floor[k] = MathF.Max(floor[k], need);
+                    if (MathF.Abs(dist[k] - along) <= half) floor[k] = MathF.Max(floor[k], need);
                 crossings.Add(along);
             }
-            float g = RailRules.MainlineGrade * ds;
-            for (int k = 1; k < count; k++) floor[k] = MathF.Max(floor[k], floor[k - 1] - g);
-            for (int k = count - 2; k >= 0; k--) floor[k] = MathF.Max(floor[k], floor[k + 1] - g);
+            for (int k = 1; k < count; k++) floor[k] = MathF.Max(floor[k], floor[k - 1] - RailRules.MainlineGrade * (dist[k] - dist[k - 1]));
+            for (int k = count - 2; k >= 0; k--) floor[k] = MathF.Max(floor[k], floor[k + 1] - RailRules.MainlineGrade * (dist[k + 1] - dist[k]));
             for (int k = 0; k < count; k++) grade[k] = MathF.Max(grade[k], floor[k]);
-            for (int k = 1; k < count; k++) grade[k] = Math.Clamp(grade[k], grade[k - 1] - g, grade[k - 1] + g);
-            for (int k = count - 2; k >= 0; k--) grade[k] = Math.Clamp(grade[k], grade[k + 1] - g, grade[k + 1] + g);
+            for (int k = 1; k < count; k++) { float g = RailRules.MainlineGrade * (dist[k] - dist[k - 1]); grade[k] = Math.Clamp(grade[k], grade[k - 1] - g, grade[k - 1] + g); }
+            for (int k = count - 2; k >= 0; k--) { float g = RailRules.MainlineGrade * (dist[k + 1] - dist[k]); grade[k] = Math.Clamp(grade[k], grade[k + 1] - g, grade[k + 1] + g); }
 
-            // --- Stückgrenzen (Blockabschnitte): ~260 m, nicht über Wasser/Kreuzungen
-            int clear = (int)(40f / ds);
+            // --- Blockabschnitte = Stücke der Trasse; Grenzen über Wasser/an Kreuzungen fallen weg (gerade Stücke verschmelzen)
             bool Free(int k)
             {
-                for (int j = Math.Max(0, k - clear); j <= Math.Min(count - 1, k + clear); j++) if (water[j]) return false;
-                foreach (float c in crossings) if (MathF.Abs(k * ds - c) < 60f) return false;
+                for (int j = 0; j < count; j++)
+                    if (water[j] && MathF.Abs(dist[j] - dist[k]) < 40f) return false;
+                foreach (float c in crossings) if (MathF.Abs(dist[k] - c) < 60f) return false;
                 return true;
             }
-            var cuts = new List<int> { 0 };
-            int last = count - 1;
-            int step = (int)(RailRules.MainlineChunk / ds), maxStep = (int)(RailRules.MainlineMaxChunk / ds), minRest = (int)(80f / ds);
-            int cur = 0;
-            while (last - cur > step * 3 / 2)
+            var blocks = new List<RoutePiece>();
+            var blockStart = new List<float>(); // Strecke am Anfang jedes Blocks
+            for (int i = 0; i < center.Count; i++)
             {
-                int found = -1;
-                for (int k = cur + step; k <= Math.Min(cur + maxStep, last - minRest); k++) if (Free(k)) { found = k; break; }
-                if (found < 0) for (int k = cur + step - 1; k > cur + minRest; k--) if (Free(k)) { found = k; break; }
-                if (found < 0) break;
-                cuts.Add(found);
-                cur = found;
+                var p = center[i];
+                if (blocks.Count > 0)
+                {
+                    var prev = blocks[blocks.Count - 1];
+                    bool collinear = prev.Turn == 0 && p.Turn == 0 && Vector2.Dot(Vector2.Normalize(prev.P2 - prev.P0), Vector2.Normalize(p.P2 - p.P0)) > 0.99996f;
+                    if (collinear && !Free(starts[i]))
+                    {
+                        prev.P2 = p.P2;
+                        prev.C = (prev.P0 + prev.P2) * 0.5f;
+                        prev.Length = Vector2.Distance(prev.P0, prev.P2);
+                        prev.H1 = p.H1;
+                        blocks[blocks.Count - 1] = prev;
+                        continue;
+                    }
+                }
+                blocks.Add(p);
+                blockStart.Add(dist[starts[i]]);
             }
-            cuts.Add(last);
+            blockStart.Add(dist[count - 1]);
 
             // --- Bauen (Kasse abgehängt: die Welt zahlt), beide Gleise
             var budget = Tracks.Budget;
             Tracks.Budget = null;
             buildingMainline = true;
             int built = 0;
+            float edge = world.Settings.SizeMeters * 0.5f - GatewayRules.EdgeInset;
+            float GradeAt(float s)
+            {
+                int lo = 0, hi = count - 1;
+                while (hi - lo > 1) { int m = (lo + hi) / 2; if (dist[m] <= s) lo = m; else hi = m; }
+                float span = dist[hi] - dist[lo];
+                float f = span > 1e-4f ? Math.Clamp((s - dist[lo]) / span, 0f, 1f) : 0f;
+                return grade[lo] + (grade[hi] - grade[lo]) * f;
+            }
             try
             {
-                built += BuildMainTrack(a, u, right * (RailRules.TrackSpacing * 0.5f), cuts, grade, ds, length, forward: true, out int s1, out int e1);
-                built += BuildMainTrack(a, u, -right * (RailRules.TrackSpacing * 0.5f), cuts, grade, ds, length, forward: false, out int s2, out int e2);
+                built += BuildMainTrack(blocks, blockStart, -RailRules.TrackSpacing * 0.5f, GradeAt, edge, forward: true, out int s1, out int e1);
+                built += BuildMainTrack(blocks, blockStart, RailRules.TrackSpacing * 0.5f, GradeAt, edge, forward: false, out int s2, out int e2);
                 Track1StartNode = s1; Track1EndNode = e1; Track2StartNode = s2; Track2EndNode = e2;
             }
             finally
@@ -121,35 +146,49 @@ namespace CityBuilder.Simulation.Rail
                 if (Vector2.Distance(g2.Position, a) < Vector2.Distance(g2.Position, b)) GatewayA = g2.Id; else GatewayB = g2.Id;
             }
             MarkDirty();
-            MainlineReport = $"Hauptstrecke {length:0} m, {cuts.Count - 1} Blöcke je Gleis, {crossings.Count} Straßenquerungen (Brücke), {built} Gleisstücke";
+            int curves = 0;
+            foreach (var p in blocks) if (p.Turn != 0) curves++;
+            MainlineReport = $"Hauptstrecke {length:0} m, {blocks.Count} Blöcke je Gleis ({curves} im Bogen), {crossings.Count} Straßenquerungen (Brücke), {built} Gleisstücke";
             return HasMainline;
         }
 
-        int BuildMainTrack(Vector2 a, Vector2 u, Vector2 offset, List<int> cuts, float[] grade, float ds, float length, bool forward,
+        /// <summary>Gerade Trasse A → B in Stücken à ~260 m (Rückfall ohne geplante Stücke).</summary>
+        static List<RoutePiece> StraightPieces(Vector2 a, Vector2 b)
+        {
+            var list = new List<RoutePiece>();
+            float len = Vector2.Distance(a, b);
+            if (len < 1f) return list;
+            var d = (b - a) / len;
+            float heading = MathF.Atan2(d.Y, d.X);
+            int n = Math.Max(1, (int)MathF.Round(len / RailRules.MainlineChunk));
+            for (int i = 0; i < n; i++)
+            {
+                var p0 = a + d * (len * i / n); var p2 = a + d * (len * (i + 1) / n);
+                list.Add(new RoutePiece { P0 = p0, P2 = p2, C = (p0 + p2) * 0.5f, H0 = heading, H1 = heading, Length = Vector2.Distance(p0, p2) });
+            }
+            return list;
+        }
+
+        int BuildMainTrack(List<RoutePiece> blocks, List<float> blockStart, float offset, Func<float, float> gradeAt, float edge, bool forward,
             out int startNode, out int endNode)
         {
             startNode = endNode = 0;
-            var nodes = new List<RoadNode>();
-            foreach (int k in cuts)
-            {
-                var p = a + u * MathF.Min(length, k * ds) + offset;
-                nodes.Add(Tracks.AddNode(p, grade[k]));
-            }
+            var pieces = new List<RoutePiece>(blocks.Count);
+            foreach (var p in blocks) pieces.Add(RoutePlanner.Offset(p, offset));
+            RoutePlanner.ClampEndToEdge(pieces, edge, false);
+            RoutePlanner.ClampEndToEdge(pieces, edge, true);
+            var nodes = new List<RoadNode> { Tracks.AddNode(pieces[0].P0, gradeAt(blockStart[0])) };
+            for (int i = 0; i < pieces.Count; i++) nodes.Add(Tracks.AddNode(pieces[i].P2, gradeAt(blockStart[i + 1])));
             int built = 0;
-            for (int i = 0; i < cuts.Count - 1; i++)
+            for (int i = 0; i < pieces.Count; i++)
             {
-                int k0 = cuts[i], k1 = cuts[i + 1];
-                int n = Math.Clamp(k1 - k0 + 1, 2, 257);
+                float s0 = blockStart[i], s1 = blockStart[i + 1];
+                int n = Math.Clamp((int)MathF.Ceiling((s1 - s0) / 4f) + 1, 2, 257);
                 var profile = new float[n];
-                for (int j = 0; j < n; j++)
-                {
-                    float f = k0 + (k1 - k0) * j / (float)(n - 1);
-                    int lo = Math.Min((int)f, grade.Length - 2);
-                    profile[j] = grade[lo] + (grade[lo + 1] - grade[lo]) * (f - lo);
-                }
+                for (int j = 0; j < n; j++) profile[j] = gradeAt(s0 + (s1 - s0) * j / (n - 1));
                 RoadNode from = nodes[i], to = nodes[i + 1];
                 if (!forward) { (from, to) = (to, from); Array.Reverse(profile); }
-                var seg = Tracks.AddSegment(from, to, (from.Position + to.Position) * 0.5f, RoadCatalog.RailMain, RoadSegmentFlags.Locked, profile);
+                var seg = Tracks.AddSegment(from, to, pieces[i].C, RoadCatalog.RailMain, RoadSegmentFlags.Locked, profile);
                 if (seg != null) built++;
             }
             startNode = forward ? nodes[0].Id : nodes[nodes.Count - 1].Id;
@@ -157,22 +196,25 @@ namespace CityBuilder.Simulation.Rail
             return built;
         }
 
-        /// <summary>Kreuzt die Straße die Korridor-Achse? Strecke auf der Achse, Straßenhöhe dort, Winkel (0..90°).</summary>
-        static bool CrossesAxis(RoadSegment seg, Vector2 a, Vector2 u, float length, out float along, out float height, out float angle)
+        /// <summary>Kreuzt die Straße die Trasse? Strecke entlang der Mittellinie, Straßenhöhe dort, Winkel (0..90°).</summary>
+        static bool CrossesPath(RoadSegment seg, List<Vector2> pts, float[] dist, out float along, out float height, out float angle)
         {
             along = height = angle = 0f;
-            var b = a + u * length;
             int m = Math.Clamp((int)MathF.Ceiling(seg.Length / 3f), 8, 256);
             var prev = seg.Start.Position;
             for (int j = 1; j <= m; j++)
             {
                 var cur = seg.Evaluate(j / (float)m);
-                if (Bezier.LineSegmentsIntersect(a, b, prev, cur, out float s, out float v))
+                var lo = Vector2.Min(prev, cur); var hi = Vector2.Max(prev, cur);
+                for (int k = 0; k < pts.Count - 1; k++)
                 {
+                    var a = pts[k]; var b = pts[k + 1];
+                    if (MathF.Max(a.X, b.X) < lo.X || MathF.Min(a.X, b.X) > hi.X || MathF.Max(a.Y, b.Y) < lo.Y || MathF.Min(a.Y, b.Y) > hi.Y) continue;
+                    if (!Bezier.LineSegmentsIntersect(a, b, prev, cur, out float s, out float v)) continue;
                     float t = (j - 1 + v) / m;
-                    along = s * length;
+                    along = dist[k] + s * (dist[k + 1] - dist[k]);
                     height = seg.HeightAt(t);
-                    angle = RoadGeometry.Angle(u, seg.Tangent(t));
+                    angle = RoadGeometry.Angle(b - a, seg.Tangent(t));
                     if (angle > 90f) angle = 180f - angle;
                     return true;
                 }

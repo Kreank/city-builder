@@ -27,18 +27,30 @@ namespace CityBuilder.Simulation.Gateways
         public Vector2 Interchange;
         public int Attempts;
         public int SegmentsBuilt;
+        /// <summary>Ausgebaute Zustände der Trassensuche (Autobahn + Bahn, Rechenaufwand).</summary>
+        public int Expansions;
+        /// <summary>Mittellinie der Autobahn (Rand B → Anschlussstelle → Rand A), nur in der Sitzung der Erzeugung.</summary>
+        public List<Vector2> Centerline;
+        /// <summary>Verworfene Kandidaten: Trassensuche ohne Weg / Fahrbahnstück nicht baubar (letzter Fehler).</summary>
+        public int NoRoute, NotBuildable, TemplateRejected;
+        /// <summary>Rechenzeit der Trassierung (Autobahn planen + bauen, Bahn planen), nur Bericht.</summary>
+        public long Milliseconds;
+        /// <summary>Gründe je verworfenem Kandidaten ohne Trasse (Fehlersuche).</summary>
+        public List<string> Log = new List<string>();
+        public RoadBuildError LastPieceError;
         public string Failure;
         public override string ToString() =>
-            HighwayBuilt ? $"Autobahn {HighwayAngle:0}° · Anschlussstelle ({Interchange.X:0}/{Interchange.Y:0}) · {SegmentsBuilt} Stücke · {Attempts} Versuche"
-                         : $"keine Autobahn: {Failure}";
+            HighwayBuilt ? $"Autobahn {HighwayAngle:0}° · Anschlussstelle ({Interchange.X:0}/{Interchange.Y:0}) · {SegmentsBuilt} Stücke · {Attempts} Versuche · {Expansions} Suchschritte · {Milliseconds} ms"
+                         : $"keine Autobahn: {Failure} ({Attempts} Versuche, {TemplateRejected} Anschlussstelle unpassend, {NoRoute} ohne Weg ({Expansions} Suchschritte), {NotBuildable} nicht baubar: {LastPieceError})";
     }
 
     /// <summary>
     /// Erzeugt beim Kartenstart die Außenanbindung (deterministisch): Ziele aus der Weltkarte (Regionsnachbarn, Hauptstädte,
     /// ohne Welt das Umland), die Autobahnachse mit dem besten Bezug zu den wichtigen Richtungen, darauf eine
-    /// Anschlussstelle (Vorlage „Raute“) nahe der Kartenmitte mit Zubringer, geländefolgende Richtungsfahrbahnen bis an
-    /// den Kartenrand (automatische Trassierung, Brücke über den Fluss), einen Bahnkorridor quer dazu und
-    /// Wasserstraßen an den Stellen, wo Fluss/Meer den Kartenrand berühren.
+    /// Anschlussstelle (Vorlage „Raute“) nahe der Kartenmitte mit Zubringer, geschwungene Richtungsfahrbahnen bis an den
+    /// Kartenrand (Trassensuche <see cref="RoutePlanner"/>: weite Bögen, Wasser fast rechtwinklig an schmaler Stelle, Gelände
+    /// ausweichen; Höhen über die automatische Trassierung), eine Fernbahntrasse, die die Autobahn einmal fast rechtwinklig
+    /// kreuzt, und Wasserstraßen an den Stellen, wo Fluss/Meer den Kartenrand berühren.
     /// </summary>
     public static class GatewayGenerator
     {
@@ -182,6 +194,15 @@ namespace CityBuilder.Simulation.Gateways
             return result;
         }
 
+        /// <summary>Achsen der Anschlussstelle: erst die 15°-Schritte nach Eignung, dann die Zwischenwinkel (7,5°) nach Eignung.</summary>
+        static List<float> HighwayCandidates(List<GatewayTarget> targets)
+        {
+            var list = AxisCandidates(targets);
+            foreach (float a in AxisCandidates(targets, 7.5f))
+                if (!list.Contains(a)) list.Add(a);
+            return list;
+        }
+
         public static Vector2 Dir(float degrees)
         {
             float r = degrees * MathF.PI / 180f;
@@ -228,15 +249,21 @@ namespace CityBuilder.Simulation.Gateways
             public Vector2 EntryA, ExitA, EntryB, ExitB;
             /// <summary>Zubringer-Enden (offene Stadtstraßen-Knoten der Anschlussstelle).</summary>
             public Vector2 StubA, StubB;
+            /// <summary>Mittellinie von Rand B über die Anschlussstelle zu Rand A (für die Bahn und Prüfungen).</summary>
+            public List<Vector2> Centerline;
+            public int Expansions;
+            public RoadBuildError LastError;
         }
 
         const float DiamondE = 400f, DiamondS = 12f, DiamondC = 52f;
 
         /// <summary>
         /// Baut die Autobahn (beide Richtungsfahrbahnen, Anschlussstelle, Zubringer) und legt die Gateways an.
+        /// Achse der Anschlussstelle wie bisher nach den Zielen; von ihren Enden aus sucht <see cref="RoutePlanner"/> je Seite eine
+        /// Trasse bis an den Kartenrand (Bögen R ≥ 750 m, Wasser gerade und fast rechtwinklig, Gelände ausweichen).
         /// Kosten trägt die Welt: die Stadtkasse ist während des Baus abgehängt.
         /// </summary>
-        internal static GatewayLayoutReport BuildHighway(SimulationWorld world, GatewaySystem gateways, List<GatewayTarget> targets)
+        internal static GatewayLayoutReport BuildHighway(SimulationWorld world, GatewaySystem gateways, List<GatewayTarget> targets, RouteField field)
         {
             var report = new GatewayLayoutReport();
             var roads = world.Roads;
@@ -244,7 +271,7 @@ namespace CityBuilder.Simulation.Gateways
             if (half < DiamondE + 300f) { report.Failure = "Karte zu klein für Autobahn + Anschlussstelle"; return report; }
 
             HighwayPlan plan = null;
-            foreach (float angle in AxisCandidates(targets))
+            foreach (float angle in HighwayCandidates(targets))
             {
                 var u = Dir(angle);
                 var n = new Vector2(-u.Y, u.X);
@@ -252,7 +279,7 @@ namespace CityBuilder.Simulation.Gateways
                 {
                     var origin = u * a + n * b;
                     report.Attempts++;
-                    plan = TryPlan(world, angle, origin, half);
+                    plan = TryPlan(world, field, angle, origin, half, report);
                     if (plan != null) break;
                 }
                 if (plan != null) break;
@@ -280,6 +307,7 @@ namespace CityBuilder.Simulation.Gateways
             report.HighwayBuilt = report.SegmentsBuilt > 0;
             report.HighwayAngle = plan.Angle;
             report.Interchange = plan.Origin;
+            report.Centerline = plan.Centerline;
             if (!report.HighwayBuilt) return report;
 
             gateways.AddHighway(plan.Angle, plan.Origin, plan.EntryA, plan.ExitA, plan.EntryB, plan.ExitB, plan.StubA, plan.StubB, targets);
@@ -297,7 +325,7 @@ namespace CityBuilder.Simulation.Gateways
                     yield return (a, s);
         }
 
-        static HighwayPlan TryPlan(SimulationWorld world, float angle, Vector2 origin, float half)
+        static HighwayPlan TryPlan(SimulationWorld world, RouteField field, float angle, Vector2 origin, float half, GatewayLayoutReport report)
         {
             var roads = world.Roads;
             var ground = roads.Ground;
@@ -308,13 +336,16 @@ namespace CityBuilder.Simulation.Gateways
             foreach (var c in new[] { origin + u * DiamondE + n * DiamondE, origin + u * DiamondE - n * DiamondE,
                                       origin - u * DiamondE + n * DiamondE, origin - u * DiamondE - n * DiamondE })
                 if (!Inside(c, inner)) return null;
+            // Die gerade Anschlussstelle selbst quert kein Wasser (sonst längs über den Fluss)
+            for (float s = -DiamondE; s <= DiamondE; s += 16f)
+                if (field.Shore(origin + u * s) < 20f) { report.TemplateRejected++; return null; }
 
             var plan = new HighwayPlan { Angle = angle, Origin = origin };
             float edge = half - GatewayRules.EdgeInset;
 
             // Anschlussstelle (Raute): Autobahn + Rampen + Brücke gehören der Welt, die äußeren Querstraßen-Stücke sind der Zubringer
             var tp = RoadTemplates.Plan(roads, RoadTemplateKind.DiamondInterchange, origin, angle, RoadCatalog.Highway2, RoadCatalog.CityTwoLane);
-            if (!tp.IsValid) return null;
+            if (!tp.IsValid) { report.TemplateRejected++; return null; }
             foreach (var p in tp.Pieces)
             {
                 bool stub = p.Type.Category == RoadCategory.City &&
@@ -325,22 +356,53 @@ namespace CityBuilder.Simulation.Gateways
                     Flags = stub ? RoadSegmentFlags.None : RoadSegmentFlags.Locked,
                 });
             }
-            if (!BridgeClears(roads, plan.Pieces, origin, u, n)) return null;
+            if (!BridgeClears(roads, plan.Pieces, origin, u, n)) { report.TemplateRejected++; return null; }
             plan.StubA = origin + n * DiamondE;
             plan.StubB = origin - n * DiamondE;
             // Zubringer-Enden auf Land
-            if (ground.IsWater(plan.StubA) || ground.IsWater(plan.StubB)) return null;
+            if (ground.IsWater(plan.StubA) || ground.IsWater(plan.StubB)) { report.TemplateRejected++; return null; }
 
-            // Richtungsfahrbahnen außerhalb der Vorlage: rechts (+u) bei −S, links (−u) bei +S
-            var right = -n * DiamondS;
-            var left = n * DiamondS;
-            // +u-Seite: rechte Fahrbahn hinaus (Ausfahrt A), linke herein (Einfahrt A)
-            if (!PlanCarriageway(plan, roads, origin + u * DiamondE + right, u, edge, outward: true, out plan.ExitA)) return null;
-            if (!PlanCarriageway(plan, roads, origin + u * DiamondE + left, u, edge, outward: false, out plan.EntryA)) return null;
-            // −u-Seite: linke Fahrbahn hinaus (Ausfahrt B), rechte herein (Einfahrt B)
-            if (!PlanCarriageway(plan, roads, origin - u * DiamondE + left, -u, edge, outward: true, out plan.ExitB)) return null;
-            if (!PlanCarriageway(plan, roads, origin - u * DiamondE + right, -u, edge, outward: false, out plan.EntryB)) return null;
+            // Mittellinie je Seite: Trassensuche von den Enden der Anschlussstelle bis an den Rand
+            var centerA = PlanHalf(field, origin + u * DiamondE, u, edge, report);
+            if (centerA == null) { report.NoRoute++; report.Log?.Add($"{angle:0}° {origin} A: Ufer {field.Shore(origin + u * DiamondE):0} m"); return null; }
+            var centerB = PlanHalf(field, origin - u * DiamondE, -u, edge, report);
+            if (centerB == null) { report.NoRoute++; report.Log?.Add($"{angle:0}° {origin} B: Ufer {field.Shore(origin - u * DiamondE):0} m"); return null; }
+
+            // Richtungsfahrbahnen: hinaus rechts der Mittellinie, herein links (Rechtsverkehr)
+            if (!PlanCarriageways(plan, roads, centerA, edge, out plan.ExitA, out plan.EntryA)) { report.NotBuildable++; report.LastPieceError = plan.LastError; return null; }
+            if (!PlanCarriageways(plan, roads, centerB, edge, out plan.ExitB, out plan.EntryB)) { report.NotBuildable++; report.LastPieceError = plan.LastError; return null; }
+
+            var line = new List<Vector2>();
+            var sb = RoutePlanner.Sample(ReverseAll(centerB), 24f);
+            line.AddRange(sb);
+            line.AddRange(RoutePlanner.Sample(centerA, 24f));
+            plan.Centerline = line;
             return plan;
+        }
+
+        static List<RoutePiece> ReverseAll(List<RoutePiece> pieces)
+        {
+            var list = new List<RoutePiece>(pieces.Count);
+            for (int i = pieces.Count - 1; i >= 0; i--) list.Add(RoutePlanner.Reverse(pieces[i]));
+            return list;
+        }
+
+        /// <summary>Mittellinie einer Autobahnseite (Ende der Anschlussstelle → Kartenrand) als Stücke; null = keine Trasse.</summary>
+        static List<RoutePiece> PlanHalf(RouteField field, Vector2 start, Vector2 d, float edge, GatewayLayoutReport report)
+        {
+            float length = ExitDistance(start, d, edge);
+            if (length < 80f || length == float.MaxValue) return null;
+            var spec = new RouteSpec
+            {
+                Radius = RouteRules.HighwayRadius, MaxGrade = GatewayRules.GradeSlope, WaterCost = RouteRules.HighwayWaterCost,
+                StraightNearWater = RouteRules.HighwayStraightNearWater, Edge = edge, IdealExit = start + d * length,
+            };
+            var steps = RoutePlanner.Plan(field, spec, start, MathF.Atan2(d.Y, d.X), out int expansions);
+            report.Expansions += expansions;
+            if (steps == null) return null;
+            // Stückgrenzen nur abseits vom Wasser (Brücke + Rampen in einem Stück)
+            return RoutePlanner.ToPieces(steps, GatewayRules.ChunkLength, GatewayRules.MaxChunkLength, 15f,
+                p => field.Shore(p) >= RouteRules.HighwayCutClearance);
         }
 
         /// <summary>
@@ -372,85 +434,62 @@ namespace CityBuilder.Simulation.Gateways
         }
 
         /// <summary>
-        /// Plant eine Richtungsfahrbahn vom Ende der Anschlussstelle <paramref name="from"/> in Richtung <paramref name="d"/>
-        /// bis an den Kartenrand, in Stücke geteilt (Stückgrenzen abseits vom Wasser, Höhen auf einer geglätteten,
-        /// steigungsbegrenzten Gradiente). <paramref name="outward"/>: Fahrtrichtung zum Rand (sonst vom Rand herein).
+        /// Beide Richtungsfahrbahnen einer Seite aus der Mittellinie (Stücke von der Anschlussstelle zum Rand): hinaus rechts,
+        /// herein links im Abstand <see cref="DiamondS"/>, Enden genau am Rand, Höhen der Stückgrenzen auf einer geglätteten,
+        /// steigungsbegrenzten Gradiente; jedes Stück wird vorab geprüft.
         /// </summary>
-        static bool PlanCarriageway(HighwayPlan plan, RoadNetwork roads, Vector2 from, Vector2 d, float edge, bool outward, out Vector2 end)
+        static bool PlanCarriageways(HighwayPlan plan, RoadNetwork roads, List<RoutePiece> center, float edge, out Vector2 exit, out Vector2 entry)
         {
-            var ground = roads.Ground;
-            end = default;
-            float length = ExitDistance(from, d, edge);
-            if (length < 80f || length > 5000f) return false;
-            end = from + d * length;
-            // Ende (und das Stück davor) auf Land – kein Autobahnende im Meer
-            if (ground.IsWater(end) || ground.IsWater(from + d * (length - 60f))) return false;
+            exit = entry = default;
+            var outward = new List<RoutePiece>();
+            var inward = new List<RoutePiece>(); // noch in Richtung hinaus geordnet
+            foreach (var p in center)
+            {
+                outward.Add(RoutePlanner.Offset(p, -DiamondS));
+                inward.Add(RoutePlanner.Offset(p, DiamondS));
+            }
+            RoutePlanner.ClampEndToEdge(outward, edge, true);
+            RoutePlanner.ClampEndToEdge(inward, edge, true);
+            var hOut = Gradient(roads.Ground, outward);
+            var hIn = Gradient(roads.Ground, inward);
+            for (int i = 0; i < outward.Count; i++)
+                if (!AddPiece(plan, roads, outward[i].P0, outward[i].C, outward[i].P2, hOut[i], hOut[i + 1])) return false;
+            for (int i = inward.Count - 1; i >= 0; i--)
+                if (!AddPiece(plan, roads, inward[i].P2, inward[i].C, inward[i].P0, hIn[i + 1], hIn[i])) return false;
+            exit = outward[outward.Count - 1].P2;
+            entry = inward[inward.Count - 1].P2;
+            return true;
+        }
 
-            // Abtastung + Gradiente
-            const float ds = 4f;
-            int count = (int)MathF.Ceiling(length / ds) + 1;
-            var water = new bool[count];
+        static bool AddPiece(HighwayPlan plan, RoadNetwork roads, Vector2 a, Vector2 c, Vector2 b, float ha, float hb)
+        {
+            var piece = new Piece { P0 = a, Control = c, P2 = b, H0 = ha, H2 = hb, Type = RoadCatalog.Highway2, FollowTerrain = true, Flags = RoadSegmentFlags.Locked };
+            var rp = RoadBuilder.Plan(roads, piece.P0, 0f, piece.Control, piece.P2, 0f, piece.Type, piece.H0, piece.H2, piece.Flags, true);
+            if (!rp.IsValid) { plan.LastError = rp.Error; return false; }
+            plan.Pieces.Add(piece);
+            return true;
+        }
+
+        /// <summary>Höhen an den Stückgrenzen: geglättetes Gelände (über Wasser die Mindesthöhe der Fahrrinne), Steigung begrenzt.</summary>
+        static float[] Gradient(IGround ground, List<RoutePiece> pieces)
+        {
+            var starts = new List<int>();
+            var pts = RoutePlanner.Sample(pieces, 4f, starts);
+            int count = pts.Count;
             var raw = new float[count];
             for (int k = 0; k < count; k++)
-            {
-                var p = from + d * MathF.Min(length, k * ds);
-                water[k] = ground.IsWater(p);
-                raw[k] = water[k] ? Profiles.WaterFloor(ground, p) : ground.HeightAt(p); // Wasserstraße: Fahrrinne verlangt lichte Höhe
-            }
-            int win = Math.Max(1, (int)(GatewayRules.GradeSmoothing / ds));
-            var smooth = BoxSmooth(raw, win);
+                raw[k] = ground.IsWater(pts[k]) ? Profiles.WaterFloor(ground, pts[k]) : ground.HeightAt(pts[k]); // Wasserstraße: Fahrrinne verlangt lichte Höhe
+            var smooth = BoxSmooth(raw, Math.Max(1, (int)(GatewayRules.GradeSmoothing / 4f)));
             var grade = new float[count];
-            grade[0] = ground.HeightAt(from); // Anschluss an die Vorlage (ebenerdig)
-            float g = GatewayRules.GradeSlope * ds;
-            for (int k = 1; k < count; k++) grade[k] = Math.Clamp(smooth[k], grade[k - 1] - g, grade[k - 1] + g);
-
-            // Stückgrenzen: alle ~260 m, mindestens 150 m vom Wasser entfernt
-            int clear = (int)(150f / ds);
-            bool Dry(int k)
+            grade[0] = ground.HeightAt(pts[0]); // Anschluss an die Vorlage (ebenerdig)
+            for (int k = 1; k < count; k++)
             {
-                for (int j = Math.Max(0, k - clear); j <= Math.Min(count - 1, k + clear); j++) if (water[j]) return false;
-                return true;
+                float g = GatewayRules.GradeSlope * Vector2.Distance(pts[k - 1], pts[k]);
+                grade[k] = Math.Clamp(smooth[k], grade[k - 1] - g, grade[k - 1] + g);
             }
-            var cuts = new List<int> { 0 };
-            int last = count - 1;
-            int step = (int)(GatewayRules.ChunkLength / ds), maxStep = (int)(GatewayRules.MaxChunkLength / ds), minRest = (int)(60f / ds);
-            int cur = 0;
-            while (last - cur > step * 3 / 2)
-            {
-                int found = -1;
-                for (int k = cur + step; k <= Math.Min(cur + maxStep, last - minRest); k += 2)
-                    if (Dry(k)) { found = k; break; }
-                if (found < 0)
-                    for (int k = cur + step - 2; k > cur + minRest; k -= 2)
-                        if (Dry(k)) { found = k; break; }
-                if (found < 0)
-                {
-                    if (last - cur <= maxStep) break; // Rest in einem Stück (über das Wasser)
-                    return false;
-                }
-                cuts.Add(found);
-                cur = found;
-            }
-            cuts.Add(last);
-
-            for (int i = 0; i < cuts.Count - 1; i++)
-            {
-                var a = from + d * MathF.Min(length, cuts[i] * ds);
-                var b = from + d * MathF.Min(length, cuts[i + 1] * ds);
-                float ha = grade[cuts[i]], hb = grade[cuts[i + 1]];
-                // Fahrtrichtung: hinaus = von der Anschlussstelle zum Rand, herein = umgekehrt
-                var piece = outward
-                    ? new Piece { P0 = a, P2 = b, H0 = ha, H2 = hb }
-                    : new Piece { P0 = b, P2 = a, H0 = hb, H2 = ha };
-                piece.Control = (piece.P0 + piece.P2) * 0.5f;
-                piece.Type = RoadCatalog.Highway2;
-                piece.FollowTerrain = true;
-                piece.Flags = RoadSegmentFlags.Locked;
-                var rp = RoadBuilder.Plan(roads, piece.P0, 0f, piece.Control, piece.P2, 0f, piece.Type, piece.H0, piece.H2, piece.Flags, true);
-                if (!rp.IsValid) return false;
-                plan.Pieces.Add(piece);
-            }
-            return true;
+            var h = new float[pieces.Count + 1];
+            for (int i = 0; i <= pieces.Count; i++) h[i] = grade[Math.Min(count - 1, starts[i])];
+            return h;
         }
 
         static float[] BoxSmooth(float[] src, int radius)
@@ -468,48 +507,204 @@ namespace CityBuilder.Simulation.Gateways
             return dst;
         }
 
-        // ------------------------------------------------------------ Bahnkorridor
+        // ------------------------------------------------------------ Bahn
+
+        /// <summary>Geplante Fernbahn: Mittellinie von Rand A nach Rand B, Kreuzungspunkt mit der Autobahn.</summary>
+        internal sealed class RailRoute
+        {
+            public List<RoutePiece> Pieces;
+            public Vector2 A, B, Through;
+            public float Angle;
+            public int Expansions;
+            public string Report = "";
+        }
 
         /// <summary>
-        /// Lage einer Bahntrasse quer durch die Karte (gerade, freigehalten): Achse mit dem besten Bezug zu den Zielen,
-        /// mindestens 45° gegen die Autobahn verdreht, mit Abstand zur Anschlussstelle; Enden auf Land.
+        /// Trasse der Fernbahn: kreuzt die Autobahn einmal, fast rechtwinklig (≤ 30° schief) und mit Abstand zur Anschlussstelle,
+        /// Richtung nach den Zielen; von dort je Seite Trassensuche bis an den Rand (R ≥ 1 000 m, 2 %, Wasser gerade und fast
+        /// rechtwinklig, Abstand zur Autobahn). Ohne Autobahn quer durch die Mitte.
         /// </summary>
-        internal static bool PlanRail(SimulationWorld world, List<GatewayTarget> targets, float highwayAngle, Vector2 interchange,
-            out Vector2 a, out Vector2 b, out float angle)
+        internal static RailRoute PlanRail(SimulationWorld world, RouteField field, List<GatewayTarget> targets, IReadOnlyList<Vector2> highwayLine,
+            Vector2 interchange)
         {
-            a = b = default;
-            angle = 0f;
-            var ground = world.Roads.Ground;
             float half = world.Settings.SizeMeters * 0.5f;
             float edge = half - GatewayRules.EdgeInset;
-            var hu = Dir(highwayAngle);
-            foreach (float cand in AxisCandidates(targets))
+            bool hasHighway = highwayLine != null && highwayLine.Count >= 2;
+            var axis = hasHighway ? highwayLine : new List<Vector2> { new Vector2(-half, 0f), new Vector2(half, 0f) };
+            if (hasHighway)
             {
-                float diff = MathF.Abs(((cand - highwayAngle) % 180f + 180f) % 180f);
-                if (diff < 45f || diff > 135f) continue;
-                var u = Dir(cand);
-                var n = new Vector2(-u.Y, u.X);
-                // Linie durch einen Punkt auf der Autobahnachse, weit genug von der Anschlussstelle (beide Seiten probieren)
-                foreach (float along in new[] { 620f, -620f, 800f, -800f, 450f, -450f })
+                field.AddNearLine(highwayLine, RouteRules.RailHighwayClearance, RouteRules.RailHighwayCost);
+                field.AddNearPoint(interchange, RouteRules.RailInterchangeClearance, RouteRules.RailInterchangeCost);
+            }
+            var result = new RailRoute();
+            int searched = 0, noRoute = 0, recrossing = 0, noStation = 0;
+            // Bezug der Achsen zu den Zielen (Maßstab für die Richtung der Bahn)
+            float bestAxis = 1e-6f;
+            for (int k = 0; k < 36; k++) bestAxis = MathF.Max(bestAxis, AxisScore(targets, Dir(k * 5f)));
+            // Kandidaten: Kreuzungspunkt entlang der Autobahn × Richtung (senkrecht ± 10/20/30°), bewertet nach Bezug zu den
+            // Zielen, Rechtwinkligkeit und Nähe zur Kartenmitte (Bahnhof nahe der Startkachel)
+            var candidates = new List<(Vector2 through, float angle, float along, float score, int order)>();
+            int order = 0;
+            foreach (float along in new[] { 620f, -620f, 800f, -800f, 1000f, -1000f })
+            {
+                var through = PointAlong(axis, interchange, along, out var tangent);
+                if (!Inside(through, half - 100f) || field.Shore(through) < RouteRules.RailStraightNearWater) continue;
+                float perp = MathF.Atan2(tangent.Y, tangent.X) * 180f / MathF.PI + 90f;
+                foreach (float off in new[] { 0f, 10f, -10f, 20f, -20f, 30f, -30f })
                 {
-                    var through = interchange + hu * along;
-                    if (!Inside(through, half - 100f)) continue;
-                    float sp = ExitDistance(through, u, edge), sm = ExitDistance(through, -u, edge);
-                    var pa = through + u * sp;
-                    var pb = through - u * sm;
-                    if (ground.IsWater(pa) || ground.IsWater(pb)) continue;
-                    // Abstand zur Anschlussstelle (Mitte der Vorlage) von der Linie
-                    float dist = MathF.Abs(Vector2.Dot(interchange - through, n));
-                    if (dist < GatewayRules.RailClearanceFromInterchange) continue;
-                    // höchstens ein Viertel über Wasser (Fluss ja, Meer nein)
-                    int wet = 0, total = 0;
-                    for (float s = -sm; s <= sp; s += 16f) { total++; if (ground.IsWater(through + u * s)) wet++; }
-                    if (wet * 4 > total) continue;
-                    a = pa; b = pb; angle = cand;
-                    return true;
+                    float a = ((perp + off) % 180f + 180f) % 180f;
+                    var u = Dir(a);
+                    var n = new Vector2(-u.Y, u.X);
+                    if (MathF.Abs(Vector2.Dot(interchange - through, n)) < GatewayRules.RailClearanceFromInterchange) continue;
+                    float centerDist = MathF.Abs(Vector2.Dot(through, n)); // Abstand der Geraden zur Kartenmitte
+                    float score = AxisScore(targets, u) / bestAxis - 0.5f * MathF.Abs(off) / RouteRules.RailCrossingMaxSkew
+                                  - 0.6f * MathF.Min(1f, centerDist / MathF.Min(half, 1500f));
+                    candidates.Add((through, a, along, score, order++));
                 }
             }
+            candidates.Sort((x, y) => MathF.Abs(x.score - y.score) > 1e-4f ? y.score.CompareTo(x.score) : x.order.CompareTo(y.order));
+            // bevorzugt Trassen mit Platz für einen Bahnhof; findet sich keine, die beste ohne
+            RailRoute fallback = null;
+            foreach (var c in candidates)
+            {
+                var u = Dir(c.angle);
+                searched++;
+                var plus = PlanRailHalf(field, c.through, u, edge, ref result.Expansions);
+                var minus = plus == null ? null : PlanRailHalf(field, c.through, -u, edge, ref result.Expansions);
+                if (minus == null) { noRoute++; continue; }
+                var pieces = ReverseAll(plus);
+                pieces.AddRange(minus);
+                // genau eine Kreuzung mit der Autobahn
+                if (hasHighway && Crossings(RoutePlanner.Sample(pieces, 16f), highwayLine) != 1) { recrossing++; continue; }
+                string what = $"Bahn {c.angle:0}° bei {c.along:0} m entlang der Autobahn";
+                if (!HasStationSpot(field, pieces, c.through))
+                {
+                    noStation++;
+                    if (fallback == null) fallback = new RailRoute { Pieces = pieces, Through = c.through, Angle = c.angle, Report = what };
+                    continue;
+                }
+                result.Pieces = pieces;
+                result.Through = c.through;
+                result.Angle = c.angle;
+                result.Report = $"{what} · {searched} Kandidaten ({noStation} ohne Bahnhofsplatz), {result.Expansions} Suchschritte";
+                break;
+            }
+            if (result.Pieces == null && fallback != null)
+            {
+                result.Pieces = fallback.Pieces;
+                result.Through = fallback.Through;
+                result.Angle = fallback.Angle;
+                result.Report = $"{fallback.Report} · ohne geraden ebenen Abschnitt für einen Bahnhof · {searched} Kandidaten, {result.Expansions} Suchschritte";
+            }
+            if (result.Pieces == null)
+            {
+                result.Report = $"keine Bahntrasse: {searched} Kandidaten gesucht, {noRoute} ohne Weg, {recrossing} kreuzen die Autobahn mehrfach";
+                return result;
+            }
+            result.A = result.Pieces[0].P0;
+            result.B = result.Pieces[result.Pieces.Count - 1].P2;
+            return result;
+        }
+
+        /// <summary>
+        /// Gibt es einen geraden, ebenen Abschnitt für einen Bahnhof (≥ 260 m, Gelände dort ≤ 2 % und kaum Wellen, weg vom
+        /// Wasser und von der Rampe der Brücke über die Autobahn)?
+        /// </summary>
+        static bool HasStationSpot(RouteField field, List<RoutePiece> pieces, Vector2 through)
+        {
+            const float need = 260f;
+            float ramp = (Rail.RailRules.RailOverRoadClearance + 1.2f) / Rail.RailRules.MainlineGrade + 120f;
+            int i = 0;
+            while (i < pieces.Count)
+            {
+                if (pieces[i].Turn != 0) { i++; continue; }
+                int j = i;
+                while (j + 1 < pieces.Count && pieces[j + 1].Turn == 0) j++;
+                var a = pieces[i].P0; var b = pieces[j].P2;
+                float len = Vector2.Distance(a, b);
+                var d = len > 1e-3f ? (b - a) / len : Vector2.UnitX;
+                for (float s = 0f; s + need <= len; s += 40f)
+                {
+                    var p0 = a + d * s; var p1 = p0 + d * need;
+                    if (Vector2.Distance((p0 + p1) * 0.5f, through) < ramp + need * 0.5f) continue; // Rampe der Brücke über die Autobahn
+                    float h0 = field.Height(p0), h1 = field.Height(p1);
+                    if (MathF.Abs(h1 - h0) > need * Rail.RailRules.MainlineGrade) continue;
+                    bool ok = true;
+                    for (float q = 0f; q <= need && ok; q += 20f)
+                    {
+                        var p = p0 + d * q;
+                        float lin = h0 + (h1 - h0) * q / need;
+                        if (MathF.Abs(field.Height(p) - lin) > 2.5f || field.Shore(p) < 60f) ok = false;
+                    }
+                    if (ok) return true;
+                }
+                i = j + 1;
+            }
             return false;
+        }
+
+        static List<RoutePiece> PlanRailHalf(RouteField field, Vector2 start, Vector2 d, float edge, ref int expansions)
+        {
+            float length = ExitDistance(start, d, edge);
+            if (length < RouteRules.RailStraightAtCrossing + 80f || length == float.MaxValue) return null;
+            var spec = new RouteSpec
+            {
+                Radius = RouteRules.RailRadius, MaxGrade = Rail.RailRules.MainlineGrade, WaterCost = RouteRules.RailWaterCost,
+                StraightNearWater = RouteRules.RailStraightNearWater, Edge = edge, IdealExit = start + d * length,
+                StraightStart = RouteRules.RailStraightAtCrossing,
+            };
+            var steps = RoutePlanner.Plan(field, spec, start, MathF.Atan2(d.Y, d.X), out int e);
+            expansions += e;
+            if (steps == null) return null;
+            return RoutePlanner.ToPieces(steps, Rail.RailRules.MainlineChunk, Rail.RailRules.MainlineMaxChunk, 15f, p => field.Shore(p) >= 40f);
+        }
+
+        /// <summary>Punkt auf dem Linienzug, <paramref name="along"/> m (Bogenlänge) vom Punkt nächst <paramref name="from"/>, und Richtung dort.</summary>
+        static Vector2 PointAlong(IReadOnlyList<Vector2> line, Vector2 from, float along, out Vector2 tangent)
+        {
+            // Bogenlänge des nächsten Punkts
+            float acc = 0f, s0 = 0f, bestD = float.MaxValue;
+            var cum = new float[line.Count];
+            for (int i = 0; i < line.Count - 1; i++)
+            {
+                var a = line[i]; var ab = line[i + 1] - a;
+                float l = ab.Length();
+                cum[i] = acc;
+                float t = l < 1e-6f ? 0f : Math.Clamp(Vector2.Dot(from - a, ab) / (l * l), 0f, 1f);
+                float d = Vector2.Distance(from, a + ab * t);
+                if (d < bestD) { bestD = d; s0 = acc + t * l; }
+                acc += l;
+            }
+            cum[line.Count - 1] = acc;
+            float s = Math.Clamp(s0 + along, 0f, acc);
+            for (int i = 0; i < line.Count - 1; i++)
+            {
+                float l = cum[i + 1] - cum[i];
+                if (s <= cum[i + 1] || i == line.Count - 2)
+                {
+                    tangent = l > 1e-6f ? Vector2.Normalize(line[i + 1] - line[i]) : Vector2.UnitX;
+                    return line[i] + (line[i + 1] - line[i]) * (l > 1e-6f ? Math.Clamp((s - cum[i]) / l, 0f, 1f) : 0f);
+                }
+            }
+            tangent = Vector2.UnitX;
+            return line[0];
+        }
+
+        /// <summary>Anzahl der Schnittpunkte zweier Linienzüge.</summary>
+        public static int Crossings(IReadOnlyList<Vector2> a, IReadOnlyList<Vector2> b)
+        {
+            // Schnittpunkte sammeln; Treffer an gemeinsamen Stützpunkten (doppelt gezählt) fallen zusammen
+            var points = new List<Vector2>();
+            for (int i = 0; i < a.Count - 1; i++)
+                for (int j = 0; j < b.Count - 1; j++)
+                    if (Bezier.LineSegmentsIntersect(a[i], a[i + 1], b[j], b[j + 1], out float s, out _))
+                    {
+                        var p = a[i] + (a[i + 1] - a[i]) * s;
+                        bool known = false;
+                        foreach (var q in points) if (Vector2.Distance(p, q) < 30f) { known = true; break; }
+                        if (!known) points.Add(p);
+                    }
+            return points.Count;
         }
 
         // ------------------------------------------------------------ Wasserstraßen

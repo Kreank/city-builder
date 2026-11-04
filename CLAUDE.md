@@ -1841,19 +1841,27 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - **Ziele** (`GatewayGenerator.Targets`): Nachbarregionen der Startregion (fremdes Land +1,5, Hauptstadt-Region +1,5, Bevölkerung),
   die 6 wichtigsten fremden Hauptstädte (Bevölkerung × Nähe), die eigene Hauptstadt; Peilung Ost/Nord aus Länge/Breite. Ohne Welt:
   vier „Umland“-Richtungen. Freie Nachbarregion (kein Land) → Ziel „{Region} (freies Land)“ (Art Umland); Spieler = `PlayerCountryId` (auch Stadtstaat). Gateway-Ziel = bestes Ziel in seiner Richtung (Gewicht × cos, ab cos 0,35), Wichtigkeit = Σ w·cos².
-- **Autobahn** (`BuildHighway`, deterministisch): Achse = Winkel (15°-Schritte) mit dem besten Bezug zu den Zielen; Anschlussstelle
-  (Vorlage Raute, 400 m) bevorzugt ±300 m seitlich der Mitte (Mitte bleibt für die Stadt), sonst weitere Lagen; Richtungsfahrbahnen
-  `Highway2` von den Vorlagen-Enden bis 6 m vor den Kartenrand in Stücken à ~260 m (≤ 900 m, Grenzen ≥ 150 m vom Wasser), Höhen der
-  Stückgrenzen auf einer geglätteten, auf 4,5 % begrenzten Gradiente, je Stück automatische Trassierung (Tunnel/Brücke/Damm, Brücke
-  über den Fluss). Alles wird erst komplett geplant (Kandidat verworfen bei ungültigem Stück, Ende im Meer, zu wenig lichter Höhe der
-  Rauten-Brücke am Hang), dann mit abgehängter Stadtkasse gebaut (**Kosten trägt die Welt**). Autobahn, Rampen und Brücke bekommen
+- **Autobahn** (`BuildHighway`, deterministisch): Achse der Anschlussstelle = Winkel (erst 15°-, dann 7,5°-Schritte) mit dem besten
+  Bezug zu den Zielen; Anschlussstelle (Vorlage Raute, 400 m, gerade, quert selbst kein Wasser) bevorzugt ±300 m seitlich der Mitte
+  (Mitte bleibt für die Stadt), sonst weitere Lagen. **Von den Vorlagen-Enden an schwingt die Trasse** (Spielertest „Bahn quer über
+  den Fluss – so würde man nie bauen“, s. „Trassierung der Welt-Infrastruktur“): Mittellinie je Seite per Trassensuche bis an den Rand,
+  Richtungsfahrbahnen `Highway2` ±12 m daneben (Bögen bleiben Bögen), Enden genau 6 m vor dem Kartenrand; Stücke = Geraden à ~260 m
+  (≤ 900 m, Geraden nur ≥ 150 m vom Wasser geteilt) und Bögen bis 15°; Höhen der Stückgrenzen auf einer geglätteten, auf 4,5 %
+  begrenzten Gradiente entlang der Kurve, je Stück automatische Trassierung (Tunnel/Brücke/Damm, Brücke über den Fluss). Gateway-
+  Richtung = Anschlussstelle → Ende am Rand. Alles wird erst komplett geplant (Kandidat verworfen ohne Trasse, bei ungültigem Stück,
+  zu wenig lichter Höhe der Rauten-Brücke am Hang), dann mit abgehängter Stadtkasse gebaut (**Kosten trägt die Welt**). Autobahn, Rampen und Brücke bekommen
   `RoadSegmentFlags.Locked`; die beiden äußeren Querstraßen-Stücke der Raute sind der **Zubringer** (Stadtstraße, frei, dort schließt
   der Spieler an; `FeederEnds`). Name „A {Nr} Richtung {Ziel}“ (Nummer aus Hash von Region/Geländeseed).
 - **Gesperrte Straßen** (`RoadSegment.IsLocked`): `RoadBuilder.Demolish` → false, `CheckReplace` → `RoadBuildError.Locked`,
   `RoadBuilder.Reverse` → null, `LockedReason(seg)` für den Hinweis; Kreisverkehr entfernt sie nicht; kein Unterhalt
   (`EconomySystem`); Flag bleibt beim Zerteilen (Rampen an die Autobahn anschließen geht weiter).
-- **Bahn**: gerader Korridor quer durch die Karte (≥ 45° zur Autobahn, ≥ 480 m von der Anschlussstelle, Enden auf Land,
-  ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways. Freigehalten über den verketteten `CitySystem.LotBlocker` (`InRailCorridor`).
+- **Bahn**: geschwungene Trasse quer durch die Karte (bis 2026-11-04 gerader Korridor ≥ 45° zur Autobahn mit bis 25 % Wasser):
+  kreuzt die Autobahn **genau einmal**, höchstens 30° schief (meist 89–90°), Kreuzungspunkt 620/800/1 000 m entlang der Autobahn von der
+  Anschlussstelle, Gerade ≥ 480 m an der Anschlussstelle vorbei; Kandidaten (Kreuzungspunkt × senkrecht ± 10/20/30°) nach Bezug zu den
+  Zielen, Rechtwinkligkeit und Nähe zur Kartenmitte geordnet; je Seite 260 m gerade (Brücke über die Autobahn), dann Trassensuche bis an
+  den Rand; bevorzugt eine Trasse mit **Platz für einen Bahnhof** (gerade, ebene 260 m abseits von Rampe und Wasser). Mittellinie als
+  Linienzug `GatewaySystem.RailPath` (gespeichert, `RailPointAt(f)`), halbe Breite 16 m, zwei Rail-Gateways (Richtung Kreuzungspunkt →
+  Ende). Freigehalten über den verketteten `CitySystem.LotBlocker` (`InRailCorridor`, Abstand zum Linienzug).
   **Seit Stufe 2 liegt darauf die zweigleisige Fernbahn-Hauptstrecke** (s. „Bahn (Stufe 2)“); die Rail-Gateways sind „noch nicht
   befahrbar (Bahnhof an der Hauptstrecke fehlt)“ (`Gateway.RailBuilt`), bis ein Bahnhof in Betrieb ist → `Operational`.
 - **Wasser** (seit Stufe 3 befahren, s. „Wasserstraße & Hafen“): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
@@ -1897,6 +1905,34 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), (~~Stufe 3 Wasserstraße/Hafen~~ ✅ s. „Wasserstraße & Hafen (Stufe 3)“), (~~Stufe 4 Flughafen~~ ✅ s. „Flughafen (Stufe 4)“); weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
   Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
   andere echte Städte als Ziel.
+
+### Trassierung der Welt-Infrastruktur (2026-11-04, Spielertest „Bahn lief quer über den Fluss“)
+- **Ziel:** Autobahn und Fernbahn wie echte Trassen – Gewässer fast rechtwinklig an schmaler Stelle (Brücke ≈ Flussbreite), nie längs
+  über den Fluss, weite Bögen statt Gerade, Gelände ausweichen, Bahn kreuzt die Autobahn genau einmal fast rechtwinklig. Gilt für neue
+  Spiele (2 km und 6 km); **alte Spielstände laden unverändert** (Straßen/Gleise stehen im Stand, `gateways` v2 = + Linienzug der
+  Bahntrasse, v1 → gerade zwischen den Enden).
+- **Trassensuche** `Gateways/RoutePlanner.cs` (`RouteField`, `RoutePlanner`, Zahlen in `RouteRules`): **hybrides A\*** – Zustand = Lage
+  (24-m-Raster) × Richtung (5°-Schritte, 72); Bausteine = Gerade oder Bogen mit dem kleinsten Halbmesser, der genau 5° dreht (Autobahn
+  R 750 m → 65 m, Bahn R 1 000 m → 87 m). So hält jede gefundene Trasse die Radien von selbst ein und ist tangentenstetig – kein
+  Glätten nötig; Bögen werden zu Stücken bis 15° zusammengefasst (quadratische Bézier, Kontrollpunkt im Tangentenschnitt, Krümmung
+  ±1 %), Geraden zu ~260 m. Kosten je Meter: 1 + Wasser (Autobahn 14, Bahn 18) + Zusatzkosten des Rasters; + 10 je Meter
+  Höhenunterschied über der Steigung (4,5 % / 2 %), + 8 % je Bogenmeter; Ende = Gerade bis an den Rand (auf Land, ≤ 50° gegen die
+  Randnormale) + 1 je Meter Abweichung vom geraden Weg (Richtung der Ziele). Schätzung = Luftlinie zum geraden Ende × 1,3 (gewichtetes A*,
+  deutlich schneller, deterministisch über einen Heap mit Einfügefolge).
+- **Wasser:** Raster 16 m (`RouteField`): Höhe geglättet (≈ 100 m), Uferabstand (Chamfer, + Land/− Wasser), **Ufernormale aus dem Gefälle
+  der geglätteten Wassermaske** (der Chamfer-Abstand rastet auf 8 Richtungen ein – gab 26,6°-Fehler). Uferlinie nur kreuzen, wenn die
+  Richtung ≤ 22° von der Normalen abweicht; ≤ 80 m (Autobahn) / 60 m (Bahn) am Ufer keine Bögen (Brücke + Widerlager gerade); höchstens
+  420 m am Stück über Wasser (kein Meer). Die Anschlussstelle selbst quert kein Wasser.
+- **Bahn:** Zusatzkosten 40/m im Umkreis 160 m um die Autobahn (zweite Kreuzung praktisch ausgeschlossen, danach geprüft: genau eine) und
+  480 m um die Anschlussstelle.
+- **Zahlen** (Test `RouteTests`, Seeds 2024/74/333/592 auf 2 km, 2024/74 auf 6 km): Querungswinkel gemessen 2–21° (Uferlinie aus zwei
+  Uferpunkten ±30 m), Brücke über Wasser = 0,96–1,03 × Gewässerbreite, kleinster Radius Autobahn 732 m (innere Fahrbahn), Bahn 989 m,
+  Steigung Bahn ≤ 2,01 %, Kreuzung Bahn/Autobahn 70–90°, gerade ≥ 250 m für Bahnhöfe überall. Rechenzeit Trassierung 20–150 ms (2 km)
+  bzw. 330–420 ms (6 km; Welt erzeugen gesamt ≈ 1,5 s).
+- **Offen:** Autobahn weicht Bergen nur über die Höhenkosten aus (keine Talsuche über die ganze Karte), Bahn und Autobahn folgen noch
+  keinem gemeinsamen Korridor, Brücken über tiefe trockene Täler werden nicht auf den Querungswinkel geprüft (nur Wasser), Fahrrinne der
+  Schifffahrt wird nur über die Höhe (nicht den Winkel) berücksichtigt, Platzbedarf des Flughafens fließt nicht in die Trassensuche ein
+  (6 km: Verkehrsflughafen findet weiter Platz).
 
 ## ÖPNV (Stufe 1: Buslinien)
 - `Simulation/Transit`: `TransitTypes.cs` (`TransitRules` alle Zahlen, `TransitCatalog.BusDepot`, `BusStop`, `TransitLine`, `Bus`,
@@ -1981,10 +2017,11 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   (±1,5 m) = **Bahnübergang** nur mit Stadtstraße, Winkel ≥ 35°, ≥ 20 m von Straßenknoten (Planenden + Straßenkreuzungen) und ≥ 25 m
   von Weichen, nicht an Bahnsteigen; sonst **lichte Höhe** Gleis über Straße 5 m, Straße über Gleis 6,5 m (Oberleitung), dazwischen
   `InsufficientClearance`; längs übereinander `OverlapsRail`. Autobahn/Rampe ebenerdig → `RailCrossing`.
-- **Hauptstrecke** (`BuildMainline`): zwei Gleise ±2,25 m um die Korridorachse (Rechtsverkehr: Gleis 1 A→B, Gleis 2 B→A), Gradiente =
-  geglättetes Gelände (160 m) mit 2 % (`MainlineGrade`), Boden über Wasser (Brücke), über jeder Straße, die den Korridor kreuzt
-  (Autobahn), Gleis ≥ Straße + 5 m + 1,2 m Tragwerk – steigungsgerecht ausgebreitet; Stücke ~260 m = Blockabschnitte (nicht über
-  Wasser/Kreuzungen geschnitten), eigenes Höhenprofil je Stück (`AddSegment(..., profile)`, Böschung bis 6 m). Gesperrt (`Locked`),
+- **Hauptstrecke** (`BuildMainline`): zwei Gleise ±2,25 m um die Mittellinie der Trasse (Stücke aus der Trassensuche, Geraden + Bögen
+  R ≥ 1 000 m; Rechtsverkehr: Gleis 1 A→B, Gleis 2 B→A; alte Welten ohne Stücke: gerade A→B), Gradiente entlang der Kurve =
+  geglättetes Gelände (160 m) mit 2 % (`MainlineGrade`), Boden über Wasser (Brücke), über jeder Straße, die die Trasse kreuzt
+  (Autobahn), Gleis ≥ Straße + 5 m + 1,2 m Tragwerk – steigungsgerecht ausgebreitet; Stücke ≤ ~260 m = Blockabschnitte (gerade Stücke
+  verschmelzen über Wasser/Kreuzungen), eigenes Höhenprofil je Stück (`AddSegment(..., profile)`, Böschung bis 6 m). Gesperrt (`Locked`),
   Kosten/Unterhalt trägt die Welt. Test (flach, Gelände, Weltseeds 99/7): Brücke 6,0–18,5 m über der Autobahn.
 - **Bahnhöfe** (`PlanStation(type, cursor)` → `BuildStation`, `DemolishStation` 25 %): rastet am nächsten ebenerdigen Gleis ≤ 40 m ein –
   Rückseite parallel, 6 m hinter der Gleismitte (Bahnsteig dazwischen), Vorderseite zeigt vom Gleis weg zur Straße. **Personenbahnhof**
@@ -2258,8 +2295,10 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   Lage; ein Spieltag Flugbetrieb (alle Zustände von Anflug bis Start, Landungen/Fluggäste/Gebühren/Besucher); Nachtflugverbot (0 Nachtbewegungen, nachts
   still); Lärm in der Schneise ≫ seitlich und im Stadt-Lärm; Speichern/Laden bitgleich; ohne Flughafen nichts; Spielwelten 2024/74 (Info, s. u.).
 - **Grenze 2-km-Karte (ehrlich; seit „Kartengröße & Kacheln“ starten neue Spiele auf 6 km mit 2 800-m-Bahn über zwei Kacheln):** In den echten Spielwelten (Seeds 2024/74, Autobahn + Bahnkorridor + Fluss queren die Karte) findet das Suchraster für den
-  **Verkehrsflughafen keinen Platz** (1 920 m Bahn-Bereich kreuzt fast immer Autobahn oder Hauptstrecke), den **Regionalflugplatz** nur in Seed 2024
-  (mit 340 000 € Erdarbeiten, eine Schneise durch Gelände gesperrt). Auf flachen Testkarten passen beide. Außerdem liegen die Einflugschneisen bei
+  **Verkehrsflughafen keinen Platz** (1 920 m Bahn-Bereich kreuzt fast immer Autobahn oder Hauptstrecke), seit der geschwungenen
+  Trassierung (2026-11-04) auch den **Regionalflugplatz** nicht mehr (vorher Seed 2024 mit 340 000 € Erdarbeiten). Auf der 6-km-Spielkarte
+  (Seed 2024, Suchraster 300 m) passen beide: Flugplatz bei (−500/100), 73 000 € Erdarbeiten; Verkehrsflughafen 2 800 m bei (−1 400/100),
+  1,06 Mio. € Erdarbeiten, je eine Schneise gesperrt. Auf flachen Testkarten passen beide. Außerdem liegen die Einflugschneisen bei
   Ost-West-Lage großteils außerhalb der Karte (dort gibt es keine Hindernisse) – diagonal oder nahe einem Rand wirkt die Hindernisfreiheit voll.
 - **Nächste Teilstufe (offen):** größere Karten bzw. Verlegen der Welt-Autobahn/-Bahn (oder Tunnel unter der Bahn) für einen echten Verkehrsflughafen,
   zweite (parallele) Bahn, Hotels/Übernachtungsbetriebe und Tourismus als Dienstleistungshandel (Etappe 8), Pendler per Flugzeug, echte Fluggäste als
@@ -2346,7 +2385,7 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
   Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
   Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0;
-  `aviation` v1 fehlt → kein Flughafen; Weltabschnitt v5 = Kachelgröße, v4 → 2 048 m; `tiles` v1 fehlt → Startzustand (2 km: alles gekauft); `trade` v2 = Handel 2, v1 → Startbündnisse aus der Welt, keine Abstimmungen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
+  `aviation` v1 fehlt → kein Flughafen; `gateways` v2 = Linienzug der Bahntrasse, v1 → gerade zwischen den Enden; Weltabschnitt v5 = Kachelgröße, v4 → 2 048 m; `tiles` v1 fehlt → Startzustand (2 km: alles gekauft); `trade` v2 = Handel 2, v1 → Startbündnisse aus der Welt, keine Abstimmungen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
   das Spiel schaltet sie ein).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:

@@ -74,7 +74,7 @@ namespace CityBuilder.Game.Gateways
             if (gw.HasRailCorridor)
             {
                 // Hinweis nicht genau auf der Autobahn: etwas Richtung Ende verschoben
-                var at = SimVector2.Lerp(gw.RailStart, gw.RailEnd, 0.3f);
+                var at = gw.RailPointAt(0.3f, out _);
                 string railText = !tracks ? "Bahntrasse · Züge folgen (freigehalten)"
                     : world.Rail.HasPassengerService ? null : "Fernbahn · Bahnhof an die Gleise setzen (Bahn, 7)";
                 if (railText != null)
@@ -147,11 +147,16 @@ namespace CityBuilder.Game.Gateways
             railObject.SetActive(gw.HasRailCorridor);
             if (!gw.HasRailCorridor) return;
 
-            var a = gw.RailStart;
-            var b = gw.RailEnd;
-            float length = SimVector2.Distance(a, b);
-            var dir = SimVector2.Normalize(b - a);
-            var side = new SimVector2(-dir.Y, dir.X);
+            // Mittellinie der (geschwungenen) Trasse; alte Spielstände: gerade zwischen den Enden
+            var path = gw.RailPath;
+            float length = 0f;
+            for (int k = 0; k < path.Count - 1; k++) length += SimVector2.Distance(path[k], path[k + 1]);
+            if (length < 1f) return;
+            SimVector2 At(float s, float offset)
+            {
+                var p = gw.RailPointAt(s / length, out var d);
+                return p + new SimVector2(-d.Y, d.X) * offset;
+            }
             var verts = new List<Vector3>();
             var tris = new List<int>();
             // zwei Striche (Gleisachsen), versetzt um ±3,5 m
@@ -162,8 +167,10 @@ namespace CityBuilder.Game.Gateways
                     for (float u = s; u < e - 0.01f; u += 4f)
                     {
                         float v = Mathf.Min(e, u + 4f);
-                        var p0 = a + dir * u + side * offset;
-                        var p1 = a + dir * v + side * offset;
+                        var p0 = At(u, offset);
+                        var p1 = At(v, offset);
+                        var side = SimVector2.Normalize(p1 - p0);
+                        side = new SimVector2(-side.Y, side.X);
                         int i = verts.Count;
                         foreach (var (p, w) in new[] { (p0, -1f), (p0, 1f), (p1, -1f), (p1, 1f) })
                         {

@@ -81,13 +81,12 @@ namespace CityBuilder.Simulation.Tests
             RoadBuilder.Build(w.Roads, plan);
         }
 
-        /// <summary>Punkt auf der Korridor-Achse bei Anteil f (0 = A, 1 = B) und Achse/Normale.</summary>
+        /// <summary>Punkt auf der Trassen-Mittellinie bei Anteil f der Länge (0 = A, 1 = B) und Richtung/Normale dort (Trasse schwingt).</summary>
         static Vector2 Axis(SimulationWorld w, float f, out Vector2 dir, out Vector2 normal)
         {
-            var a = w.Gateways.RailStart; var b = w.Gateways.RailEnd;
-            dir = Vector2.Normalize(b - a);
+            var p = w.Gateways.RailPointAt(f, out dir);
             normal = new Vector2(-dir.Y, dir.X);
-            return a + (b - a) * f;
+            return p;
         }
 
         /// <summary>Anteil der Achse weit weg von der Autobahn (Rampe der Eisenbahnbrücke meiden).</summary>
@@ -286,8 +285,9 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(2, plan.PlatformTracks);
             Assert.False(plan.HasRoadAccess);
             Assert.True(Vector2.Dot(plan.Front, normal) > 0.99f, "Vorderseite zeigt vom Gleis weg");
-            Assert.Equal(RailRules.PlatformGap + StationCatalog.Passenger.Depth * 0.5f + RailRules.TrackSpacing * 0.5f,
-                Vector2.Dot(plan.Position - p, normal), 1);
+            // Abstand Bahnhofsmitte ↔ Trassenachse (Toleranz statt Rundung auf 1 Stelle: 18,25 vs. 18,25006 rundet verschieden)
+            float expectedOffset = RailRules.PlatformGap + StationCatalog.Passenger.Depth * 0.5f + RailRules.TrackSpacing * 0.5f;
+            Assert.InRange(Vector2.Dot(plan.Position - p, normal), expectedOffset - 0.05f, expectedOffset + 0.05f);
             // ohne Gleis in der Nähe kein Bahnhof
             Assert.Equal(StationBuildError.NoTrack, rail.PlanStation(StationCatalog.Passenger, p + normal * 300f).Error);
 
