@@ -238,6 +238,7 @@ namespace CityBuilder.Game.Rail
             {
                 case StationBuildError.NoTrack: return $"Bahnhof rastet an einem Gleis ein (≤ {RailRules.StationSnapRadius:0} m, ebenerdig, Bahnsteig parallel)";
                 case StationBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case StationBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case StationBuildError.OnWater: return "Nicht im Wasser bauen";
                 case StationBuildError.TooSteep: return $"Zu steil (max. {RailRules.StationMaxSlope:0} m Höhenunterschied)";
                 case StationBuildError.OverlapsRoad: return "Steht auf einer Straße";

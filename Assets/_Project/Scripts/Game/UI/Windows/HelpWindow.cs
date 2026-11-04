@@ -45,6 +45,11 @@ namespace CityBuilder.Game.UI.Windows
                     "am Ufer (Bauleiste „Hafen“, 8) bringt Seehandel und billige Fracht per Schiff. Ein Flughafen (Bauleiste „Flughafen“, 9) " +
                     "macht den Luftweg befahrbar: Touristen, Geschäftsreisende und Luftfracht – aber Fluglärm entlang der Einflugschneisen, und dort " +
                     "dürfen keine hohen Gebäude, Türme oder Windräder stehen.");
+            // --- Kacheln
+            ui.Note("Die Karte besteht aus Kacheln (6 × 6 km = 3 × 3 Kacheln à 2 km). Gebaut wird nur auf gekauftem Land – am Anfang die " +
+                    "mittlere Kachel (weiß umrandet). Weitere Nachbarkacheln kauft man im Kachel-Fenster (Raster-Knopf oben); jede weitere kostet mehr. " +
+                    "Autobahn, Fernbahn und Flüsse laufen über die ganze Karte. Ein Verkehrsflughafen braucht meist zwei Kacheln.");
+            // --- Ende Kacheln
             ui.Section("Bauen");
             using (ui.Fields())
             {

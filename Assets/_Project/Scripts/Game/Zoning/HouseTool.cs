@@ -399,6 +399,7 @@ namespace CityBuilder.Game.Zoning
             switch (plan.Error)
             {
                 case HouseBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case HouseBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case HouseBuildError.OnWater: return "Nicht im Wasser bauen";
                 case HouseBuildError.TooSteep: return $"Zu steil (max. {CitySystem.HouseMaxSlope:0} m Höhenunterschied)";
                 case HouseBuildError.OverlapsRoad: return "Steht auf einer Straße";

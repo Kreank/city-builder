@@ -14,7 +14,16 @@ namespace CityBuilder.Game
     [DefaultExecutionOrder(-100)]
     public sealed class SimulationRunner : MonoBehaviour
     {
+        [Tooltip("Veraltet (Szene hat 2048 gespeichert) – Kartengröße kommt aus mapSize.")]
         [SerializeField] float worldSize = 2048f;
+        // --- Kacheln: neue Spiele auf der großen Karte aus Kacheln (6 × 6 km = 3 × 3, Start auf der mittleren Kachel).
+        // Eigenes Feld, damit der in der Szene gespeicherte alte Wert worldSize (2048) nicht greift.
+        [Header("Karte")]
+        [Tooltip("Kantenlänge der Stadtkarte neuer Spiele (m). 6144 = 3 × 3 Kacheln à 2048 m; 2048 = eine Kachel wie früher.")]
+        [SerializeField] float mapSize = WorldSettings.GameSizeMeters;
+        [Tooltip("Kantenlänge einer kaufbaren Kachel (m).")]
+        [SerializeField] float tileSize = 2048f;
+        // --- Ende Kacheln
         // Bewusst NICHT serialisiert: die Szene hatte noch einen alten Wert (10) gespeichert, der das Zeitmodell
         // überschrieb (Tempo 1 lief ~15× zu schnell). Einzige Quelle ist TimeModel.
         static float ticksPerSecond => TimeModel.TicksPerRealSecond;
@@ -100,6 +109,7 @@ namespace CityBuilder.Game
             {
                 var placeholder = CreateSettings();
                 placeholder.GenerateWorld = false;
+                placeholder.SizeMeters = 2048f; // Kacheln: Platzhalter klein und schnell (eine Kachel)
                 placeholder.PrebuiltConnections = placeholder.RequireGatewayForMoveIn = placeholder.RequireGatewayForTrade = false; // Gateways: Platzhalter braucht keine Autobahn
                 World = SimulationWorld.CreateDefault(placeholder);
                 SetSpeed(0);
@@ -155,7 +165,8 @@ namespace CityBuilder.Game
         /// <summary>Einstellungen aus dem Inspector; <paramref name="worldSeed"/>/<paramref name="startRegion"/> überschreiben (Neues Spiel).</summary>
         public WorldSettings CreateSettings(int? worldSeed = null, int? startRegion = null) => new WorldSettings
         {
-            SizeMeters = worldSize,
+            SizeMeters = mapSize > 0f ? mapSize : worldSize, // Kacheln
+            TileSize = tileSize > 0f ? tileSize : 2048f,       // Kacheln
             GenerateTerrain = generateTerrain,
             TerrainSeed = terrainSeed,
             UnlimitedFunds = unlimitedFunds,

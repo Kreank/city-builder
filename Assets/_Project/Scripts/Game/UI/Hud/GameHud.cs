@@ -94,6 +94,7 @@ namespace CityBuilder.Game.UI.Hud
         GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
         TradeWindow tradeWindow; // Etappe 8 Handel (F11)
         RealmWindow realmWindow; // Etappe 7 Reich (Pos1)
+        TilesWindow tilesWindow; // Kacheln: Bauland kaufen (Knopf oben)
         EnvironmentWindow environmentWindow; // Umwelt (Etappe 6): Knopf in der Ansichtsleiste
         VisualElement resourceFlyout;
 
@@ -242,6 +243,7 @@ namespace CityBuilder.Game.UI.Hud
             // --- Ende G5
             tradeWindow = Windows.Add(new TradeWindow()); // Etappe 8 Handel (F11), nur mit Weltkarte sichtbar
             realmWindow = Windows.Add(new RealmWindow()); // Etappe 7 Reich (Pos1): Städte, Lieferungen, Land gründen
+            tilesWindow = Windows.Add(new TilesWindow()); // Kacheln: Übersicht, Nachbarkacheln kaufen
             environmentWindow = Windows.Add(new EnvironmentWindow()); // Umwelt (Etappe 6): Luft, Boden, Gegenmaßnahmen
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
@@ -520,6 +522,13 @@ namespace CityBuilder.Game.UI.Hud
             realmBtn.Add(Icon(HudIconKind.Flag));
             topBar.Add(realmBtn);
             // --- Ende Etappe 7
+
+            // --- Kacheln: Bauland kaufen (kein freies Tastenkürzel – Knopf in der oberen Leiste)
+            var tilesBtn = Btn(null, () => tilesWindow?.Toggle(), () => tilesWindow != null && tilesWindow.IsOpen,
+                "Kacheln: Karte aus Kacheln, Nachbarkacheln kaufen (Bauland erweitern)", null, "cb-icon-btn");
+            tilesBtn.Add(Icon(HudIconKind.Tiles));
+            topBar.Add(tilesBtn);
+            // --- Ende Kacheln
 
             // --- Etappe 8 Handel (F11) – nur mit den neuen Fenstern und Weltkarte
             var tradeBtn = Btn(null, () => tradeWindow?.Toggle(), () => tradeWindow != null && tradeWindow.IsOpen,

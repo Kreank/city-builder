@@ -40,12 +40,18 @@ namespace CityBuilder.Game
 
         void Start() => runner = FindAnyObjectByType<SimulationRunner>();
 
+        // --- Kacheln: Grenzen folgen der Kartengröße der laufenden Welt (6-km-Karte); worldHalfSize bleibt Rückfall ohne Welt
+        float HalfSize => runner != null && runner.World != null ? runner.World.Settings.SizeMeters * 0.5f : worldHalfSize;
+        /// <summary>Auf großen Karten etwas weiter herauszoomen (Überblick über mehrere Kacheln), höchstens 3 600 m.</summary>
+        float MaxDistance => Mathf.Min(3600f, Mathf.Max(maxDistance, HalfSize * 1.1f));
+        // --- Ende Kacheln
+
         /// <summary>Springt mit dem Fokus zu einem Punkt (z. B. Zubringer der Autobahn); Folgen endet.</summary>
         public void FocusOn(Vector3 p)
         {
             FollowTarget = null;
-            focus.x = Mathf.Clamp(p.x, -worldHalfSize, worldHalfSize);
-            focus.z = Mathf.Clamp(p.z, -worldHalfSize, worldHalfSize);
+            focus.x = Mathf.Clamp(p.x, -HalfSize, HalfSize);
+            focus.z = Mathf.Clamp(p.z, -HalfSize, HalfSize);
         }
 
         void LateUpdate()
@@ -98,11 +104,11 @@ namespace CityBuilder.Game
                     targetDistance *= 1f - Mathf.Sign(scroll) * zoomStep;
             }
 
-            targetDistance = Mathf.Clamp(targetDistance, minDistance, maxDistance);
+            targetDistance = Mathf.Clamp(targetDistance, minDistance, MaxDistance);
             distance = Mathf.Lerp(distance, targetDistance, 1f - Mathf.Exp(-smoothing * dt));
 
-            focus.x = Mathf.Clamp(focus.x, -worldHalfSize, worldHalfSize);
-            focus.z = Mathf.Clamp(focus.z, -worldHalfSize, worldHalfSize);
+            focus.x = Mathf.Clamp(focus.x, -HalfSize, HalfSize);
+            focus.z = Mathf.Clamp(focus.z, -HalfSize, HalfSize);
             // Fokuspunkt folgt dem Gelände (weich, damit die Kamera nicht springt)
             if (runner != null && runner.World != null)
             {

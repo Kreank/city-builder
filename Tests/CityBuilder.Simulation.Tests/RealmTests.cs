@@ -207,6 +207,38 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(back.Citizens.Stats.Population > 0);
         }
 
+        /// <summary>Kacheln: große Karte (3 × 3) – jede Stadt hat ihre eigenen Kacheln, Kauf überlebt den Wechsel.</summary>
+        [Fact]
+        public void Switch_BigMap_TilesPerCity()
+        {
+            var a = SimulationWorld.CreateDefault(new WorldSettings
+            {
+                GenerateWorld = true, WorldSeed = WorldSeed, Planet = Small, StartRegion = Layout.Value.start, CityName = "Bergheim",
+                GenerateTerrain = false, SizeMeters = WorldSettings.GameSizeMeters,
+            });
+            Assert.Equal(3, a.Tiles.TilesPerSide);
+            Assert.True(a.Tiles.Purchase(2, 1));
+            var road = RoadBuilder.Plan(a.Roads, new Vector2(-300, 0), 0f, null, new Vector2(300, 0), 0f, RoadCatalog.CityTwoLane);
+            Assert.True(road.IsValid, road.Error.ToString());
+            RoadBuilder.Build(a.Roads, road);
+            var hall = a.Services.PlanAligned(ServiceCatalog.TownHall, new Vector2(-150, -30));
+            Assert.True(hall.IsValid, hall.Error.ToString());
+            Assert.NotNull(a.Services.Build(hall));
+            var b = Found(a, Layout.Value.free[0], "Talheim");
+            var wb = RealmSwitch.Switch(a, b.Id);
+            Assert.Equal(WorldSettings.GameSizeMeters, wb.Settings.SizeMeters);
+            Assert.Equal(1, wb.Tiles.OwnedCount); // neue Stadt: nur die Mitte
+            Assert.False(wb.Tiles.IsOwned(2, 1));
+            Assert.True(wb.Tiles.Purchase(1, 2));
+            Days(wb, 1);
+            var wa = RealmSwitch.Switch(wb, 0);
+            Assert.True(wa.Tiles.IsOwned(2, 1));
+            Assert.False(wa.Tiles.IsOwned(1, 2));
+            var wb2 = RealmSwitch.Switch(wa, b.Id);
+            Assert.True(wb2.Tiles.IsOwned(1, 2));
+            Assert.False(wb2.Tiles.IsOwned(2, 1));
+        }
+
         [Fact]
         public void Switch_IsDeterministic_AndSurvivesSaveLoad()
         {

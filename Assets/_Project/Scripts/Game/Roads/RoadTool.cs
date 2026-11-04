@@ -253,6 +253,10 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Gateways.GatewayView>().Init(this, previewMaterial);
             // --- Ende Gateways
 
+            // --- Kacheln: Kachelgrenzen (gekauft/kaufbar/gesperrt), Hinweis „Kachel nicht gekauft“ in den Bauwerkzeugen
+            Ensure<CityBuilder.Game.Tiles.TileView>().Init(this, previewMaterial);
+            // --- Ende Kacheln
+
             // --- G5 Warenketten: Fenster „Wirtschaft“ (Taste F5; IMGUI-Rückfall, neue UI: GoodsWindow)
             Ensure<CityBuilder.Game.Goods.GoodsPanel>().Init(this);
             Ensure<CityBuilder.Game.Goods.IndustryFocusView>().Init(this, previewMaterial); // Produktion lenken: Schwerpunkt-Gebiete
@@ -1276,6 +1280,7 @@ namespace CityBuilder.Game.Roads
                 case RoadBuildError.OverlapsStructure: return "Straße überschneidet ein Bauwerk – anders führen oder Gebäude verschieben";
                 case RoadBuildError.Locked: return "Gehört zum Fernstraßennetz – nicht abreißbar/umbaubar (am Zubringer anschließen)"; // Gateways
                 case RoadBuildError.DrawbridgeNoFairway: return "Klappbrücke quer über die Fahrrinne ziehen (genau eine Querung, Stadtstraße)"; // Wasserstraße
+                case RoadBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 default: return null;
             }
         }

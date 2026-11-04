@@ -544,6 +544,7 @@ namespace CityBuilder.Game.Utilities
             switch (e)
             {
                 case UtilityBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case UtilityBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case UtilityBuildError.OverlapsRoad: return "Steht auf einer Straße";
                 case UtilityBuildError.OverlapsFacility: return "Überschneidet ein anderes Bauwerk";
                 case UtilityBuildError.OnWater: return "Nicht im Wasser bauen";
