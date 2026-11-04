@@ -144,7 +144,7 @@ namespace CityBuilder.Simulation.Realm
 
         /// <summary>
         /// Wöchentlich: NPC-Länder (Utility AI mit Persönlichkeit) beanspruchen freie Nachbarregionen. Chance je Land
-        /// 3 %/Woche × (0,5 + Risiko) × (1 + Hunger), danach 120 Tage Pause; höchstens 45 % des anfangs freien Landes.
+        /// 1,5 %/Woche × (0,5 + Risiko) × (1 + Hunger), danach 120 Tage Pause; höchstens 45 % des anfangs freien Landes.
         /// Ziel per gewichtetem Zufall über den Nutzen (Boden, Küste, Fluss, Bodenschätze, Wald; Spielergrenze meiden vorsichtige
         /// Länder). Folgen nur als Beziehung: Anspruch direkt am Spielergebiet −6 („Grenzstreit“), andere Nachbarn −2.
         /// </summary>

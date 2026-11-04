@@ -69,7 +69,7 @@ namespace CityBuilder.Simulation.Realm
 
         // ------------------------------------------------------------ NPC-Expansion
         /// <summary>Wöchentliche Grundchance je NPC-Land, eine freie Nachbarregion zu beanspruchen (× Persönlichkeit).</summary>
-        public const double ExpansionWeeklyChance = 0.03;
+        public const double ExpansionWeeklyChance = 0.015;
         /// <summary>Nach einem Anspruch wartet ein Land so viele Tage.</summary>
         public const int ExpansionCooldownDays = 120;
         /// <summary>Die NPC-Länder nehmen höchstens so viel des anfangs freien Landes (der Rest bleibt für den Spieler).</summary>
