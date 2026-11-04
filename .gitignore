@@ -61,3 +61,6 @@ Thumbs.db
 # Eigene Assets: Bericht des OwnModelCatalogBuilder (wird im Editor erzeugt, s. docs/Modell-Konvention.md)
 /Assets/_Project/Models/_Unused.txt
 /Assets/_Project/Models/_Unused.txt.meta
+
+# Agenten-Worktrees (Claude Code)
+.claude/worktrees/

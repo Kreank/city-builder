@@ -2576,3 +2576,17 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   **nur angeschlossen an vorhandenes Wasser der Karte**. Man darf kein Wasser erzeugen, wo die Karte keins hat. Achtung: heute ergibt
   Absenken unter 0 m überall Wasser (s. „Gelände“ → Terraforming) – das muss auf „mit bestehendem Gewässer verbunden“ beschränkt werden
   (sonst trockene Senke). Danach: gegrabene Kanäle als Fahrrinne/Hafenstandort (s. „Wasserstraße & Hafen“ → Schleusen und Kanäle).
+- **Arbeitsplan (vereinbart 2026-11-04, noch nicht gestartet):** drei parallele Agenten in Worktrees, danach zusammenführen + Tests
+  (+ Kompilier-/Rauchtest, wenn Unity zu ist), Spieler testet, 2–3 Nachbesserungsrunden einplanen.
+  (A) **Gebäude setzen** – Einrasten/Ausrichtung/ruhige Vorschau/exakter Straßenabstand/klare Fehler für Häuser, Reihen, Dienste, Depots,
+  Verschieben (`RoadFront`, `PlacementGhost`, `HouseTool`, `ServiceTool`, `FacilityMover`). (B) **Versorgung** – Pumpe/Auslass am flachen
+  Ufer, Rohre verlegen, Umspannwerk-Anschlüsse sichtbar, Strommasten/Mastfehler (`UtilitySystem`, `UtilityPoles`, `UtilityTool`, `UtilityView`).
+  (C) **Wasserwege graben** – Terraforming-Wasser nur mit Verbindung zu Kartenwasser, Kanäle als Fahrrinne/Hafenplatz (`TerrainMap`,
+  `TerraformTool`, `ShippingSystem`/`NavGrid`).
+- **Stand Spieltest 2026-11-04 (in Unity noch nicht angesehen):** Kachel-Karte (nur in neuen Spielen, 6 × 6 km), Handel Stufe 2 (F11),
+  neue Trassierung Autobahn/Fernbahn (nur neue Spiele), eigene Modelle für Krankenhaus/Grundschule/Müllhalde/Radio/TV/Parks.
+  Hinweise: Game-Ansicht „Scale“ auf 1x (2,4x ließ die UI riesig/abgeschnitten wirken); Store-Pakete CarAI, Traffic Engine, MB Road System
+  entfernt (eigene Verkehrssimulation, Kompilierfehler); Polyzero ElectricCables lokal an Unity 6.6 angepasst (`GetInstanceID` →
+  `GetHashCode`, ThirdParty ist nicht im Git – nach Neuimport erneut nötig); neue Store-Pakete (Pack_FREE_Cars, Street Assets,
+  Prototype Collection, SpaceZeta_StreetLamps, MOOD WARE Skybox, Polyzero) sind noch nicht im `AssetCatalogBuilder` eingetragen;
+  Menü „City Builder → Third Party → Pakete neu speichern“ gegen die Warnungen alter Formate (ungeprüft).
