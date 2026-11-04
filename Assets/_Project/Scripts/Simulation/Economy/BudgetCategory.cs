@@ -75,6 +75,11 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Einnahme: Hafengeld je Schiffsanlauf und Umschlag je Ladung.</summary>
         HarborFees,
         // --- Ende Wasserstraße & Hafen
+
+        // --- Umwelt (Etappe 6, hinten angefügt)
+        /// <summary>Ausgabe: Umweltschutz – Bäume pflanzen (Aufforstung).</summary>
+        Environment,
+        // --- Ende Umwelt
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -88,7 +93,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.HarborFees + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, dann Hafen)
+        public const int Count = (int)BudgetCategory.Environment + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, dann Umwelt)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -142,6 +147,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.RailFares: return "Bahn: Entgelte & Fahrgeld";   // Bahn
                 case BudgetCategory.HarborConstruction: return "Bau Hafen & Klappbrücken"; // Wasserstraße & Hafen
                 case BudgetCategory.HarborFees: return "Hafen: Hafengeld & Umschlag";      // Wasserstraße & Hafen
+                case BudgetCategory.Environment: return "Umweltschutz (Bäume)";      // Umwelt
                 default: return c.ToString();
             }
         }

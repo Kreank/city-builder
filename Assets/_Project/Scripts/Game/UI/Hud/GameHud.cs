@@ -82,6 +82,7 @@ namespace CityBuilder.Game.UI.Hud
         WorldMapUiWindow worldMap;
         GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
         TradeWindow tradeWindow; // Etappe 8 Handel (F11)
+        EnvironmentWindow environmentWindow; // Umwelt (Etappe 6): Knopf in der Ansichtsleiste
         VisualElement resourceFlyout;
 
         /// <summary>Wahr, solange die neue UI läuft (sonst greift das RoadTool auf die alte IMGUI-Leiste zurück).</summary>
@@ -224,6 +225,7 @@ namespace CityBuilder.Game.UI.Hud
             if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
             // --- Ende G5
             tradeWindow = Windows.Add(new TradeWindow()); // Etappe 8 Handel (F11), nur mit Weltkarte sichtbar
+            environmentWindow = Windows.Add(new EnvironmentWindow()); // Umwelt (Etappe 6): Luft, Boden, Gegenmaßnahmen
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
         }
@@ -652,8 +654,19 @@ namespace CityBuilder.Game.UI.Hud
             RailButton(HudIconKind.Car, "Verkehr: Stau-Ansicht (V)", () => trafficOverlay?.Toggle(), () => trafficOverlay != null && trafficOverlay.Visible);
             RailButton(HudIconKind.Noise, "Lärm (N)", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.Noise),
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Noise);
-            RailButton(HudIconKind.Air, "Abgas (P)", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.AirPollution),
+            RailButton(HudIconKind.Air, "Luftqualität (P) – Abgas aus Verkehr, Kraftwerken, Industrie, Heizen; zieht mit dem Wind, Wald/Parks bauen ab",
+                () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.AirPollution),
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution);
+            // --- Umwelt (Etappe 6): Boden, Grundwasser, Umweltfenster (ohne neue Tasten)
+            RailButton(HudIconKind.Resource, "Bodenbelastung (Altlasten aus Industrie, Deponie, Abwasser) – senkt Ernte und Bodenwert",
+                () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.Soil),
+                () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Soil);
+            RailButton(HudIconKind.Groundwater, "Grundwasser (Deponie-Sickerwasser, Industrie) – belastet Brunnen",
+                () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.Groundwater),
+                () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Groundwater);
+            RailButton(HudIconKind.Tree, "Umwelt: Luft, Wind, Quellen, Umweltauflagen, Umweltzone, Bäume pflanzen",
+                () => environmentWindow?.Toggle(), () => environmentWindow != null && environmentWindow.IsOpen);
+            // --- Ende Umwelt
             RailButton(HudIconKind.LandValue, "Bodenwert (F2) – rot niedrig, gelb mittel, grün hoch", () => envOverlay?.Toggle(EnvironmentOverlayView.Overlay.LandValue),
                 () => envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue); // G6
             RailButton(HudIconKind.Resource, "Rohstoffe (F3 schaltet Boden → Wald → Erz → Kohle → Öl → Sand → Grundwasser → aus)",
@@ -707,7 +720,9 @@ namespace CityBuilder.Game.UI.Hud
                 void Add(bool on, string name) { if (on) s = s == null ? name : s + " + " + name; }
                 Add(trafficOverlay != null && trafficOverlay.Visible, "Verkehr");
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Noise, "Lärm");
-                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution, "Abgas");
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.AirPollution, "Luftqualität");
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Soil, "Bodenbelastung");      // Umwelt
+                Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.Groundwater, "Grundwasser");  // Umwelt
                 Add(envOverlay != null && envOverlay.Current == EnvironmentOverlayView.Overlay.LandValue, "Bodenwert");
                 if (envOverlay != null && envOverlay.CurrentResourceId != null) Add(true, ResourceName(envOverlay.CurrentResourceId));
                 Add(utilityOverlay != null && utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Strom");

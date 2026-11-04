@@ -105,7 +105,7 @@ namespace CityBuilder.Simulation.Services
         readonly List<ServiceFacility> sortedFacilities = new List<ServiceFacility>();
         int nextId = 1;
         int builtRoadVersion = -1, builtStructureVersion = -1, reachVersion, linkedReachVersion = -1, linkedCityVersion = -1;
-        bool pollutionActive;
+        internal bool pollutionActive; // Umwelt (Etappe 6): Merker der alten Luftrechnung, gesetzt vom EcologySystem
 
         /// <summary>Wird bei jeder Änderung an Dienstgebäuden erhöht (für die Darstellung).</summary>
         public int StructureVersion { get; private set; }
@@ -721,22 +721,10 @@ namespace CityBuilder.Simulation.Services
         void Emit()
         {
             if (environment == null) return;
-            bool polluting = false;
             foreach (var f in facilities.Values)
-            {
                 if (f.Type.NoiseLevel > 0f) environment.Noise.StampRadialMax(f.Position, f.Type.NoiseRadius, f.Type.NoiseLevel);
-                if (f.Type.Pollution > 0f) { environment.AirPollution.AddRadial(f.Position, f.Type.PollutionRadius, f.Type.Pollution); polluting = true; }
-            }
-            // Abklingen macht bisher das UtilitySystem, aber nur, wenn eigene Kraftwerke Abgas machen – sonst hier
-            // (gleiche Werte; später ein gemeinsames Umweltsystem)
-            bool utilityPolluting = false;
-            if (utilities != null) foreach (var f in utilities.Facilities) if (f.Type.Pollution > 0f) { utilityPolluting = true; break; }
-            if (!utilityPolluting && (polluting || pollutionActive))
-            {
-                environment.AirPollution.Diffuse(0.1f);
-                environment.AirPollution.Decay(0.08f);
-                pollutionActive = polluting || environment.AirPollution.MaxValue() > 0.001f;
-            }
+            // --- Umwelt (Etappe 6): Abgas der Verbrennungsanlage und das Abklingen rechnet das EcologySystem (world.Ecology);
+            // ohne volles Modell genau wie früher hier (Merker pollutionActive bleibt im Spielstand dieses Systems)
         }
 
         // ------------------------------------------------------------ Straßen

@@ -25,6 +25,8 @@ namespace CityBuilder.Game.UI.Hud
         Flame, Shield,
         /// <summary>Wasserstraße &amp; Hafen: Frachtschiff von der Seite auf Wellen.</summary>
         Ship,
+        /// <summary>Umwelt (Etappe 6): Laubbaum (Bäume pflanzen, Umweltfenster), Tropfen über Boden (Grundwasser).</summary>
+        Tree, Groundwater,
     }
 
     /// <summary>
@@ -116,6 +118,16 @@ namespace CityBuilder.Game.UI.Hud
                 case HudIconKind.Shield: // Sicherheit: Polizeischild mit Stern
                     Poly(true, 12, 3, 20, 6, 19, 14, 12, 21, 5, 14, 4, 6);
                     Poly(true, 12, 8, 13.2f, 10.8f, 16, 11, 13.8f, 12.9f, 14.5f, 15.6f, 12, 14.1f, 9.5f, 15.6f, 10.2f, 12.9f, 8, 11, 10.8f, 10.8f);
+                    break;
+                case HudIconKind.Tree: // Umwelt: Laubbaum (Krone aus drei Kreisen, Stamm)
+                    Circle(12, 8, 4.5f); Circle(8, 12, 3.5f); Circle(16, 12, 3.5f);
+                    Line(12, 14, 12, 21); Line(9, 21, 15, 21);
+                    break;
+                case HudIconKind.Groundwater: // Umwelt: Tropfen über Bodenschichten
+                    p.BeginPath(); p.MoveTo(P(12, 3)); p.BezierCurveTo(P(15, 7), P(16.5f, 9.5f), P(16.5f, 11.5f));
+                    p.BezierCurveTo(P(16.5f, 14), P(14.5f, 16), P(12, 16)); p.BezierCurveTo(P(9.5f, 16), P(7.5f, 14), P(7.5f, 11.5f));
+                    p.BezierCurveTo(P(7.5f, 9.5f), P(9, 7), P(12, 3)); p.ClosePath(); p.Stroke();
+                    Line(3, 19, 21, 19); Line(5, 22, 19, 22);
                     break;
                 case HudIconKind.Bus: // ÖPNV
                     Poly(true, 3, 17, 3, 7, 21, 7, 21, 17);

@@ -111,6 +111,12 @@ namespace CityBuilder.Simulation.Citizens
 
         // ------------------------------------------------------------ Täglich je Bürger
 
+        /// <summary>
+        /// Umwelt (Etappe 6, Hook): chronische Luftbelastung an einer Wohnung 0..1 (geglättetes Tagesmittel). Gesetzt von
+        /// <c>EcologySystem.Connect</c>; null bzw. 0 = wie bisher.
+        /// </summary>
+        public Func<Building, float> ChronicAirExposure { get; set; }
+
         /// <summary>Erinnerungen abklingen, Gesundheit, Lebensereignisse. Läuft im täglichen Durchlauf.</summary>
         void DailyLife(Citizen c)
         {
@@ -123,6 +129,17 @@ namespace CityBuilder.Simulation.Citizens
             // Gesundheit: Grundwert nach Alter, Abgas, Krankheit
             float baseHealth = c.Age < 50 ? 1f : MathF.Max(0.45f, 1f - (c.Age - 50) * 0.012f);
             float target = Math.Clamp(baseHealth - 0.3f * air - (c.IsIll ? 0.45f : 0f) + 0.1f * (healthCov - 0.5f), 0.05f, 1f);
+            // --- Umwelt (Etappe 6): chronische Luftbelastung an der Wohnung (Atemwege), Kinder und Ältere stärker (0 = wie bisher)
+            float chronic = ChronicAirExposure != null && home != null ? ChronicAirExposure(home) : 0f;
+            float airIllness = 1f;
+            if (chronic > 0f)
+            {
+                float load = chronic * Environment.EcologyRules.Vulnerability(c.Age);
+                target = Math.Clamp(target - Environment.EcologyRules.ChronicHealthLoss * load, 0.05f, 1f);
+                airIllness = 1f + Environment.EcologyRules.ChronicIllnessFactor * load;
+                if (load >= 0.25f) Remember(c, MemoryKind.Smog, Math.Min(1f, 0.25f + load));
+            }
+            // --- Ende Umwelt
             c.Health = Math.Clamp(c.Health + (target - c.Health) * 0.25f, 0f, 1f);
 
             if (c.IsIll)
@@ -134,7 +151,7 @@ namespace CityBuilder.Simulation.Citizens
                     Log(LifeEventKind.Recovery, c, null, null);
                 }
             }
-            else if (Roll(LifeEventKind.Illness, c, (1f + (c.Age > 60 ? (c.Age - 60) * 0.05f : 0f)) * (1f + 2f * air) * (1.5f - healthCov)))
+            else if (Roll(LifeEventKind.Illness, c, (1f + (c.Age > 60 ? (c.Age - 60) * 0.05f : 0f)) * (1f + 2f * air) * (1.5f - healthCov) * airIllness))
             {
                 c.IsIll = true;
                 BecameIll?.Invoke(c); // Dienstfahrzeuge: Rettungswagen bei schwerer Erkrankung (nur Zustand merken, keine Fahrt im Handler)

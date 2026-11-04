@@ -12,7 +12,7 @@ namespace CityBuilder.Game.Environment
     public sealed class EnvironmentOverlayView : MonoBehaviour
     {
         /// <summary><see cref="Resource"/> = Ressourcen-Raster der Welt (Etappe 5), Art in <see cref="CurrentResourceId"/>, F3 schaltet durch.</summary>
-        public enum Overlay { None, Noise, AirPollution, LandValue, Resource, WaterQuality } // WaterQuality: G3 erweitert (Knopf in der Ansichtsleiste, keine Taste)
+        public enum Overlay { None, Noise, AirPollution, LandValue, Resource, WaterQuality, Soil, Groundwater } // WaterQuality: G3 erweitert; Soil/Groundwater: Umwelt (Etappe 6) – Knöpfe in der Ansichtsleiste, keine Taste
 
         [SerializeField] SimulationRunner runner;
         [SerializeField] Material overlayMaterial;
@@ -141,11 +141,27 @@ namespace CityBuilder.Game.Environment
                 return;
             }
             // --- Ende
+            // --- Umwelt (Etappe 6): Bodenbelastung (Altlasten) und Grundwasser – eigene Raster des EcologySystems
+            if (Current == Overlay.Soil || Current == Overlay.Groundwater)
+            {
+                var eco = runner.World.Ecology;
+                var g = eco == null ? null : Current == Overlay.Soil ? eco.Soil : eco.Groundwater;
+                if (g == null || g.Width != env.Noise.Width) { Toggle(Current); return; }
+                if (g == shownLayer && g.Version == shownVersion) return;
+                if (soilGradient == null) soilGradient = DefaultGradient(new Color(0.85f, 0.75f, 0.35f), new Color(0.45f, 0.1f, 0.35f));
+                if (groundwaterGradient == null) groundwaterGradient = DefaultGradient(new Color(0.55f, 0.8f, 0.95f), new Color(0.45f, 0.3f, 0.1f));
+                RefreshTexture(g, Current == Overlay.Soil ? soilGradient : groundwaterGradient, scale: 2.5f);
+                return;
+            }
+            // --- Ende Umwelt
             var layer = Current == Overlay.Noise ? env.Noise : env.AirPollution;
             if (layer == shownLayer && layer.Version == shownVersion) return;
 
-            RefreshTexture(layer, Current == Overlay.Noise ? noiseGradient : pollutionGradient);
+            // Umwelt (Etappe 6): Luftwerte liegen meist unter 0,4 (Smog ab 0,3) → gestreckt, damit Unterschiede sichtbar sind
+            RefreshTexture(layer, Current == Overlay.Noise ? noiseGradient : pollutionGradient, scale: Current == Overlay.Noise ? 1f : 2.5f);
         }
+
+        Gradient soilGradient, groundwaterGradient; // Umwelt (Etappe 6)
 
         // --- Welt (Etappe 5): Ressourcen-Ansicht
         int resourceIndex = -1;
@@ -194,6 +210,11 @@ namespace CityBuilder.Game.Environment
 
         void OnGUI()
         {
+            if (runner != null && runner.World?.Ecology != null && (Current == Overlay.AirPollution || Current == Overlay.Soil || Current == Overlay.Groundwater))
+            {
+                DrawEcologyLegend(); // Umwelt (Etappe 6)
+                return;
+            }
             if (Current != Overlay.Resource || runner == null || runner.World.Resources == null) return;
             var kind = runner.World.Resources.Kind(CurrentResourceId);
             if (kind == null) return;
@@ -203,6 +224,27 @@ namespace CityBuilder.Game.Environment
             GUI.Box(rect, $"<b>{kind.DisplayName}</b> (F3 weiter){region} · gesamt {runner.World.Resources.TotalAmount(kind.Id):N0} {kind.Unit}", legendStyle);
         }
         // --- Ende Welt
+
+        // --- Umwelt (Etappe 6): Legende mit Wind/Inversion bzw. Höchstwerten
+        void DrawEcologyLegend()
+        {
+            var eco = runner.World.Ecology;
+            if (legendStyle == null) legendStyle = new GUIStyle(GUI.skin.box) { fontSize = 13, alignment = TextAnchor.MiddleCenter, richText = true };
+            string text;
+            if (Current == Overlay.AirPollution)
+            {
+                var wind = eco.Wind;
+                string inv = eco.Inversion > 0.5f ? " · <b>Inversion</b> (Luft steht)" : "";
+                text = eco.Enabled
+                    ? $"<b>Luftqualität</b> · Wind aus {wind.FromName} {wind.MetersPerSecond:0} m/s{inv} · an Wohnungen Ø {eco.HomeAirAverage:0.00}, Smog ab {EcologyRules.SmogThreshold:0.0}"
+                    : "<b>Abgas</b> (Kraftwerke, Verbrennung)";
+            }
+            else if (Current == Overlay.Soil) text = $"<b>Bodenbelastung</b> (Altlasten) · höchstens {eco.Soil.MaxValue() * 100f:0} % · senkt Ernte und Bodenwert";
+            else text = $"<b>Grundwasser</b> belastet · höchstens {eco.Groundwater.MaxValue() * 100f:0} % · Brunnen saugen es an";
+            var rect = new Rect(Screen.width * 0.5f - 260f, CityBuilder.Game.UI.HudLayout.TopInset + 4f, 520f, 26f);
+            GUI.Box(rect, text, legendStyle);
+        }
+        // --- Ende Umwelt
         Gradient waterGradient; // G3 erweitert: Wasserqualität
         // --- G6 Bodenwert
         Gradient landValueGradient;
@@ -225,12 +267,12 @@ namespace CityBuilder.Game.Environment
             shownLayer = null;
         }
 
-        void RefreshTexture(GridLayer layer, Gradient gradient, bool opaqueLow = false)
+        void RefreshTexture(GridLayer layer, Gradient gradient, bool opaqueLow = false, float scale = 1f)
         {
             var values = layer.RawValues;
             for (int i = 0; i < values.Length; i++)
             {
-                float v = Mathf.Clamp01(values[i]);
+                float v = Mathf.Clamp01(values[i] * scale);
                 if (v <= 0.001f) { pixels[i] = new Color32(0, 0, 0, 0); continue; }
                 Color c = gradient.Evaluate(v);
                 // Bodenwert (G6): niedrige Werte sind die Aussage → gleichmäßig deckend statt nach Wert

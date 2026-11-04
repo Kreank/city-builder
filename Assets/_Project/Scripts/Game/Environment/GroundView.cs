@@ -96,6 +96,7 @@ namespace CityBuilder.Game.Environment
             dirtyChunks.Clear();
             dirtyHoleAreas.Clear();
             appliedUnderground = false;
+            tintDay = int.MinValue; recolorQueue.Clear(); // Umwelt (Etappe 6): Jahreszeit-Färbung neu bestimmen
         }
         // --- Ende Speichern & Laden
 
@@ -169,6 +170,7 @@ namespace CityBuilder.Game.Environment
         {
             if (holes == null) return;
             if (dirtyHoleAreas.Count > 0) RecomputeHoles();
+            UpdateSeasonTint(); // Umwelt (Etappe 6)
             foreach (int i in dirtyChunks) BuildChunk(i);
             dirtyChunks.Clear();
 
@@ -301,6 +303,58 @@ namespace CityBuilder.Game.Environment
         static readonly Color Rock = new Color(0.48f, 0.46f, 0.43f);
         static readonly Color Earth = new Color(0.45f, 0.35f, 0.25f);
         static readonly Color Gravel = new Color(0.55f, 0.52f, 0.47f);
+        // --- Umwelt (Etappe 6): Gelände-Farben nach Klima/Jahreszeit (aus world.Climate, ohne Spielzustand)
+        static readonly Color Straw = new Color(0.66f, 0.6f, 0.34f);
+        static readonly Color Snow = new Color(0.9f, 0.92f, 0.95f);
+        float tintDryness, tintSnow;
+        int tintDay = int.MinValue;
+        readonly Queue<int> recolorQueue = new Queue<int>();
+        /// <summary>Kacheln, deren Farben je Bild neu berechnet werden (verteilt, damit der Tageswechsel nicht ruckelt).</summary>
+        const int RecolorPerFrame = 3;
+
+        /// <summary>
+        /// Einmal je Spieltag: Grastrockenheit und Schneedecke aus dem Klima; ändert sich die Färbung merklich (≥ 0,04), werden alle
+        /// Kacheln nach und nach neu eingefärbt (nur Vertex-Farben).
+        /// </summary>
+        void UpdateSeasonTint()
+        {
+            var world = runner.World;
+            var climate = world?.Climate;
+            if (climate != null && world.Clock.Day != tintDay)
+            {
+                tintDay = world.Clock.Day;
+                float dry = Mathf.Round(climate.GrassDrynessOn(tintDay) * 20f) / 20f;
+                float snow = Mathf.Round(climate.SnowCoverOn(tintDay) * 20f) / 20f;
+                if (Mathf.Abs(dry - tintDryness) >= 0.04f || Mathf.Abs(snow - tintSnow) >= 0.04f)
+                {
+                    tintDryness = dry;
+                    tintSnow = snow;
+                    recolorQueue.Clear();
+                    for (int i = 0; i < chunkFilters.Length; i++) recolorQueue.Enqueue(i);
+                }
+            }
+            for (int n = 0; n < RecolorPerFrame && recolorQueue.Count > 0; n++)
+            {
+                int i = recolorQueue.Dequeue();
+                if (!dirtyChunks.Contains(i)) RecolorChunk(i);
+            }
+        }
+
+        void RecolorChunk(int index)
+        {
+            var mesh = chunkFilters[index].sharedMesh;
+            int cx = index % chunksPerSide, cy = index / chunksPerSide;
+            int gx0 = cx * ChunkCells, gy0 = cy * ChunkCells;
+            int gx1 = Mathf.Min(cells, gx0 + ChunkCells), gy1 = Mathf.Min(cells, gy0 + ChunkCells);
+            int w = gx1 - gx0 + 1, h = gy1 - gy0 + 1;
+            if (mesh == null || mesh.vertexCount != w * h) { dirtyChunks.Add(index); return; }
+            var colors = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                colors[y * w + x] = GroundColor(gx0 + x, gy0 + y);
+            mesh.SetColors(colors);
+        }
+        // --- Ende Umwelt
 
         /// <summary>
         /// Farbe eines Gitterpunkts: Gras mit dunkleren Wiesenflecken und trockenen Stellen (Rauschen),
@@ -324,6 +378,8 @@ namespace CityBuilder.Game.Environment
             c = Color.Lerp(c, DryGrass, Mathf.InverseLerp(0.62f, 0.9f, detail) * 0.6f);
             // Höhenlagen etwas karger
             c = Color.Lerp(c, Rock, Mathf.InverseLerp(55f, 95f, h) * 0.35f);
+            // Umwelt (Etappe 6): trockenes, gelbes Gras bei Dürre/Sommerhitze/trockenem Klima (fleckig nach dem Rauschen)
+            if (tintDryness > 0.01f) c = Color.Lerp(c, Straw, tintDryness * (0.45f + 0.55f * detail));
 
             if (terrain.WaterLevel > -100f)
             {
@@ -341,6 +397,12 @@ namespace CityBuilder.Game.Environment
             {
                 var soil = Color.Lerp(Earth, Gravel, detail);
                 c = Color.Lerp(c, soil, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.05f, 0.6f, worked)) * 0.85f);
+            }
+            // Umwelt (Etappe 6): Schneedecke im Winter kalter Regionen – nicht auf steilem Fels und nicht unter Wasser, in Höhenlagen dichter
+            if (tintSnow > 0.01f && (terrain.WaterLevel <= -100f || h > terrain.WaterLevel + 0.2f))
+            {
+                float cover = Mathf.Clamp01(tintSnow * (1f + Mathf.InverseLerp(40f, 90f, h)) - rock * 0.7f) * (0.8f + 0.2f * patches);
+                c = Color.Lerp(c, Snow, cover);
             }
             return c;
         }

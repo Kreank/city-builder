@@ -51,6 +51,9 @@ namespace CityBuilder.Simulation.LandValue
         /// <summary>Sicherheit (Hook): frische Brände + Kriminalität am Punkt 0..1 (null = 0). Gesetzt vom SafetySystem.</summary>
         public Func<Vector2, float> SafetyPenaltyAt { get; set; }
 
+        /// <summary>Umwelt (Etappe 6, Hook): Bodenbelastung am Punkt 0..1 (null = 0). Gesetzt vom EcologySystem.</summary>
+        public Func<Vector2, float> ContaminationAt { get; set; }
+
         public LandValueSystem(SimulationWorld world)
         {
             this.world = world ?? throw new ArgumentNullException(nameof(world));
@@ -168,6 +171,7 @@ namespace CityBuilder.Simulation.LandValue
             i.Air = env.AirPollution.Sample(p);
             i.Garbage = Math.Clamp(garbage.Sample(p), 0f, 1f);
             if (SafetyPenaltyAt != null) i.Safety = Math.Clamp(SafetyPenaltyAt(p), 0f, 1f); // Sicherheit
+            if (ContaminationAt != null) i.Contamination = Math.Clamp(ContaminationAt(p), 0f, 1f); // Umwelt: Altlasten
             return i;
         }
 

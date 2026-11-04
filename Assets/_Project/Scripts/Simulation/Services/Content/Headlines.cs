@@ -35,6 +35,10 @@ namespace CityBuilder.Simulation.Services.Content
         FireRuin,
         CrimeWave,
         Arrest,
+        // --- Umwelt (Etappe 6)
+        Smog,
+        FishKill,
+        EnvironmentRules,
     }
 
     /// <summary>
@@ -200,6 +204,24 @@ namespace CityBuilder.Simulation.Services.Content
                 ("Polizei fasst Täter", "Schneller Einsatz: an der {Straße} klickten die Handschellen. Aufklärungsquote zuletzt {Prozent} %."),
             },
             // --- Ende Sicherheit
+            // --- Umwelt (Etappe 6)
+            /* Smog */ new[]
+            {
+                ("Smog-Alarm!", "Dicke Luft über der Stadt: {Anzahl} Wohngebäude ({Prozent} %) liegen im Smog. Ärzte raten Kindern und Älteren, drinnen zu bleiben."),
+                ("Die Stadt hustet", "Abgase von Verkehr, Industrie und Heizungen hängen fest – {Prozent} % der Wohnungen betroffen. {Medium} fragt: Wo bleiben die Filter?"),
+                ("Grauer Himmel, schwere Luft", "Smog in {Anzahl} Wohngebäuden. Ohne Wind und Bäume zieht die schlechte Luft nicht ab."),
+            },
+            /* FishKill */ new[]
+            {
+                ("Fischsterben im Fluss", "Tote Fische treiben flussabwärts – die Verschmutzung erreicht {Prozent} %. Ungeklärtes Abwasser gilt als Ursache."),
+                ("Der Fluss kippt", "Anwohner melden Gestank und tote Fische. Messwert der Verschmutzung: {Prozent} %. {Medium} fordert eine Kläranlage."),
+            },
+            /* EnvironmentRules */ new[]
+            {
+                ("Strengere Umweltauflagen", "Die Stadt verschärft die Auflagen: {Name}. Fabriken müssen nachrüsten – die Wirtschaft klagt über Kosten."),
+                ("Filterpflicht beschlossen", "Neue Regeln für Schornsteine: {Name}. Umweltverbände jubeln, Unternehmen rechnen nach."),
+            },
+            // --- Ende Umwelt
         };
 
         public static int TopicCount => ByTopic.Length;
@@ -238,6 +260,9 @@ namespace CityBuilder.Simulation.Services.Content
                 case HeadlineTopic.FireRuin: return -0.8f;
                 case HeadlineTopic.CrimeWave: return -0.6f;
                 case HeadlineTopic.Arrest: return 0.3f;
+                case HeadlineTopic.Smog: return -0.7f;             // Umwelt
+                case HeadlineTopic.FishKill: return -0.8f;
+                case HeadlineTopic.EnvironmentRules: return 0.2f;
                 default: return 0.5f; // Eröffnungen
             }
         }

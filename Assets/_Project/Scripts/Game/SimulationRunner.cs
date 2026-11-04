@@ -42,6 +42,7 @@ namespace CityBuilder.Game
         [Tooltip("Dienste schicken echte Fahrzeuge über das Straßennetz (Müllabfuhr hängt teilweise an deren Ankunft).")]
         [SerializeField] bool serviceVehicles = true;
         [SerializeField] bool safetyEvents = true; // Sicherheit: Brände und Kriminalität
+        [SerializeField] bool environmentModel = true; // Umwelt (Etappe 6): Luft aus allen Quellen, Wind, Boden, Grundwasser
         /// <summary>Erster Start ohne Spielstand: läuft eine Platzhalterwelt, bis der Spieler im Neues-Spiel-Fenster startet.</summary>
         public bool AwaitingNewGame { get; private set; }
         // --- Ende Spielstart
@@ -107,6 +108,7 @@ namespace CityBuilder.Game
             World = SimulationWorld.CreateDefault(CreateSettings());
             World.ServiceVehicles.Enabled = serviceVehicles; // Eigene Assets 2
             if (World.Safety != null) World.Safety.Enabled = safetyEvents; // Sicherheit
+            if (World.Ecology != null) World.Ecology.Enabled = environmentModel; // Umwelt (Etappe 6)
             if (World.Planet != null)
                 Debug.Log($"[CityBuilder] Welt {worldSeed}: {World.Planet.Regions.Count} Regionen, {World.Planet.Countries.Count} Länder, " +
                           $"{World.Planet.GenerationMilliseconds:0} ms. Start: {World.StartRegion.Name} ({World.Planet.PlayerCountry.Name})");
@@ -171,6 +173,7 @@ namespace CityBuilder.Game
             World = world ?? throw new System.ArgumentNullException(nameof(world));
             if (serviceVehicles && world.ServiceVehicles != null) world.ServiceVehicles.Enabled = true; // Eigene Assets 2: auch alte Stände/neues Spiel
             if (safetyEvents && world.Safety != null) world.Safety.Enabled = true; // Sicherheit: auch alte Stände/neues Spiel
+            if (environmentModel && world.Ecology != null) world.Ecology.Enabled = true; // Umwelt (Etappe 6): auch alte Stände/neues Spiel
             accumulator = 0.0;
             WorldGeneration++;
             WorldReplaced?.Invoke();
