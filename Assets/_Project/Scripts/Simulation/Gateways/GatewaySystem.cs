@@ -44,9 +44,19 @@ namespace CityBuilder.Simulation.Gateways
 
         // --- Bahnkorridor
         public bool HasRailCorridor { get; private set; }
+        /// <summary>Enden der Fernbahntrasse am Kartenrand (A = Beginn Gleis 1).</summary>
         public Vector2 RailStart { get; private set; }
         public Vector2 RailEnd { get; private set; }
         public float RailHalfWidth => GatewayRules.RailCorridorHalfWidth;
+        /// <summary>Mittellinie der Fernbahntrasse als Linienzug von A nach B (geschwungen; alte Spielstände: gerade A–B).</summary>
+        public IReadOnlyList<Vector2> RailPath => railPath;
+        readonly List<Vector2> railPath = new List<Vector2>();
+        /// <summary>Stücke der Mittellinie (nur in der Sitzung der Erzeugung, für den Bau der Hauptstrecke).</summary>
+        internal List<RoutePiece> RailPieces { get; private set; }
+        /// <summary>Bericht der Bahn-Trassensuche (nur in der Sitzung der Erzeugung).</summary>
+        public string RailReport { get; private set; }
+        /// <summary>Mittellinie der Autobahn (nur in der Sitzung der Erzeugung).</summary>
+        public IReadOnlyList<Vector2> HighwayCenterline { get; private set; }
 
         /// <summary>Bericht der Erzeugung (nur in der laufenden Sitzung, nicht gespeichert).</summary>
         public GatewayLayoutReport LastReport { get; private set; }
@@ -77,19 +87,28 @@ namespace CityBuilder.Simulation.Gateways
             var targets = GatewayGenerator.Targets(world.Planet);
             int number = 1 + (int)(GatewayRules.Hash(world.StartRegion?.Id ?? 0, world.Settings.TerrainSeed) % 98u);
             HighwayNumber = number; // für die Namen; bleibt 0, wenn die Autobahn nicht gebaut werden kann
-            var report = GatewayGenerator.BuildHighway(world, this, targets);
+            // Trassensuche: ein Raster für Autobahn und Bahn (Gelände/Ufer vor dem Bau)
+            var watch = System.Diagnostics.Stopwatch.StartNew(); // nur für den Bericht (Rechenzeit), wirkt nicht auf die Simulation
+            var field = RouteField.Build(world.Roads.Ground, world.Settings.SizeMeters * 0.5f);
+            var report = GatewayGenerator.BuildHighway(world, this, targets, field);
             if (!report.HighwayBuilt) HighwayNumber = 0;
+            HighwayCenterline = report.HighwayBuilt ? report.Centerline : null;
 
-            // Bahnkorridor quer zur Autobahn (ohne Autobahn quer durch die Mitte)
-            float hwAngle = report.HighwayBuilt ? report.HighwayAngle : 0f;
+            // Fernbahn: kreuzt die Autobahn einmal fast rechtwinklig (ohne Autobahn quer durch die Mitte)
             var center = report.HighwayBuilt ? report.Interchange : Vector2.Zero;
-            if (GatewayGenerator.PlanRail(world, targets, hwAngle, center, out var ra, out var rb, out _))
+            var rail = GatewayGenerator.PlanRail(world, field, targets, HighwayCenterline, center);
+            report.Expansions += rail.Expansions;
+            report.Milliseconds = watch.ElapsedMilliseconds;
+            RailReport = rail.Report;
+            if (rail.Pieces != null)
             {
                 HasRailCorridor = true;
-                RailStart = ra;
-                RailEnd = rb;
-                AddEnd(GatewayKind.Rail, GatewayStatus.Planned, ra, Vector2.Normalize(ra - rb), targets, "Bahn", 0f, 0, 0);
-                AddEnd(GatewayKind.Rail, GatewayStatus.Planned, rb, Vector2.Normalize(rb - ra), targets, "Bahn", 0f, 0, 0);
+                RailStart = rail.A;
+                RailEnd = rail.B;
+                RailPieces = rail.Pieces;
+                SetRailPath(RoutePlanner.Sample(rail.Pieces, 24f));
+                AddEnd(GatewayKind.Rail, GatewayStatus.Planned, rail.A, Vector2.Normalize(rail.A - rail.Through), targets, "Bahn", 0f, 0, 0);
+                AddEnd(GatewayKind.Rail, GatewayStatus.Planned, rail.B, Vector2.Normalize(rail.B - rail.Through), targets, "Bahn", 0f, 0, 0);
                 LinkPartners(gateways.Count - 2, gateways.Count - 1);
             }
 
@@ -136,14 +155,16 @@ namespace CityBuilder.Simulation.Gateways
             feederEnds.Clear();
             feederEnds.Add(stubA);
             feederEnds.Add(stubB);
-            var u = GatewayGenerator.Dir(angle);
+            // Richtung je Seite: von der Anschlussstelle zum Ende am Rand (die Trasse schwingt, die Achse allein sagt das nicht mehr)
+            var u = Vector2.Normalize((entryA + exitA) * 0.5f - interchange);
+            var v = Vector2.Normalize((entryB + exitB) * 0.5f - interchange);
             float capacity = 2 * GatewayRules.LaneCapacityPerHour;
             var roads = world.Roads;
             int entryAId = roads.FindNearestNode(entryA, 1f)?.Id ?? 0, exitAId = roads.FindNearestNode(exitA, 1f)?.Id ?? 0;
             int entryBId = roads.FindNearestNode(entryB, 1f)?.Id ?? 0, exitBId = roads.FindNearestNode(exitB, 1f)?.Id ?? 0;
             string route = $"A {HighwayNumber}";
             AddEnd(GatewayKind.Highway, GatewayStatus.Operational, (entryA + exitA) * 0.5f, u, targets, route, capacity, entryAId, exitAId);
-            AddEnd(GatewayKind.Highway, GatewayStatus.Operational, (entryB + exitB) * 0.5f, -u, targets, route, capacity, entryBId, exitBId);
+            AddEnd(GatewayKind.Highway, GatewayStatus.Operational, (entryB + exitB) * 0.5f, v, targets, route, capacity, entryBId, exitBId);
             LinkPartners(gateways.Count - 2, gateways.Count - 1);
         }
 
@@ -355,12 +376,54 @@ namespace CityBuilder.Simulation.Gateways
         /// <summary>Liegt der Punkt im freigehaltenen Bahnkorridor (+ halbe Zone)?</summary>
         public bool InRailCorridor(Vector2 p, float margin = 0f)
         {
-            if (!HasRailCorridor) return false;
-            var ab = RailEnd - RailStart;
-            float len2 = ab.LengthSquared();
-            if (len2 < 1e-6f) return false;
-            float t = Math.Clamp(Vector2.Dot(p - RailStart, ab) / len2, 0f, 1f);
-            return Vector2.Distance(p, RailStart + ab * t) <= RailHalfWidth + margin;
+            if (!HasRailCorridor || railPath.Count < 2) return false;
+            float r = RailHalfWidth + margin;
+            if (p.X < railMin.X - r || p.Y < railMin.Y - r || p.X > railMax.X + r || p.Y > railMax.Y + r) return false;
+            float r2 = r * r;
+            for (int i = 0; i < railPath.Count - 1; i++)
+            {
+                var a = railPath[i]; var b = railPath[i + 1];
+                // schnelle Ablehnung über das Rechteck des Teilstücks
+                if (p.X < MathF.Min(a.X, b.X) - r || p.X > MathF.Max(a.X, b.X) + r || p.Y < MathF.Min(a.Y, b.Y) - r || p.Y > MathF.Max(a.Y, b.Y) + r) continue;
+                var ab = b - a;
+                float len2 = ab.LengthSquared();
+                float t = len2 < 1e-6f ? 0f : Math.Clamp(Vector2.Dot(p - a, ab) / len2, 0f, 1f);
+                if (Vector2.DistanceSquared(p, a + ab * t) <= r2) return true;
+            }
+            return false;
+        }
+
+        Vector2 railMin, railMax;
+
+        /// <summary>Mittellinie der Trasse setzen (Erzeugung, Laden).</summary>
+        void SetRailPath(IEnumerable<Vector2> points)
+        {
+            railPath.Clear();
+            railPath.AddRange(points);
+            railMin = new Vector2(float.MaxValue);
+            railMax = new Vector2(float.MinValue);
+            foreach (var q in railPath) { railMin = Vector2.Min(railMin, q); railMax = Vector2.Max(railMax, q); }
+        }
+
+        /// <summary>Punkt der Trassen-Mittellinie bei Anteil <paramref name="f"/> der Länge (0 = A, 1 = B) und Richtung dort.</summary>
+        public Vector2 RailPointAt(float f, out Vector2 direction)
+        {
+            direction = Vector2.UnitX;
+            if (railPath.Count < 2) return RailStart;
+            float total = 0f;
+            for (int i = 0; i < railPath.Count - 1; i++) total += Vector2.Distance(railPath[i], railPath[i + 1]);
+            float s = Math.Clamp(f, 0f, 1f) * total, acc = 0f;
+            for (int i = 0; i < railPath.Count - 1; i++)
+            {
+                float l = Vector2.Distance(railPath[i], railPath[i + 1]);
+                if (acc + l >= s || i == railPath.Count - 2)
+                {
+                    direction = l > 1e-6f ? (railPath[i + 1] - railPath[i]) / l : Vector2.UnitX;
+                    return railPath[i] + direction * Math.Clamp(s - acc, 0f, l);
+                }
+                acc += l;
+            }
+            return RailEnd;
         }
 
         // ------------------------------------------------------------ Verdrahtung

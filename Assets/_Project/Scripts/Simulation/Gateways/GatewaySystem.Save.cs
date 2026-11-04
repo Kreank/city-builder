@@ -11,7 +11,8 @@ namespace CityBuilder.Simulation.Gateways
     public sealed partial class GatewaySystem : ISaveable
     {
         public string SaveId => "gateways";
-        public int SaveVersion => 1;
+        /// <summary>v2: Mittellinie der (geschwungenen) Bahntrasse; v1 → gerade Linie zwischen den Enden.</summary>
+        public int SaveVersion => 2;
 
         public void Write(SaveWriter w)
         {
@@ -54,6 +55,7 @@ namespace CityBuilder.Simulation.Gateways
             });
             WriteSeen(w, seenIn);
             WriteSeen(w, seenOut);
+            w.List(railPath, w.Vector2); // v2
         }
 
         static void WriteStats(SaveWriter w, GatewayDayStats s)
@@ -140,6 +142,11 @@ namespace CityBuilder.Simulation.Gateways
             }, 16));
             ReadSeen(r, seenIn);
             ReadSeen(r, seenOut);
+            if (version >= 2) SetRailPath(r.List(r.Vector2, 8));
+            else if (HasRailCorridor) SetRailPath(new[] { RailStart, RailEnd }); // alte Stände: gerader Korridor
+            else SetRailPath(System.Array.Empty<System.Numerics.Vector2>());
+            RailPieces = null;
+            HighwayCenterline = null;
             partnerDay = int.MinValue;
         }
     }

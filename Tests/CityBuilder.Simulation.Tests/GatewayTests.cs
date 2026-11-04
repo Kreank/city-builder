@@ -323,12 +323,12 @@ namespace CityBuilder.Simulation.Tests
             Assert.Single(gw.All, g => g.Kind == GatewayKind.Air && !g.HasLocation);
 
             // Straße quer über den Korridor, Wohngebiet beidseits → kein Gebäude im Korridor
-            var a = gw.RailStart; var b = gw.RailEnd;
-            var dir = Vector2.Normalize(b - a);
+            // weg von der Autobahn (Bahn: dort liegt jetzt die Rampe der Eisenbahnbrücke über die Autobahn); Trasse kann schwingen
+            var p1 = gw.RailPointAt(0.2f, out var d1); var p2 = gw.RailPointAt(0.8f, out var d2);
+            bool first = Vector2.Distance(p1, gw.Interchange) > Vector2.Distance(p2, gw.Interchange);
+            var mid = first ? p1 : p2;
+            var dir = first ? d1 : d2;
             var normal = new Vector2(-dir.Y, dir.X);
-            // weg von der Autobahn (Bahn: dort liegt jetzt die Rampe der Eisenbahnbrücke über die Autobahn)
-            var p1 = a + (b - a) * 0.2f; var p2 = a + (b - a) * 0.8f;
-            var mid = Vector2.Distance(p1, gw.Interchange) > Vector2.Distance(p2, gw.Interchange) ? p1 : p2;
             Road(w, mid - normal * 220f, mid + normal * 220f);
             w.City.Population.Residents = 3000;
             w.City.Population.WorkingAge = 1800;
@@ -340,9 +340,13 @@ namespace CityBuilder.Simulation.Tests
             foreach (var bld in w.City.Buildings)
             {
                 // nächster Punkt der Korridor-Mittellinie liegt nicht im Grundstück, Abstand ≥ halbe Breite
-                float t = Math.Clamp(Vector2.Dot(bld.Position - a, b - a) / (b - a).LengthSquared(), 0f, 1f);
-                var q = a + (b - a) * t;
-                Assert.False(bld.Contains(q), $"{bld} steht im Bahnkorridor");
+                var path = gw.RailPath;
+                for (int i = 0; i < path.Count - 1; i++)
+                {
+                    var a = path[i]; var b = path[i + 1];
+                    float t = Math.Clamp(Vector2.Dot(bld.Position - a, b - a) / (b - a).LengthSquared(), 0f, 1f);
+                    Assert.False(bld.Contains(a + (b - a) * t), $"{bld} steht im Bahnkorridor");
+                }
                 Assert.False(gw.InRailCorridor(bld.Position));
             }
             // beidseits gebaut (Korridor teilt das Gebiet, sperrt es nicht ganz)

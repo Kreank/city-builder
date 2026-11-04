@@ -344,31 +344,37 @@ namespace CityBuilder.Simulation.Tests
         {
             tried = 0;
             AirportPlan best = null;
-            for (int ang = 0; ang < 180; ang += 15)
-                for (int x = -900; x <= 900; x += 100)
-                    for (int y = -900; y <= 900; y += 100)
-                    {
-                        float r = ang * MathF.PI / 180f;
-                        for (int side = -1; side <= 1; side += 2)
+            float half = w.Settings.SizeMeters * 0.5f;
+            int span = (int)(half - 124f) / 100 * 100, step = half > 1500f ? 300 : 100; // große Karte: gröberes Suchraster
+            using (w.Tiles.Unrestricted()) // große Karte: Suche über alle Kacheln (gekauft werden müssten sie im Spiel)
+                for (int ang = 0; ang < 180; ang += 15)
+                    for (int x = -span; x <= span; x += step)
+                        for (int y = -span; y <= span; y += step)
                         {
-                            tried++;
-                            var p = w.Aviation.PlanAirport(type, new Vector2(x, y), new Vector2(MathF.Cos(r), MathF.Sin(r)), side);
-                            if (p.IsValid && (best == null || p.TotalCost < best.TotalCost)) best = p;
-                            Errors[p.Error] = Errors.TryGetValue(p.Error, out int c) ? c + 1 : 1;
+                            float r = ang * MathF.PI / 180f;
+                            for (int side = -1; side <= 1; side += 2)
+                            {
+                                tried++;
+                                var p = w.Aviation.PlanAirport(type, new Vector2(x, y), new Vector2(MathF.Cos(r), MathF.Sin(r)), side);
+                                if (p.IsValid && (best == null || p.TotalCost < best.TotalCost)) best = p;
+                                Errors[p.Error] = Errors.TryGetValue(p.Error, out int c) ? c + 1 : 1;
+                            }
                         }
-                    }
             return best;
         }
 
         [Theory]
-        [InlineData(2024, true)]   // Info: Flugplatz passt (Erdarbeiten nötig), Verkehrsflughafen nicht (Autobahn/Bahn/Fluss queren die 2-km-Karte)
-        [InlineData(74, false)]    // Info: Fluss/Küste + Autobahn + Bahn lassen keinen Platz im Suchraster
-        public void GameWorld_Sites_Destinations(int seed, bool expectAirfield)
+        // Info 2 km: Autobahn/Bahn/Fluss queren die Karte; seit der geschwungenen Trassierung (Bahn kreuzt die Autobahn bei Seed 2024
+        // näher an der Mitte) findet das Suchraster auch für den Flugplatz keinen Platz mehr – vorher einen mit 340 000 € Erdarbeiten
+        [InlineData(2024, 2048f, false, false)]
+        [InlineData(74, 2048f, false, false)]    // Info: Fluss/Küste + Autobahn + Bahn lassen keinen Platz im Suchraster
+        [InlineData(2024, 6144f, true, true)]    // Spielkarte 6 km: Flugplatz und Verkehrsflughafen (2 800 m) finden Platz
+        public void GameWorld_Sites_Destinations(int seed, float size, bool expectAirfield, bool expectAirport)
         {
             var settings = new WorldSettings
             {
                 GenerateWorld = true, WorldSeed = seed, GenerateTerrain = true, PrebuiltConnections = true,
-                RequireGatewayForMoveIn = true, RequireGatewayForTrade = true,
+                RequireGatewayForMoveIn = true, RequireGatewayForTrade = true, SizeMeters = size,
             };
             var w = SimulationWorld.CreateDefault(settings);
             w.Step();
@@ -380,6 +386,7 @@ namespace CityBuilder.Simulation.Tests
             output.WriteLine(field != null ? $"Flugplatz: {field.Center} {AviationRules.RunwayDesignator(field.Dir)}, Erdarbeiten {field.EarthworkCost:0} €, Schneisen {field.CorridorA}/{field.CorridorB}" : $"Flugplatz: kein Platz ({n1} geprüft)");
             output.WriteLine(port != null ? $"Flughafen: {port.Center} {AviationRules.RunwayDesignator(port.Dir)}, Erdarbeiten {port.EarthworkCost:0} €, Schneisen {port.CorridorA}/{port.CorridorB}" : $"Flughafen: kein Platz ({n2} geprüft)");
             if (expectAirfield) Assert.NotNull(field);
+            if (expectAirport) Assert.NotNull(port);
             Assert.True(w.Aviation.Destinations.Count >= 5);
             Assert.All(w.Aviation.Destinations, d => Assert.True(d.DistanceKm > 0f && d.Hours > 0.5f));
         }
