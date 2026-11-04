@@ -2372,3 +2372,21 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
      Handelsfenster F11 (im Editor noch nicht visuell abgenommen), Weltwirtschaft kalibriert (im Mittel ausgeglichen),
      Schlagzeilen zum Handel. Später: Regierungen/Bündnisse, Tourismus, Gegenangebote
 9. Multiplayer (Freunde einladen, eigene Städte im eigenen oder fremden Land, asynchron), Online-Handel, Mobile-Port
+
+### Vorrang: Spielerwünsche 2026-11-04 (nach Kacheln/Handel 2, vor ÖPNV/Regionalzügen)
+**Leitlinie des Spielers:** „Grundsätzlich muss das alles genauer und professioneller ausgearbeitet werden.“ Bauen fühlt sich noch
+„hakelig“ an – Präzision und Verlässlichkeit vor neuen Systemen.
+- **Gebäude genauer setzen:** Einrasten, Ausrichtung, Vorschau und Gültigkeit müssen sich sauber und vorhersagbar anfühlen (kein
+  Springen/Zittern der Vorschau, klare Rückmeldung warum ungültig, Abstand zur Straße exakt, Drehen ohne Sprünge).
+- **Standortgebundene Bauwerke wie in Cities: Skylines:** Wasserpumpe nur an **flachem Ufer** eines Gewässers (Ansaugung im Wasser,
+  Gebäude an Land, Uferneigung begrenzt) statt „in der Nähe von Wasser“; ebenso Abwasser-Auslass (und Kläranlage mit Auslauf) am Ufer,
+  Vorschau zeigt passende Uferstellen.
+- **Wasser-/Abwasserrohre verlegen verbessern:** präziser, angenehmer, nachvollziehbare Anschlüsse (Einrasten, Kette, Anzeige der
+  versorgten Gebäude, Fehler sichtbar).
+- **Strom überarbeiten:** Umspannwerke übergeben Strom an Hochspannungs- bzw. Ortsnetz-Masten nachvollziehbar (Anschlusspunkte am
+  Umspannwerk sichtbar); **Strommasten bauen ist „komisch“ und fehlerhaft** – Mastsetzung, Spannweiten, Einrasten an Straßen/Masten,
+  Verbinden mehrerer Leitungen an einem Mast, Vorschau.
+- **Neue Wasserwege schaffen (Terraforming):** Kanäle/Becken graben, um später eigene natürliche Häfen und Wasserwege zu bauen –
+  **nur angeschlossen an vorhandenes Wasser der Karte**. Man darf kein Wasser erzeugen, wo die Karte keins hat. Achtung: heute ergibt
+  Absenken unter 0 m überall Wasser (s. „Gelände“ → Terraforming) – das muss auf „mit bestehendem Gewässer verbunden“ beschränkt werden
+  (sonst trockene Senke). Danach: gegrabene Kanäle als Fahrrinne/Hafenstandort (s. „Wasserstraße & Hafen“ → Schleusen und Kanäle).
