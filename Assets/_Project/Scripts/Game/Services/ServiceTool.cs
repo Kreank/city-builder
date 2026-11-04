@@ -202,7 +202,7 @@ namespace CityBuilder.Game.Services
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°"; // UX
             string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
-            SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 10f));
+            SetLabel(plan.IsValid ? info : plan.ObstacleNote ?? ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 10f)); // Flughafen: Hinweis zur Einflugschneise
             if (clicked && plan.IsValid)
             {
                 s.Build(plan);
@@ -379,6 +379,7 @@ namespace CityBuilder.Game.Services
                 case ServiceBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {ServiceSystem.RoadReach:0} m";
                 case ServiceBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 case ServiceBuildError.AlreadyBuilt: return "Gibt es nur einmal je Stadt – steht schon";
+                case ServiceBuildError.ObstacleClearance: return "Zu hoch für die Einflugschneise des Flughafens – niedriger oder woanders bauen"; // Flughafen
                 default: return null;
             }
         }

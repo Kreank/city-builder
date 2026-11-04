@@ -80,6 +80,15 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Umweltschutz – Bäume pflanzen (Aufforstung).</summary>
         Environment,
         // --- Ende Umwelt
+
+        // --- Flughafen (Stufe 4, hinten angefügt; Einnahme/Ausgabe s. Budget.IsIncome)
+        /// <summary>Ausgabe: Bau und Ausbau von Flughäfen (inkl. Einebnen des Geländes).</summary>
+        AirportConstruction,
+        /// <summary>Einnahme: Landeentgelte, Passagierentgelte, Umschlag Luftfracht.</summary>
+        AirportFees,
+        /// <summary>Einnahme: Tourismus (Kurtaxe, Eintritt in Freizeitanlagen/Sehenswürdigkeiten).</summary>
+        TourismIncome,
+        // --- Ende Flughafen
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -93,14 +102,15 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.Environment + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, dann Umwelt)
+        public const int Count = (int)BudgetCategory.TourismIncome + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, dann Flughafen)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
             c < BudgetCategory.RoadConstruction
             || c == BudgetCategory.Tariffs || c == BudgetCategory.TradeSales || c == BudgetCategory.PenaltiesReceived // Etappe 8
             || c == BudgetCategory.RailFares  // Bahn
-            || c == BudgetCategory.HarborFees; // Wasserstraße & Hafen
+            || c == BudgetCategory.HarborFees  // Wasserstraße & Hafen
+            || c == BudgetCategory.AirportFees || c == BudgetCategory.TourismIncome; // Flughafen
 
         public static BudgetCategory TaxCategory(TaxKind kind)
         {
@@ -148,6 +158,9 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.HarborConstruction: return "Bau Hafen & Klappbrücken"; // Wasserstraße & Hafen
                 case BudgetCategory.HarborFees: return "Hafen: Hafengeld & Umschlag";      // Wasserstraße & Hafen
                 case BudgetCategory.Environment: return "Umweltschutz (Bäume)";      // Umwelt
+                case BudgetCategory.AirportConstruction: return "Bau Flughafen";                   // Flughafen
+                case BudgetCategory.AirportFees: return "Flughafen: Lande- & Passagierentgelte"; // Flughafen
+                case BudgetCategory.TourismIncome: return "Tourismus: Kurtaxe & Eintritt";       // Flughafen (Tourismus)
                 default: return c.ToString();
             }
         }

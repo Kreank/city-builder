@@ -311,7 +311,7 @@ namespace CityBuilder.Game.Utilities
             if (t.IsSubstation) info += " · Hochspannung an einen Rand, Ortsnetz an einen anderen";
             else if (t.Kind == UtilityKind.Power) info += t.FeedsLocalGrid ? " · speist ins Ortsnetz oder in die Hochspannung" : " · Hochspannung zum Umspannwerk verlegen";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
-            SetLabel(plan.IsValid ? info : ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 8f));
+            SetLabel(plan.IsValid ? info : plan.ObstacleNote ?? ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 8f)); // Flughafen: Hinweis zur Einflugschneise
             if (clicked && plan.IsValid) Utilities.BuildFacility(plan);
         }
 
@@ -557,6 +557,7 @@ namespace CityBuilder.Game.Utilities
                 case UtilityBuildError.PoleOnFacility: return "Kein Maststandort: Bauwerk im Weg";
                 case UtilityBuildError.PoleOnBuilding: return "Kein Maststandort: Gebäude im Weg (wird nicht abgerissen) – Erdkabel oder andere Trasse";
                 case UtilityBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                case UtilityBuildError.ObstacleClearance: return "Zu hoch für die Einflugschneise des Flughafens – niedriger oder woanders bauen"; // Flughafen
                 case UtilityBuildError.NoRoadAccess: return $"Keine Zufahrt an der Vorderseite (Pfeil) – zur Stadtstraße drehen, höchstens {UtilitySystem.RoadReach:0} m";
                 // --- Energie erweitert
                 case UtilityBuildError.NeedsRiver: return "Nur im Fluss (Mitte im fließenden Wasser, nicht im Meer) – das Wehr richtet sich quer zum Fluss aus";

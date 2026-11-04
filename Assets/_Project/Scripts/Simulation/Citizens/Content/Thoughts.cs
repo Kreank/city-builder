@@ -265,6 +265,16 @@ namespace CityBuilder.Simulation.Citizens.Content
                 "Ich habe ein neues Schloss gekauft. Die Polizei war erst spät da.",
             },
             // --- Ende Sicherheit
+            // --- Flughafen
+            /* AircraftNoise */ new[]
+            {
+                "Schon wieder ein Jet direkt über dem Dach – an der {Straße} versteht man sein eigenes Wort nicht.",
+                "Um sechs Uhr früh die erste Maschine. Ausschlafen kann man hier vergessen.",
+                "Die Fenster klirren, wenn sie starten. Ich schreibe eine Beschwerde an den Flughafen.",
+                "Seit der Flughafen da ist, gehen wir nicht mehr gern in den Garten.",
+                "{Partner} sagt, man gewöhnt sich an den Fluglärm. Ich nicht.",
+            },
+            // --- Ende Flughafen
         };
 
         public static int Count(MemoryKind k) => ByKind[(int)k].Length;

@@ -199,7 +199,7 @@ namespace CityBuilder.Simulation.Citizens
                     Remember(c, MemoryKind.NuclearFear, 0.6f * ctx.Nuclear * p.Anxious, street: street);
                 // --- Ende
                 if (calm < 0.5f && rng.Chance((0.5f - calm) * p.NoiseSensitive * 0.6f))
-                    Remember(c, ctx.Air > ctx.Noise ? MemoryKind.Smog : MemoryKind.Noise, 0.3f + (0.5f - calm), street: street);
+                    Remember(c, ctx.Air > ctx.Noise ? MemoryKind.Smog : NoiseKindAt(home, ctx.Noise), 0.3f + (0.5f - calm), street: street);
                 if (safety < 0.35f && rng.Chance(p.Anxious * 0.15f)) Remember(c, MemoryKind.FeelsUnsafe, 0.35f, street: street);
             }
             Approach(n, NeedKind.Work, WorkTarget(c, c.WorkplaceId != 0 ? city.GetBuilding(c.WorkplaceId) : null), 0.3f);
@@ -342,6 +342,18 @@ namespace CityBuilder.Simulation.Citizens
         // ------------------------------------------------------------ Erinnerungen
 
         /// <summary>Erinnerung anlegen/auffrischen. Textvorlage per stabilem Hash (verbraucht keinen Zufall).</summary>
+        // --- Flughafen (Hook): Fluglärm am Ort (0..1), gesetzt vom AviationSystem; null = kein Flughafen
+        public Func<System.Numerics.Vector2, float> AircraftNoiseAt { get; set; }
+
+        /// <summary>Lärm-Erinnerung: „Fluglärm“, wenn der Lärm am Wohnort überwiegend von Flugzeugen kommt, sonst „Lärm“.</summary>
+        MemoryKind NoiseKindAt(Building home, float noise)
+        {
+            if (AircraftNoiseAt == null || home == null) return MemoryKind.Noise;
+            float air = AircraftNoiseAt(home.Position);
+            return air > 0.05f && air >= noise * 0.6f ? MemoryKind.AircraftNoise : MemoryKind.Noise;
+        }
+        // --- Ende Flughafen
+
         internal void Remember(Citizen c, MemoryKind kind, float strength, int street = 0, int building = 0, Citizen other = null, int facility = 0)
         {
             if (c == null || strength <= 0f) return;

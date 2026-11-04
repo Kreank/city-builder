@@ -39,6 +39,8 @@ namespace CityBuilder.Simulation.Utilities
         /// <summary>Wasserkraft: Ufer zu niedrig für einen Aufstau (Fallhöhe unter dem Minimum) oder Fluss zu schmal/zu breit.</summary>
         NoHydroSite,
         // --- Ende Energie erweitert
+        /// <summary>Flughafen: zu hoch für eine Einflugschneise/Übergangsfläche (<see cref="FacilityPlan.ObstacleNote"/>).</summary>
+        ObstacleClearance,
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -61,6 +63,8 @@ namespace CityBuilder.Simulation.Utilities
         /// <summary>Wasserkraft: Querschnitt des Flusses am Standort (Breite m, mittlere Tiefe m), Abfluss m³/s, Fallhöhe m.</summary>
         public HydroSite Hydro;
         // --- Ende Energie erweitert
+        /// <summary>Flughafen: Hinweis zur Hindernisfreiheit (bei <see cref="UtilityBuildError.ObstacleClearance"/>).</summary>
+        public string ObstacleNote;
         public bool IsValid => Error == UtilityBuildError.None;
         /// <summary>Mitte der Vorderkante (Vorschau-Pfeil).</summary>
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
@@ -377,6 +381,10 @@ namespace CityBuilder.Simulation.Utilities
                     return UtilityBuildError.OverlapsFacility;
             if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
                 return UtilityBuildError.OverlapsFacility; // G4-Hook: Dienstgebäude
+            // --- Flughafen (Hook): zu hoch für eine Einflugschneise (Windräder, Schornsteine, Wassertürme …)
+            plan.ObstacleNote = ObstacleCheck?.Invoke(type.Id, plan.Position, MathF.Max(type.Width, type.Depth) * 0.5f);
+            if (plan.ObstacleNote != null) return UtilityBuildError.ObstacleClearance;
+            // --- Ende Flughafen
             // Zufahrt an der Vorderseite (Kraftwerke, Wasserturm): Steht das Bauwerk an einer Stadtstraße (Rand ≤ RoadReach,
             // = Netzanschluss über die Straße), muss die Vorderseite zu ihr zeigen. Ohne Straße in der Nähe (Überland, Anschluss
             // per Leitung/Rohr) gilt keine Zufahrtspflicht – Brennstoff/Personal sind noch nicht simuliert.
@@ -394,6 +402,8 @@ namespace CityBuilder.Simulation.Utilities
         // --- G4 Dienste (Hooks, gesetzt vom ServiceSystem): andere Bauwerke, auf die weder Versorger noch Masten dürfen.
         /// <summary>Überlappt das Rechteck (Mitte, Tiefenrichtung, Breite, Tiefe) ein fremdes Bauwerk?</summary>
         public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
+        // --- Flughafen (Hook): (Typ-Id, Mitte, halbe Größe) → Hinweis, wenn das Bauwerk eine Einflugschneise durchstößt, sonst null
+        public Func<string, Vector2, float, string> ObstacleCheck { get; set; }
         /// <summary>Liegt ein fremdes Bauwerk am Punkt (mit Rand)?</summary>
         public Func<Vector2, float, bool> OtherStructureAt { get; set; }
         // --- Ende G4

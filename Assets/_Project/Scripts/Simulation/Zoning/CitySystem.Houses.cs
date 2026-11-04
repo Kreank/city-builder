@@ -160,6 +160,10 @@ namespace CityBuilder.Simulation.Zoning
                 if (blocker == null || string.CompareOrdinal(sb.Kind, blocker.Kind) < 0 || (sb.Kind == blocker.Kind && sb.Id < blocker.Id)) blocker = sb;
             }
             if (blocker != null) { plan.BlockerName = blocker.Name; return HouseBuildError.OverlapsStructure; }
+            // --- Flughafen (Hook): Hindernisfreiheit – zu hoch für die Einflugschneise (Text als „… im Weg“)
+            string placement = PlacementCheck?.Invoke(plan);
+            if (placement != null) { plan.BlockerName = placement; return HouseBuildError.OverlapsStructure; }
+            // --- Ende Flughafen
             // Strommasten u. a. über die Grundstücks-Sperre (prüft mit halber Zellbreite Rand → Punkte 4 m innerhalb der Kanten)
             if (LotBlocker != null)
                 foreach (var p in InsetSamples(plan.Position, plan.Front, type.Width, type.Depth))
