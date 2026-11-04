@@ -178,6 +178,8 @@ namespace CityBuilder.Simulation.Services
         // --- ÖPNV (Hook): überlappt ein fremdes Bauwerk (Mitte, Front, Breite, Tiefe)? Gesetzt vom TransitSystem.
         public Func<Vector2, Vector2, float, float, bool> OtherStructureOverlaps { get; set; }
         // --- Ende ÖPNV
+        // --- Flughafen (Hook): (Typ-Id, Mitte, halbe Größe) → Hinweis, wenn das Bauwerk eine Einflugschneise durchstößt, sonst null
+        public Func<string, Vector2, float, string> ObstacleCheck { get; set; }
 
         public ServiceFacility GetFacility(int id) => facilities.TryGetValue(id, out var f) ? f : null;
 
@@ -446,6 +448,10 @@ namespace CityBuilder.Simulation.Services
             if (OtherStructureOverlaps != null && OtherStructureOverlaps(plan.Position, plan.Front, type.Width, type.Depth))
                 return ServiceBuildError.OverlapsFacility;
             // --- Ende ÖPNV
+            // --- Flughafen (Hook): zu hoch für eine Einflugschneise
+            plan.ObstacleNote = ObstacleCheck?.Invoke(type.Id, plan.Position, MathF.Max(type.Width, type.Depth) * 0.5f);
+            if (plan.ObstacleNote != null) return ServiceBuildError.ObstacleClearance;
+            // --- Ende Flughafen
             if (utilities != null)
             {
                 foreach (var f in utilities.Facilities)

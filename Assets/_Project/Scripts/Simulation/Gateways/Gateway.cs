@@ -122,6 +122,9 @@ namespace CityBuilder.Simulation.Gateways
         // --- Wasserstraße (Stufe 3): Grund, warum der Wasserweg nicht befahrbar ist (vom ShippingSystem gesetzt, abgeleitet)
         public string ShippingNote { get; internal set; }
         // --- Ende Wasserstraße
+        // --- Flughafen (Stufe 4): Grund, warum der Luftweg nicht befahrbar ist (vom AviationSystem gesetzt, abgeleitet)
+        public string AviationNote { get; internal set; }
+        // --- Ende Flughafen
 
         /// <summary>Alle Zuzügler-Haushalte über diesen Anschluss seit Spielbeginn (verteilt den Zuzug nach Wichtigkeit).</summary>
         public int TotalMoveIns { get; internal set; }
@@ -157,7 +160,7 @@ namespace CityBuilder.Simulation.Gateways
                 {
                     case GatewayKind.Rail: return RailBuilt ? "noch nicht befahrbar (Bahnhof an der Hauptstrecke fehlt)" : "noch nicht befahrbar (Züge folgen)"; // Bahn
                     case GatewayKind.Water: return !Navigable ? "nicht schiffbar (zu schmal/flach)" : ShippingNote ?? "noch nicht befahrbar (Schiffe/Hafen folgen)"; // Wasserstraße
-                    case GatewayKind.Air: return "noch nicht befahrbar (Flughafen folgt)";
+                    case GatewayKind.Air: return AviationNote ?? "noch nicht befahrbar (Flughafen folgt)"; // Flughafen
                     default: return "noch nicht befahrbar (folgt)";
                 }
             }

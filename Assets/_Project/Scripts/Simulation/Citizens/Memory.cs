@@ -56,6 +56,10 @@ namespace CityBuilder.Simulation.Citizens
         /// <summary>Einbruch/Diebstahl bei einem selbst.</summary>
         Burglary,
         // --- Ende Sicherheit
+        // --- Flughafen
+        /// <summary>Fluglärm am Wohnort (Anflugschneise, Starts, Nachtflüge).</summary>
+        AircraftNoise,
+        // --- Ende Flughafen
     }
 
     /// <summary>
@@ -132,6 +136,7 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.TrainLate: return -0.3f; // Bahn
                 case MemoryKind.Fire: return -0.85f;     // Sicherheit
                 case MemoryKind.Burglary: return -0.7f;  // Sicherheit
+                case MemoryKind.AircraftNoise: return -0.55f; // Flughafen
                 default: return 0.3f; // QuietEvening
             }
         }
@@ -157,6 +162,7 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.PowerOutage:
                 case MemoryKind.WaterOutage: return 0.85f;
                 case MemoryKind.Noise:
+                case MemoryKind.AircraftNoise: // Flughafen
                 case MemoryKind.Smog:
                 case MemoryKind.FeelsUnsafe:
                 case MemoryKind.NicePark: return 0.88f;
@@ -208,6 +214,7 @@ namespace CityBuilder.Simulation.Citizens
                 case MemoryKind.TrainLate: return "Zug verspätet/voll";  // Bahn
                 case MemoryKind.Fire: return "Brand";          // Sicherheit
                 case MemoryKind.Burglary: return "Einbruch";   // Sicherheit
+                case MemoryKind.AircraftNoise: return "Fluglärm"; // Flughafen
                 default: return "ruhiger Abend";
             }
         }
