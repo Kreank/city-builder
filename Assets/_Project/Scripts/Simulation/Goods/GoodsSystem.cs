@@ -131,6 +131,11 @@ namespace CityBuilder.Simulation.Goods
         /// Gesetzt in <c>SimulationWorld.CreateDefault</c> (<see cref="ProductionPolicy.SubsidyFor"/>).
         /// </summary>
         public Func<Firm, double> SubsidyFor { get; set; }
+        /// <summary>
+        /// Umwelt (Etappe 6, Hook): Mehrkosten einer Firma je Tag (Umweltauflagen nach Rezept, Umweltzone), täglich abgebucht,
+        /// mindern Gewinn und damit die Gewerbesteuer. Gesetzt von <c>EcologySystem.Connect</c>; null = 0.
+        /// </summary>
+        public Func<Firm, double> EnvironmentCostFor { get; set; }
 
         // --- Etappe 8 Handel (Hooks, gesetzt von Trade.TradeSystem.AttachCity)
         /// <summary>Weltmarktpreis je Gut aus den Ländern (Angebot/Nachfrage). null = deterministisches Rauschen (G5, ohne Welt).</summary>
@@ -477,6 +482,15 @@ namespace CityBuilder.Simulation.Goods
                     f.Cash += subsidy;
                     subsidies += subsidy;
                 }
+
+                // --- Umwelt (Etappe 6): Mehrkosten der Umweltauflagen/Umweltzone (null bzw. 0 = wie bisher)
+                double environmentCost = EnvironmentCostFor != null ? EnvironmentCostFor(f) : 0;
+                if (environmentCost > 0)
+                {
+                    f.Today.Environment += environmentCost;
+                    f.Cash -= environmentCost;
+                }
+                // --- Ende Umwelt
 
                 // Verderb
                 foreach (var g in GoodsCatalog.All)

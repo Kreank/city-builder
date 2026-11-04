@@ -68,6 +68,11 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Einnahme: Stationsentgelte (Halt Fern-/Güterzug), Fahrgeldanteil je Ein-/Aussteiger, Umschlag je Ladung.</summary>
         RailFares,
         // --- Ende Bahn
+
+        // --- Umwelt (Etappe 6, hinten angefügt)
+        /// <summary>Ausgabe: Umweltschutz – Bäume pflanzen (Aufforstung).</summary>
+        Environment,
+        // --- Ende Umwelt
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -81,7 +86,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.RailFares + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, dann Bahn)
+        public const int Count = (int)BudgetCategory.Environment + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, dann Umwelt)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -132,6 +137,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.IndustrySubsidies: return "Wirtschaftsförderung"; // Produktion lenken
                 case BudgetCategory.RailConstruction: return "Bau Bahn";              // Bahn
                 case BudgetCategory.RailFares: return "Bahn: Entgelte & Fahrgeld";   // Bahn
+                case BudgetCategory.Environment: return "Umweltschutz (Bäume)";      // Umwelt
                 default: return c.ToString();
             }
         }

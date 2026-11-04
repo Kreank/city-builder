@@ -97,6 +97,9 @@ namespace CityBuilder.Simulation.Utilities
         }
 
         /// <summary>Qualität des angesaugten Wassers einer Pumpe 0..1 (andere Bauwerke: 1).</summary>
+        /// <summary>Umwelt (Etappe 6, Hook): Qualität des Grundwassers an einem Brunnen 0..1 (null = 1). Gesetzt vom EcologySystem.</summary>
+        public Func<UtilityFacility, float> WellQuality { get; set; }
+
         public float PumpQuality(UtilityFacility f) => f != null && pumpQuality.TryGetValue(f.Id, out float q) ? q : 1f;
 
         /// <summary>
@@ -284,6 +287,19 @@ namespace CityBuilder.Simulation.Utilities
                     if (!pumpQuality.TryGetValue(f.Id, out float old) || MathF.Abs(old - q) > 1e-3f) changed = true;
                     pumpQuality[f.Id] = q;
                 }
+                // --- Umwelt (Etappe 6): Brunnen saugen Grundwasser an (Deponie/Industrie verschmutzen es); 1 = wie bisher
+                else if (WellQuality != null)
+                {
+                    float wq = Math.Clamp(WellQuality(f), 0f, 1f);
+                    if (wq < 1f || pumpQuality.ContainsKey(f.Id))
+                    {
+                        q = wq;
+                        seen.Add(f.Id);
+                        if (!pumpQuality.TryGetValue(f.Id, out float old) || MathF.Abs(old - q) > 1e-3f) changed = true;
+                        pumpQuality[f.Id] = q;
+                    }
+                }
+                // --- Ende Umwelt
                 if (f.NetworkId < 0 || f.Output <= 0f) continue;
                 sum.TryGetValue(f.NetworkId, out float s);
                 weight.TryGetValue(f.NetworkId, out float wsum);

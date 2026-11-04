@@ -13,7 +13,7 @@ namespace CityBuilder.Simulation.Goods
     public sealed partial class GoodsSystem : ISaveable
     {
         public string SaveId => "goods";
-        public int SaveVersion => 3; // v2: Zeitmodell – Lkw-Startzeit (Verkehrszeit) double; v3: Förderung (Produktion lenken)
+        public int SaveVersion => 4; // v2: Zeitmodell – Lkw-Startzeit (Verkehrszeit) double; v3: Förderung (Produktion lenken); v4: Umweltkosten (Etappe 6)
 
         public void Write(SaveWriter w)
         {
@@ -201,6 +201,7 @@ namespace CityBuilder.Simulation.Goods
             w.Double(l.Revenue); w.Double(l.InputCost); w.Double(l.Wages); w.Double(l.Transport); w.Double(l.Purchases);
             w.Float(l.Produced); w.Float(l.Sold); w.Float(l.Exported); w.Float(l.Imported);
             w.Double(l.Subsidy); // v3
+            w.Double(l.Environment); // v4 (Umwelt)
         }
 
         static void ReadLedger(SaveReader r, FirmLedger l, int version)
@@ -208,6 +209,7 @@ namespace CityBuilder.Simulation.Goods
             l.Revenue = r.Double(); l.InputCost = r.Double(); l.Wages = r.Double(); l.Transport = r.Double(); l.Purchases = r.Double();
             l.Produced = r.Float(); l.Sold = r.Float(); l.Exported = r.Float(); l.Imported = r.Float();
             l.Subsidy = version >= 3 ? r.Double() : 0; // v3: Förderung (Produktion lenken)
+            l.Environment = version >= 4 ? r.Double() : 0; // v4: Umweltauflagen/Umweltzone (Etappe 6)
         }
 
         static void WriteTrade(SaveWriter w, TradeBalance t)
