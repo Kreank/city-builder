@@ -85,6 +85,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
+## Entscheidung: Kartengröße (2026-11-04, Spieler – noch nicht umgesetzt)
+- Die 2-km-Stadtkarte ist zu klein (Verkehrsflughafen findet in echten Spielwelten keinen Platz, Metropolen eng).
+  Gewählt: **größere Karte aus 2-km-Kacheln** (z. B. 6 × 6 km), Start auf der mittleren Kachel, **Nachbarkacheln mit Geld
+  kaufen** (wie Cities: Skylines); volle Rechenlast nur, wo gebaut ist. Nächster großer Umbau (Gelände, Raster, Speichern).
+
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
   kein `UnityEngine`. Vektoren: `System.Numerics.Vector2` (x, y) ↔ Unity (x, 0, z) über `SimConvert`.

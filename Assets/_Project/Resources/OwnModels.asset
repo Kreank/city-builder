@@ -13,16 +13,729 @@ MonoBehaviour:
   m_Name: OwnModels
   m_EditorClassIdentifier: CityBuilder.Game::CityBuilder.Game.Assets.OwnModelCatalog
   Facilities:
+  - Id: sewage_plant
+    Model: {fileID: 919132149155446097, guid: c6b81511fe7c1d14f9adc170b77fc8d8, type: 3}
+    Folder: Services
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 16.599998, z: 32.2}
   - Id: power_coal
     Model: {fileID: 919132149155446097, guid: 6e0ed95daed7da44ba789315d3637116, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 48, y: 50, z: 36}
   - Id: power_gas
     Model: {fileID: 919132149155446097, guid: bcac130cb6d230f4790f7ed923c5f613, type: 3}
-  - Id: power_wind
-    Model: {fileID: 919132149155446097, guid: a30d7ed730d31084ab630c65e1d0d5da, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 36, y: 28.4, z: 28}
+  - Id: power_nuclear
+    Model: {fileID: 919132149155446097, guid: 00888e9f43690cd41be4cb6fba684b21, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 64, y: 63.3, z: 48}
   - Id: power_solar
     Model: {fileID: 919132149155446097, guid: 3ec3ca9cb1110524c916466019c9f6e8, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 4.12, z: 32}
+  - Id: power_substation
+    Model: {fileID: 919132149155446097, guid: 96898dbc134444c47a995c5e36dbd48b, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24, y: 9.05, z: 20}
   - Id: water_pump
     Model: {fileID: 919132149155446097, guid: a66d5056e42328849beb8c5505b81bb0, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16.2, y: 12.920317, z: 17.376305}
   - Id: water_tower
     Model: {fileID: 919132149155446097, guid: dbad713e8908e264dbbde93cbd9dc6b7, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 10.396324, y: 24.449999, z: 10.648162}
+  - Id: power_wind
+    Model: {fileID: 919132149155446097, guid: a30d7ed730d31084ab630c65e1d0d5da, type: 3}
+    Folder: Utilities
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 31.869738, y: 59.5, z: 9.949846}
+  Services:
+  - Id: clinic
+    Model: {fileID: 919132149155446097, guid: 4ec80eb8fb0d9a94ba08ba5008b84bf2, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 8.38, z: 16}
+  - Id: hospital
+    Model: {fileID: 919132149155446097, guid: 4ec80eb8fb0d9a94ba08ba5008b84bf2, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 8.38, z: 16}
+  - Id: fire_station
+    Model: {fileID: 919132149155446097, guid: 17e1a88a9d83eac4c9db24126bcb072f, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24.849998, y: 18.7, z: 24}
+  - Id: school_primary
+    Model: {fileID: 919132149155446097, guid: 3825902dc5e6b684580328834d6c1b89, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40.11, y: 12.027001, z: 32}
+  - Id: school_high
+    Model: {fileID: 919132149155446097, guid: 3825902dc5e6b684580328834d6c1b89, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40.11, y: 12.027001, z: 32}
+  - Id: landfill
+    Model: {fileID: 919132149155446097, guid: 7c5591ccbed342845aed34126651a821, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 54.3, z: 25.399544}
+  - Id: incinerator
+    Model: {fileID: 919132149155446097, guid: 7c5591ccbed342845aed34126651a821, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 54.3, z: 25.399544}
+  - Id: library
+    Model: {fileID: 919132149155446097, guid: 7349e782a44c6114b8b0381f0f69ecea, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16.24155, y: 10.5, z: 16}
+  - Id: media_newspaper
+    Model: {fileID: 919132149155446097, guid: 11b87c7493e67044db82907edeb689cb, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24, y: 15.65, z: 16}
+  - Id: media_radio
+    Model: {fileID: 919132149155446097, guid: 11b87c7493e67044db82907edeb689cb, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24, y: 15.65, z: 16}
+  - Id: media_tv
+    Model: {fileID: 919132149155446097, guid: 11b87c7493e67044db82907edeb689cb, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24, y: 15.65, z: 16}
+  - Id: park_small
+    Model: {fileID: 919132149155446097, guid: eae500134a8d65b40a98f38ebe312887, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24.54662, y: 7.592, z: 24.439827}
+  - Id: park_large
+    Model: {fileID: 919132149155446097, guid: eae500134a8d65b40a98f38ebe312887, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24.54662, y: 7.592, z: 24.439827}
+  - Id: police_station
+    Model: {fileID: 919132149155446097, guid: 71cd2a6d923be7542a62b1e1153eac20, type: 3}
+    Folder: Services
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24, y: 16.85, z: 16}
+  - Id: leisure_playground
+    Model: {fileID: 919132149155446097, guid: 1522057bc44b08d4da7674a9971d57cf, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16.819931, y: 5.57, z: 16.932491}
+  - Id: leisure_sports_field
+    Model: {fileID: 919132149155446097, guid: d5556c35b38f86f469098a5e9a8f83a8, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 48, y: 18.4, z: 32}
+  - Id: leisure_tennis
+    Model: {fileID: 919132149155446097, guid: 9e6e20aa2f581324daece99e0ba3aef0, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 3.2, z: 24}
+  - Id: leisure_pool
+    Model: {fileID: 919132149155446097, guid: a2377b5fd7610314fab655cd2913ca53, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 7.22, z: 32}
+  - Id: leisure_stadium
+    Model: {fileID: 919132149155446097, guid: f7a648367e1432e488c17500c8e857dc, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 80, y: 32.4, z: 64.270004}
+  - Id: leisure_ferris_wheel
+    Model: {fileID: 919132149155446097, guid: 23ca3c3f18a626644854dda043c7fbe4, type: 3}
+    Folder: Leisure
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 31.62, y: 32.919533, z: 24}
+  - Id: landmark_town_hall
+    Model: {fileID: 919132149155446097, guid: 19ea370dd8678de4c840ac37d6693706, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 36, y: 29, z: 28}
+  - Id: landmark_church
+    Model: {fileID: 919132149155446097, guid: 188dbc7dad7f90e41b542c574377726c, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24.00878, y: 38.95, z: 36}
+  - Id: landmark_museum
+    Model: {fileID: 919132149155446097, guid: eed621757959ce94f90ec1d533fb031f, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 34, y: 15.727142, z: 30}
+  - Id: landmark_castle
+    Model: {fileID: 919132149155446097, guid: 11f309620d4191f45abaa4f792d42da4, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 44, y: 26.179998, z: 44}
+  - Id: landmark_ruin
+    Model: {fileID: 919132149155446097, guid: ec33c03f01c9dd34b80c24de9efc0bfc, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 22, y: 8.070179, z: 18}
+  - Id: landmark_statue
+    Model: {fileID: 919132149155446097, guid: 9e3cb5c574fa23848a069bb7ac680937, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 8, y: 7.476696, z: 8}
+  - Id: landmark_fountain
+    Model: {fileID: 919132149155446097, guid: 06a3749833d53da429b4d0db1caf8a2a, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 12.954328, y: 5.7000003, z: 12.954328}
+  - Id: landmark_obelisk
+    Model: {fileID: 919132149155446097, guid: c2d7a294254f4194c88f30fea5f573af, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 10.04, y: 16.9, z: 10.02}
+  - Id: landmark_bandstand
+    Model: {fileID: 919132149155446097, guid: 83fb3b6a6c864c043ae1397709dc03e0, type: 3}
+    Folder: Landmarks
+    Role: service
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 13.137825, y: 8.2, z: 13.586203}
+  People: []
+  Transport:
+  - Id: bus_stop
+    Model: {fileID: 919132149155446097, guid: bb7fcd5ad598ff7478d4ce9edf98058c, type: 3}
+    Folder: Props
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 5.0638514, y: 2.9638515, z: 2.135888}
+  - Id: bus_depot
+    Model: {fileID: 919132149155446097, guid: c4535251bb2f1144088dbc1915da3312, type: 3}
+    Folder: Transport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 7.8, z: 24.09}
+  Extras:
+  - Id: AdPillar
+    Model: {fileID: 919132149155446097, guid: 37f6667b1928b2a468eca6511c9ad1aa, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 1.364899, y: 3.5, z: 1.4}
+  - Id: Bench
+    Model: {fileID: 919132149155446097, guid: 19413de7dc75a754c89eb4ca5f20a33d, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 1.8, y: 0.932357, z: 0.6380817}
+  - Id: BikeRack
+    Model: {fileID: 919132149155446097, guid: 4d66f3bb73075da448300adb09d13c49, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 3.26, y: 0.84, z: 0.5}
+  - Id: Bollard
+    Model: {fileID: 919132149155446097, guid: 9eda5533a14a3db429477f41a6e36c9c, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 0.1940147, y: 0.96, z: 0.1940147}
+  - Id: BridgePillar
+    Model: {fileID: 919132149155446097, guid: cbe4b1a0ffdb7834586791a92f6d06f0, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: bridge_pillar
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 12, y: 12.8, z: 4}
+  - Id: Bush_Dark
+    Model: {fileID: 919132149155446097, guid: 0c0a18c8a6c5baa4bb9db84b65512a40, type: 3}
+    Folder: Nature
+    Role: bush
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 2.5615287, y: 1.8000002, z: 2.850884}
+  - Id: Bush_Flower
+    Model: {fileID: 919132149155446097, guid: 8dc3af9074ae2784da863ecce4351df0, type: 3}
+    Folder: Nature
+    Role: bush
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.8410276, y: 1.2445999, z: 2.070616}
+  - Id: Bush_Round
+    Model: {fileID: 919132149155446097, guid: a4b07f3dedd31af43b521ee02b4ee6e6, type: 3}
+    Folder: Nature
+    Role: bush
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.9618876, y: 1.3499999, z: 1.815366}
+  - Id: Cow
+    Model: {fileID: 919132149155446097, guid: a1655060a14703740986c05db1f8d4da, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: animal
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 0.83000004, y: 1.8, z: 2.8038456}
+  - Id: Farm
+    Model: {fileID: 919132149155446097, guid: adce21881cbbe784db3d3aafda66f911, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: farmstead
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32.325504, y: 11.4, z: 24}
+  - Id: Field_Corn
+    Model: {fileID: 919132149155446097, guid: abbdf9f45a3e50a478b38b4ef0ffc469, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - corn
+    Size: {x: 32, y: 2.5, z: 32}
+  - Id: Field_Meadow
+    Model: {fileID: 919132149155446097, guid: 1b99f381d5b8f124796a965f14f1a434, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - meadow
+    Size: {x: 32, y: 6.4541698, z: 32}
+  - Id: Field_Plowed
+    Model: {fileID: 919132149155446097, guid: 937a32de89aceef4d85facd0447c1197, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - plowed
+    Size: {x: 32, y: 0.46, z: 32}
+  - Id: Field_Potato
+    Model: {fileID: 919132149155446097, guid: 5513064c1f110ed45b8eebfd54048db2, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - potato
+    Size: {x: 32, y: 0.75, z: 32}
+  - Id: Field_Rapeseed
+    Model: {fileID: 919132149155446097, guid: f22d983e15d19bc45b175fef0872fd02, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - rapeseed
+    Size: {x: 32, y: 1.44, z: 32}
+  - Id: Field_Vegetables
+    Model: {fileID: 919132149155446097, guid: 8a4396a0cca52c04d941bef3719dedd8, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - vegetables
+    Size: {x: 32, y: 0.80999994, z: 32}
+  - Id: Field_Wheat
+    Model: {fileID: 919132149155446097, guid: 726d240f7ed7f104f856986f92b41e8e, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - wheat
+    Size: {x: 32, y: 1.14, z: 32}
+  - Id: Field_Wheat_Harvested
+    Model: {fileID: 919132149155446097, guid: 1c9e9b0463629c543a190759bf8c5652, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: field
+    Placement: 
+    Biome: 
+    Tags:
+    - wheat
+    - harvested
+    Size: {x: 32, y: 1.5632924, z: 32}
+  - Id: Greenhouse
+    Model: {fileID: 919132149155446097, guid: fb1d6aaf575f6e4459d07350e0f9a8d5, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: greenhouse
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 6.0834484, z: 24.5}
+  - Id: HayBales
+    Model: {fileID: 919132149155446097, guid: e4e75655af7281c42b092f99a153f0b8, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: deco
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 2.5, y: 2.241268, z: 1.3000001}
+  - Id: Hydrant
+    Model: {fileID: 919132149155446097, guid: 5b4c4299b16d5af46b5f539f7eea26f9, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 0.65999997, y: 1.1600001, z: 0.53}
+  - Id: Kiosk
+    Model: {fileID: 919132149155446097, guid: fedc1bfcc24cdd64a940589ce6ff0a1f, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 3.4, y: 3.45, z: 3.57}
+  - Id: Mailbox
+    Model: {fileID: 919132149155446097, guid: 0514a21740243dc4da7abd53a0b4e918, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 0.48, y: 1.5521691, z: 0.35}
+  - Id: NoiseBarrier
+    Model: {fileID: 919132149155446097, guid: 88d86906bb80c2848b53e2f70d8d5b4c, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: noise_barrier
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1, y: 4.2, z: 17}
+  - Id: Orchard
+    Model: {fileID: 919132149155446097, guid: f01a4b1f296e34b4aab5d44bcd8ce652, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: orchard
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 3.96, z: 32}
+  - Id: Pasture
+    Model: {fileID: 919132149155446097, guid: e7c834a8c6dcc194193bc08aae774e92, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: pasture
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 7.779766, z: 32}
+  - Id: PicnicTable
+    Model: {fileID: 919132149155446097, guid: f61a389d3642c0f4a8fd3f9d5e01627b, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 1.9, y: 0.7882843, z: 1.7}
+  - Id: Planter
+    Model: {fileID: 919132149155446097, guid: d93a75d6dba88004b8de82f74808735f, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 1.6112192, y: 3.49, z: 1.531152}
+  - Id: PowerPylon
+    Model: {fileID: 919132149155446097, guid: b6ebd28b3cb33274a8295abbea85efe0, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: power_pylon
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 18.31177, y: 42.036896, z: 9.4}
+  - Id: Roadworks
+    Model: {fileID: 919132149155446097, guid: 5b35d69668b9f6344b6359ced5d24f73, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: roadworks
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 8.2, y: 2.9199998, z: 6}
+  - Id: Rock_Large
+    Model: {fileID: 919132149155446097, guid: 3875fe1b270e8bb4ba1c11ae69e897d2, type: 3}
+    Folder: Nature
+    Role: rock
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 4.9379625, y: 1.6837364, z: 3.0451357}
+  - Id: Rock_Small
+    Model: {fileID: 919132149155446097, guid: 13530089edece3744812dd4d46a2629b, type: 3}
+    Folder: Nature
+    Role: rock
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.8246332, y: 0.6395738, z: 1.1346085}
+  - Id: SignGantry
+    Model: {fileID: 919132149155446097, guid: fa509c0c8f86dcb4c931c1532f445c4d, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: sign_gantry
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 18.4, y: 8, z: 1.4}
+  - Id: StreetLamp
+    Model: {fileID: 919132149155446097, guid: 2b3bb72e8f184b240a39550487e254fc, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 0.4, y: 6.2392235, z: 2.2728207}
+  - Id: Tractor
+    Model: {fileID: 919132149155446097, guid: a85047b7e3d5f0541996d72331b44cba, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: vehicle
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 2.54, y: 2.8979752, z: 3.1244442}
+  - Id: TrashBin
+    Model: {fileID: 919132149155446097, guid: 10a29b3182a1c634eadb87ade34a3cc8, type: 3}
+    Folder: Props
+    Role: prop
+    Use: 
+    Placement: sidewalk
+    Biome: 
+    Tags: []
+    Size: {x: 0.5728053, y: 0.93, z: 0.61140263}
+  - Id: TunnelPortal
+    Model: {fileID: 919132149155446097, guid: fcad080217ec22f4f86147444a5f09be, type: 3}
+    Folder: Infrastructure
+    Role: infrastructure
+    Use: tunnel_portal
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 28.101173, y: 17.2, z: 21.461544}
+  - Id: Vineyard
+    Model: {fileID: 919132149155446097, guid: c4eecfb1ea4371148b317f60f1d2097b, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: vineyard
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 2, z: 32}
+  - Id: Windmill
+    Model: {fileID: 919132149155446097, guid: 8cb4c9ee1542a1f47a9154f1e698e1b5, type: 3}
+    Folder: Agriculture
+    Role: agriculture
+    Use: windmill
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 17.939665, y: 22.969833, z: 12}
   Palette: {fileID: 2100000, guid: 30eaef96c71f7e145ab463ee8df76c51, type: 2}
+  SourceStamp: 7650ad23f2a86b26
