@@ -92,7 +92,7 @@ namespace CityBuilder.Game.UI
         /// Die Instanz wird je Modell einmal erzeugt und wiederverwendet (keine Skripte, keine Schatten).
         /// </summary>
         public void ShowModel(GameObject model, SimVector2 pos, SimVector2 front, float width, float depth, float height,
-                              float fallbackTall, Material material, bool showFront = true)
+                              float fallbackTall, Material material, bool showFront = true, int units = 1)
         {
             if (model == null) { HideModel(); Show(pos, front, width, depth, height, fallbackTall, material, showFront); return; }
             if (front.LengthSquared() < 1e-6f) front = SimVector2.UnitY;
@@ -103,6 +103,7 @@ namespace CityBuilder.Game.UI
                 inst.name = model.name + " (Vorschau)";
                 foreach (var c in inst.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
                 foreach (var b in inst.GetComponentsInChildren<MonoBehaviour>(true)) Object.Destroy(b);
+                FitLikeViews(inst, width, depth, units);
                 float top = 0f;
                 foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
                 {
@@ -133,6 +134,60 @@ namespace CityBuilder.Game.UI
             // Quader aus, Vorderseiten-Markierung bleibt (Pfeil über dem echten Dach)
             Show(pos, front, width, depth, height, modelHeights[model], material, showFront);
             box.SetActive(false);
+        }
+
+        /// <summary>
+        /// Wie UtilityView/ServiceView: grobe Einheitenfehler (cm statt m) an die Grundfläche anpassen und Bauwerke mit mehreren
+        /// Anlagen (Offshore-Windpark) im Raster vervielfachen – sonst wäre die Vorschau riesig/winzig bzw. zeigte nur ein Windrad.
+        /// </summary>
+        static void FitLikeViews(GameObject inst, float width, float depth, int units)
+        {
+            var t = inst.transform;
+            t.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            var rootScale = t.localScale;
+            t.localScale = Vector3.one;
+            // Kinder unter einen Zwischenknoten (trägt die Prefab-Skalierung), damit Skalierung und Kopien das Wurzelobjekt
+            // (Lage/Drehung je Frame) nicht stören
+            var children = new System.Collections.Generic.List<Transform>();
+            foreach (Transform c in t) children.Add(c);
+            var model = new GameObject(inst.name + " Teile").transform;
+            model.SetParent(t, false);
+            model.localScale = rootScale;
+            foreach (var c in children) c.SetParent(model, false);
+            // Renderer direkt an der Wurzel (Ein-Mesh-Prefab): als Kopie unter den Zwischenknoten
+            var rootFilter = inst.GetComponent<MeshFilter>();
+            var rootRenderer = inst.GetComponent<MeshRenderer>();
+            if (rootFilter != null && rootRenderer != null)
+            {
+                var copy = new GameObject("Mesh");
+                copy.transform.SetParent(model, false);
+                copy.AddComponent<MeshFilter>().sharedMesh = rootFilter.sharedMesh;
+                copy.AddComponent<MeshRenderer>().sharedMaterials = rootRenderer.sharedMaterials;
+                rootRenderer.enabled = false;
+                Object.Destroy(rootRenderer);
+                Object.Destroy(rootFilter);
+            }
+
+            bool any = false;
+            var b = new Bounds();
+            foreach (var r in model.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+            }
+            if (any)
+            {
+                float fit = Mathf.Min(width / Mathf.Max(0.01f, b.size.x), depth / Mathf.Max(0.01f, b.size.z));
+                if (fit < 0.2f || fit > 5f) model.localScale = rootScale * fit;
+            }
+            if (units <= 1) return;
+            int cols = Mathf.CeilToInt(Mathf.Sqrt(units)), rows = Mathf.CeilToInt(units / (float)cols);
+            for (int i = 0; i < units; i++)
+            {
+                int cx = i % cols, cz = i / cols;
+                var at = new Vector3((cx - (cols - 1) * 0.5f) * width / cols, 0f, (cz - (rows - 1) * 0.5f) * depth / rows);
+                var unit = i == 0 ? model : Object.Instantiate(model.gameObject, t, false).transform;
+                unit.localPosition = at;
+            }
         }
 
         void HideModel()

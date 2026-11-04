@@ -89,8 +89,7 @@ namespace CityBuilder.Game.Inspect
                 else if (inspector != null && CanMove(inspector.Current.Kind)) Begin(inspector.Current.Kind, inspector.Current.Id);
             }
             if (!Moving) return;
-            if (kb.commaKey.wasPressedThisFrame) Rotation = Mathf.Repeat(Rotation - 15f, 360f);
-            if (kb.periodKey.wasPressedThisFrame) Rotation = Mathf.Repeat(Rotation + 15f, 360f);
+            Rotation = Mathf.Repeat(Rotation + GameKeyboard.RotateInput(kb, 15f), 360f); // , . oder Strg links + Mausrad
         }
 
         void LateUpdate()
@@ -123,7 +122,7 @@ namespace CityBuilder.Game.Inspect
             if (f == null) return true;
             var plan = s.PlanAligned(f.Type, p, Rotation, f.Id);
             var t = f.Type;
-            Show(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 6f, plan.IsValid, t.NeedsRoadFront);
+            Show(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 6f, plan.IsValid, t.NeedsRoadFront, Catalog?.Service(t.Id));
             Label(t.DisplayName, plan.Cost, plan.Aligned, plan.Displaced.Count, plan.IsValid ? null : CityBuilder.Game.Services.ServiceTool.ErrorText(plan.Error),
                 plan.Position, plan.Height);
             return clicked && plan.IsValid && s.MoveFacility(plan);
@@ -135,7 +134,7 @@ namespace CityBuilder.Game.Inspect
             if (f == null) return true;
             var plan = u.PlanFacilityAligned(f.Type, p, Rotation, f.Id);
             var t = f.Type;
-            Show(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid, t.NeedsRoadFront);
+            Show(plan.Position, plan.Front, t.Width, t.Depth, plan.Height, 5f, plan.IsValid, t.NeedsRoadFront, Catalog?.Facility(t.Id), t.Units);
             Label(t.DisplayName, plan.Cost, plan.Aligned, plan.Displaced.Count, plan.IsValid ? null : CityBuilder.Game.Utilities.UtilityTool.ErrorText(plan.Error),
                 plan.Position, plan.Height);
             return clicked && plan.IsValid && u.MoveFacility(plan);
@@ -150,7 +149,7 @@ namespace CityBuilder.Game.Inspect
             bool aligned = t.SnapDepot(d.Type, p, out var snapped, out float snapRot);
             if (aligned) { pos = snapped; rot = snapRot + Rotation; }
             var plan = t.PlanMoveDepot(d.Id, pos, rot);
-            Show(plan.Position, plan.Front, d.Type.Width, d.Type.Depth, plan.Height, 8f, plan.IsValid, true);
+            Show(plan.Position, plan.Front, d.Type.Width, d.Type.Depth, plan.Height, 8f, plan.IsValid, true, Catalog?.TransportModel("bus_depot"));
             Label(d.Type.DisplayName, (float)plan.Cost, aligned, plan.Displaced.Count, plan.IsValid ? null : CityBuilder.Game.Transit.TransitTool.ErrorText(plan.Error),
                 plan.Position, plan.Height);
             return clicked && plan.IsValid && t.MoveDepot(plan);
@@ -170,8 +169,16 @@ namespace CityBuilder.Game.Inspect
         }
         // --- Ende Wohnhäuser
 
-        void Show(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront) =>
-            ghost.Show(pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront);
+        static CityBuilder.Game.Assets.OwnModelCatalog Catalog => CityBuilder.Game.Assets.OwnModelCatalog.Instance;
+
+        // Mit echtem Modell, wenn vorhanden (wie beim Bauen), sonst Quader
+        void Show(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront,
+                  GameObject model = null, int units = 1)
+        {
+            var mat = valid ? okMaterial : badMaterial;
+            if (model != null) ghost.ShowModel(model, pos, front, width, depth, height, tall, mat, showFront, units);
+            else ghost.Show(pos, front, width, depth, height, tall, mat, showFront);
+        }
 
         void Label(string name, float cost, bool aligned, int displaced, string error, SimVector2 pos, float height)
         {

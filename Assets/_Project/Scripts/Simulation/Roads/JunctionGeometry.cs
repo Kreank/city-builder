@@ -51,10 +51,22 @@ namespace CityBuilder.Simulation.Roads
         public int ArmA, ArmB;
         /// <summary>Bordsteinkante (= Fahrbahnrand) von der linken Kante von A zur rechten von B.</summary>
         public Vector2[] Curb;
-        /// <summary>Gehweg-Außenkante, gleich viele Punkte wie <see cref="Curb"/>.</summary>
+        /// <summary>
+        /// Gehweg-Außenkante, gleich viele Punkte wie <see cref="Curb"/>. Auch gesetzt, wenn nur einer der beiden Arme
+        /// einen Gehweg hat (<see cref="TaperedSidewalk"/>): dann läuft der Gehweg bis zum anderen Arm auf null Breite aus.
+        /// </summary>
         public Vector2[] Outer;
-        /// <summary>Beide Arme haben Gehwege → Gehwegecke wird gebaut.</summary>
+        /// <summary>Beide Arme haben Gehwege → Gehwegecke wird gebaut (und ist begehbar, s. Gehwegnetz).</summary>
         public bool HasSidewalk;
+        /// <summary>
+        /// Nur ein Arm hat einen Gehweg (Stadtstraße ↔ Rampe, z. B. am Zubringer der Anschlussstelle): Gehweg läuft keilförmig
+        /// aus, damit er nicht offen am Straßenende abbricht. Nur Darstellung – kein Fußweg.
+        /// </summary>
+        public bool TaperedSidewalk;
+        /// <summary>Wird eine Gehweg-Fläche gezeichnet (voll oder auslaufend)?</summary>
+        public bool DrawsSidewalk => HasSidewalk || TaperedSidewalk;
+        /// <summary>Äußerste Kante der Ecke (Gehweg-Außenkante, sonst Fahrbahnrand) – für Brüstung/Schürze.</summary>
+        public Vector2[] Boundary => Outer ?? Curb;
     }
 
     /// <summary>Fertige Kreuzungsfläche: Arme mit Trimm, Fahrbahn-Umriss und Ecken.</summary>
@@ -75,7 +87,20 @@ namespace CityBuilder.Simulation.Roads
         public RoadSegment From, To;
         public Vector2 P0, Control, P2;
         public float H0, H2;
+        /// <summary>
+        /// Höhe am Kontrollpunkt: Die Höhe läuft als quadratische Bézierkurve H0 → HControl → H2 und erreicht in der Mitte
+        /// (t = 0,5) genau die Knotenhöhe. Früher linear H0 → H2: auf einer Kuppe hing das Eckstück unter dem Knoten durch,
+        /// dort liegt das Gelände aber knapp unter der Knotenhöhe und schaute durch die Fahrbahn.
+        /// </summary>
+        public float HControl;
         public float Trim;
+
+        /// <summary>Höhe des Eckstücks beim Kurvenparameter t (0 = P0, 1 = P2).</summary>
+        public float HeightAt(float t)
+        {
+            float u = 1f - t;
+            return u * u * H0 + 2f * u * t * HControl + t * t * H2;
+        }
     }
 
     /// <summary>
@@ -300,8 +325,17 @@ namespace CityBuilder.Simulation.Roads
                 float radius = CornerRadius(a.Spec, b.Spec);
                 var curb = CornerPath(node, a, b, a.Spec.Carriageway, b.Spec.Carriageway, radius, transition);
                 bool sidewalk = a.Spec.HasSidewalk && b.Spec.HasSidewalk;
-                var outer = sidewalk ? CornerPath(node, a, b, a.Spec.Full, b.Spec.Full, OuterRadius(a.Spec, b.Spec), transition) : null;
-                layout.Corners.Add(new JunctionCorner { ArmA = i, ArmB = (i + 1) % n, Curb = curb, Outer = outer, HasSidewalk = sidewalk });
+                bool tapered = !sidewalk && (a.Spec.HasSidewalk || b.Spec.HasSidewalk);
+                Vector2[] outer = null;
+                if (sidewalk) outer = CornerPath(node, a, b, a.Spec.Full, b.Spec.Full, OuterRadius(a.Spec, b.Spec), transition);
+                else if (tapered)
+                    // Gehweg nur an einem Arm: Außenkante von dessen Gehweg bis zum Fahrbahnrand des anderen (Keil, scharfe Ecke)
+                    outer = CornerPath(node, a, b, a.Spec.HasSidewalk ? a.Spec.Full : a.Spec.Carriageway,
+                        b.Spec.HasSidewalk ? b.Spec.Full : b.Spec.Carriageway, 0f, transition);
+                layout.Corners.Add(new JunctionCorner
+                {
+                    ArmA = i, ArmB = (i + 1) % n, Curb = curb, Outer = outer, HasSidewalk = sidewalk, TaperedSidewalk = tapered,
+                });
 
                 layout.Ring.Add(a.Point + a.Right * a.Spec.Carriageway);
                 layout.RingHeights.Add(a.Height);
@@ -440,6 +474,8 @@ namespace CityBuilder.Simulation.Roads
                 P2 = p2,
                 H0 = h0,
                 H2 = h2,
+                // Scheitel (t = 0,5) genau auf Knotenhöhe; bei gleichmäßiger Steigung ergibt das wieder die Gerade H0 → H2
+                HControl = 2f * node.Height - 0.5f * (h0 + h2),
                 Trim = trim,
             };
         }

@@ -158,7 +158,10 @@ namespace CityBuilder.Game.Roads
                 mf = CreateMeshObject($"Road {seg.Id} ({seg.Type.DisplayName})", materials.All);
                 segmentObjects[seg.Id] = mf;
             }
-            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground, structStart, structEnd);
+            // Sackgassen (Straßenende ohne Anschluss): Stirnseite schließen
+            bool capStart = seg.Start.SegmentIds.Count == 1, capEnd = seg.End.SegmentIds.Count == 1;
+            mf.sharedMesh = RoadMeshBuilder.BuildSegment(seg, trimStart, trimEnd, mf.sharedMesh, network.Ground, structStart, structEnd,
+                capStart, capEnd);
             // --- Wasserstraße: Klappe zeichnet die ShippingView (Modell mit beweglichen Klappen statt fester Fahrbahn)
             var mr = mf.GetComponent<MeshRenderer>();
             if (mr != null) mr.enabled = !seg.IsDrawbridge;
@@ -188,8 +191,8 @@ namespace CityBuilder.Game.Roads
             if (shape == NodeShape.Junction)
             {
                 // Kreuzung: Fahrbahnfläche mit gerundeten Bordsteinecken + Gehweg-Ecken
-                mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt], materials[RoadSurface.Sidewalk] };
-                mf.sharedMesh = RoadMeshBuilder.BuildJunction(network, node, mf.sharedMesh);
+                mr.sharedMaterials = new[] { materials[RoadSurface.Asphalt], materials[RoadSurface.Sidewalk], materials[RoadSurface.Ground] };
+                mf.sharedMesh = RoadMeshBuilder.BuildJunction(network, node, mf.sharedMesh, network.Ground);
                 return;
             }
 

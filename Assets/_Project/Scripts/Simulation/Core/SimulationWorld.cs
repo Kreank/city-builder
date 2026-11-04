@@ -90,7 +90,10 @@ namespace CityBuilder.Simulation.Core
         /// </summary>
         float RoadRule(Vector2 p, float proposed)
         {
-            float result = proposed;
+            // Unter einer Fahrbahn: genau knapp darunter; liegen dort mehrere Straßen (Kreuzungen, Rampen, Übergänge)
+            // mit leicht verschiedener Höhe, zählt die niedrigste – früher gewann die zuletzt geprüfte, und das Gelände
+            // ragte durch die tiefere Fahrbahn. Daneben (Rand) nie höher als irgendeine nahe Straße.
+            float under = float.MaxValue, beside = float.MaxValue;
             float margin = Terrain.RoadMargin;
             foreach (var s in Roads.Segments)
             {
@@ -110,9 +113,11 @@ namespace CityBuilder.Simulation.Core
                 if (natural > limit || natural < -limit) continue;
 
                 float surface = road - TerrainMap.UnderRoad;
-                result = d <= s.Type.HalfWidth ? surface : MathF.Min(result, surface);
+                if (d <= s.Type.HalfWidth) under = MathF.Min(under, surface);
+                else beside = MathF.Min(beside, surface);
             }
-            return result;
+            float result = under < float.MaxValue ? under : proposed;
+            return MathF.Min(result, beside);
         }
 
         // --- Welt (Etappe 5)

@@ -468,7 +468,8 @@ namespace CityBuilder.Simulation.Services
                 plan.AccessSegmentId = seg;
                 plan.AccessT = t;
             }
-            else if (type.NeedsRoadFront) return ServiceBuildError.NoRoadAccess;
+            // Frei setzen (Spieler, 2026-11-04): ohne Zufahrt gültig – das Gebäude wirkt erst mit Straße und verfällt sonst
+            // nach NoRoadDays (s. DecayWithoutRoad). NoRoadAccess wird nicht mehr vergeben.
             return ServiceBuildError.None;
         }
 
@@ -528,6 +529,8 @@ namespace CityBuilder.Simulation.Services
 
         public void Tick(SimulationWorld world)
         {
+            // Frei setzen: zuerst (Anschluss aus dem letzten Durchlauf), damit der Rest des Durchlaufs ohne verfallene Gebäude neu baut
+            if (world != null) DecayWithoutRoad();
             if (roads.Version != builtRoadVersion || StructureVersion != builtStructureVersion)
             {
                 RecomputeReach();
@@ -545,6 +548,38 @@ namespace CityBuilder.Simulation.Services
             changed |= UpdateGarbageAndRisk();
             if (changed) CoverageVersion++;
             Emit();
+        }
+
+        // ------------------------------------------------------------ Frei setzen
+
+        /// <summary>Tage ohne Zufahrt, bis ein Dienstgebäude verfällt (wie gesetzte Gebäude, <see cref="CitySystem.HouseNoRoadDays"/>).</summary>
+        public const int NoRoadDays = CitySystem.HouseNoRoadDays;
+
+        /// <summary>Ein Dienstgebäude ist ohne Zufahrt verfallen und wurde ohne Erstattung abgerissen.</summary>
+        public event Action<ServiceFacility> FacilityDecayedWithoutRoad;
+
+        /// <summary>Restzeit in Tagen bis zum Verfall (−1 = hat Zufahrt bzw. braucht keine).</summary>
+        public float DaysUntilNoRoadDecay(ServiceFacility f) =>
+            f == null || !f.MissingRoad ? -1f : MathF.Max(0f, NoRoadDays - f.NoRoadTicks / (float)SimulationClock.TicksPerDay);
+
+        readonly List<ServiceFacility> decayScratch = new List<ServiceFacility>();
+
+        void DecayWithoutRoad()
+        {
+            decayScratch.Clear();
+            foreach (var f in facilities.Values)
+            {
+                if (!f.MissingRoad) { f.NoRoadTicks = 0; continue; }
+                f.NoRoadTicks += TickInterval;
+                if (f.NoRoadTicks >= NoRoadDays * SimulationClock.TicksPerDay) decayScratch.Add(f);
+            }
+            if (decayScratch.Count == 0) return;
+            decayScratch.Sort((a, b) => a.Id.CompareTo(b.Id));
+            foreach (var f in decayScratch)
+            {
+                Remove(f.Id);
+                FacilityDecayedWithoutRoad?.Invoke(f);
+            }
         }
 
         /// <summary>Für Tests/Werkzeuge: sofort neu rechnen (ohne Uhr).</summary>

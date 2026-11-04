@@ -40,12 +40,13 @@ namespace CityBuilder.Game.UI.Hud
             panelBody.Add(tools);
 
             var tiles = Container("cb-tiles");
-            tiles.Add(Tile("Gleis", $"{RoadCatalog.RailTrack.CostPerMeter:0} €/m", RailSwatch, HudIconKind.Train,
+            tiles.Add(ThumbTile("Gleis", $"{RoadCatalog.RailTrack.CostPerMeter:0} €/m", RailSwatch, HudIconKind.Train,
+                "tr:rail_track", ModelThumbnails.Transport("rail_track"),
                 () => rt.Select(RailTool.RailAction.Track),
                 () => rt.Active && rt.Current == RailTool.RailAction.Track,
                 $"Gleis bauen · max. {RoadType.RailMaxSlope * 100f:0.#} % Steigung · Radius ≥ {RailRules.MinRadius:0} m · Weichen zweigen tangential ab (≤ {RailRules.MaxSwitchAngle:0}°) · " +
                 $"Straße queren: Bahnübergang oder Brücke/Tunnel · Unterhalt {RailRules.TrackUpkeepPerMeterWeek:0.0} €/m/Woche"));
-            tiles.Add(Tile("Gleisbogen", "3 Klicks", RailSwatch, HudIconKind.Road,
+            tiles.Add(ThumbTile("Gleisbogen", "3 Klicks", RailSwatch, HudIconKind.Road, null, null,
                 () => rt.Select(RailTool.RailAction.Curve),
                 () => rt.Active && rt.Current == RailTool.RailAction.Curve,
                 "Start, Kontrollpunkt, Ende – für Überholgleise, Bahnhofsschleifen und Anschlussgleise"));
@@ -53,7 +54,10 @@ namespace CityBuilder.Game.UI.Hud
             {
                 var t = type;
                 var action = t.Kind == StationKind.Passenger ? RailTool.RailAction.PassengerStation : RailTool.RailAction.FreightStation;
-                tiles.Add(Tile(t.DisplayName, BuildLabels.Money((float)t.Cost), RailSwatch, t.Kind == StationKind.Passenger ? HudIconKind.People : HudIconKind.Briefcase,
+                // Personenbahnhof = Bahnhofsmodell; Güterbahnhof hat keins → Containerwagen als Bild
+                string model = t.Kind == StationKind.Passenger ? "train_station" : "rail_container_wagon";
+                tiles.Add(ThumbTile(t.DisplayName, BuildLabels.Money((float)t.Cost), RailSwatch, t.Kind == StationKind.Passenger ? HudIconKind.People : HudIconKind.Briefcase,
+                    "tr:" + model, ModelThumbnails.Transport(model),
                     () => rt.Select(action),
                     () => rt.Active && rt.Current == action,
                     t.Kind == StationKind.Passenger

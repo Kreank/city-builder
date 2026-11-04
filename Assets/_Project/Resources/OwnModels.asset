@@ -13,6 +13,42 @@ MonoBehaviour:
   m_Name: OwnModels
   m_EditorClassIdentifier: CityBuilder.Game::CityBuilder.Game.Assets.OwnModelCatalog
   Facilities:
+  - Id: power_battery
+    Model: {fileID: 919132149155446097, guid: 6561d75364c5e424589b2e5b53b721c8, type: 3}
+    Folder: Energy
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 4.6, z: 24}
+  - Id: power_biogas
+    Model: {fileID: 919132149155446097, guid: 4c126143025de2942942fe001d65d0d8, type: 3}
+    Folder: Energy
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 10.62, z: 32}
+  - Id: power_hydro
+    Model: {fileID: 919132149155446097, guid: c26a01384c82a2a47a874fa139a819f1, type: 3}
+    Folder: Energy
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 65.92813, y: 23.800001, z: 56}
+  - Id: power_offshore_wind
+    Model: {fileID: 919132149155446097, guid: 7de6c666c88a5f04e9094e4cb75bb29f, type: 3}
+    Folder: Energy
+    Role: facility
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 50.749092, y: 119.3, z: 15.440114}
   - Id: sewage_plant
     Model: {fileID: 919132149155446097, guid: c6b81511fe7c1d14f9adc170b77fc8d8, type: 3}
     Folder: Services
@@ -358,6 +394,258 @@ MonoBehaviour:
     Size: {x: 13.137825, y: 8.2, z: 13.586203}
   People: []
   Transport:
+  - Id: rail_container_wagon
+    Model: {fileID: 919132149155446097, guid: 41cf728d2365f5141bd05a7a0b9fc0e5, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 2.7, y: 3.8774862, z: 20.6}
+  - Id: rail_level_crossing
+    Model: {fileID: 919132149155446097, guid: 0d65db6537ab3014eb7821a2c76b3f16, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 3.3612552, z: 16}
+  - Id: rail_locomotive
+    Model: {fileID: 919132149155446097, guid: 0a85b6265cad39c4ea74a1b5c4d64e04, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 3.04, y: 6.257486, z: 20}
+  - Id: rail_coach
+    Model: {fileID: 919132149155446097, guid: a2fadbd80d7f61a4081801a52c32866c, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 3, y: 4.177486, z: 27}
+  - Id: rail_tank_wagon
+    Model: {fileID: 919132149155446097, guid: 768c92955c46523479eb0a8088da35f1, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 2.866288, y: 4.527486, z: 17}
+  - Id: rail_track
+    Model: {fileID: 919132149155446097, guid: 4f0614565ad9f0341838031d65c5fc25, type: 3}
+    Folder: Rail
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 5.5, y: 7, z: 16}
+  - Id: train_station
+    Model: {fileID: 919132149155446097, guid: 90fee0cca2e8d444bbc230fb01dc9df1, type: 3}
+    Folder: Transport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 18.9, z: 25.4}
+  - Id: air_airliner
+    Model: {fileID: 919132149155446097, guid: ccbdf79bc1f154e4e946f796db5c0cd9, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 34.3, y: 11.965746, z: 38}
+  - Id: air_airliner_red
+    Model: {fileID: 919132149155446097, guid: f000a15e2909ba6409baadc23c52e185, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 34.3, y: 11.965746, z: 38}
+  - Id: air_baggage
+    Model: {fileID: 919132149155446097, guid: be9e2b9e604441b4f9891956d2d5fab6, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.7, y: 2.2809699, z: 10.8}
+  - Id: air_tower
+    Model: {fileID: 919132149155446097, guid: 9dba18bf9fb0adf43a62b0b064f45905, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 12, y: 43.85, z: 12}
+  - Id: air_hangar
+    Model: {fileID: 919132149155446097, guid: d5d5dcad746a40740a24838f6e39725c, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 40, y: 14, z: 33.18593}
+  - Id: air_runway
+    Model: {fileID: 919132149155446097, guid: b46a016492096ad49925dd5e16ad8686, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 64, y: 0.5, z: 48}
+  - Id: air_runway_end
+    Model: {fileID: 919132149155446097, guid: 78e1ded199b935f4aadef2b5f077a8fe, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 64, y: 0.5, z: 48}
+  - Id: air_small
+    Model: {fileID: 919132149155446097, guid: 17201e1151d9c864fa2c7fd1cdcc82c5, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 11.05, y: 3.3832536, z: 9.75}
+  - Id: air_taxiway
+    Model: {fileID: 919132149155446097, guid: f3fc67139c3c5e64a8a72f83d3493605, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 32, y: 0.5, z: 32}
+  - Id: air_terminal
+    Model: {fileID: 919132149155446097, guid: dbada955e9949b14c93a64e3d31b31dc, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 64, y: 14.220042, z: 38.2}
+  - Id: air_windsock
+    Model: {fileID: 919132149155446097, guid: dc498beab2f2752459d5c5a9e24df022, type: 3}
+    Folder: Airport
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 4.185225, y: 6.52434, z: 1.2}
+  - Id: buoy_green
+    Model: {fileID: 919132149155446097, guid: 87c212957d7e1b640892825b67109c71, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.5216904, y: 3.78, z: 1.6}
+  - Id: buoy_red
+    Model: {fileID: 919132149155446097, guid: 0486ccd96c06a8740b2875e2ffd2d2d3, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 1.5216904, y: 3.78, z: 1.6}
+  - Id: ship_cargo
+    Model: {fileID: 919132149155446097, guid: 6c1686b77983c06489738a337aa69370, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 13, y: 28.6, z: 80}
+  - Id: harbor_container_crane
+    Model: {fileID: 919132149155446097, guid: 00492ee404b4f014aa293299ca4435eb, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 18, y: 46.176865, z: 70}
+  - Id: ship_ferry
+    Model: {fileID: 919132149155446097, guid: f7f63e6ed35c3d94eb67ac06d5a3a2fe, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 12.2, y: 15.9, z: 42}
+  - Id: harbor_crane
+    Model: {fileID: 919132149155446097, guid: 4e5dce4a69919cd4b815fcc38aec7567, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 7.2, y: 22.467228, z: 27}
+  - Id: harbor_warehouse
+    Model: {fileID: 919132149155446097, guid: 9a18079c3d3e3994496b909536f185fd, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 24.6, y: 22.509523, z: 14.5}
+  - Id: harbor_quay
+    Model: {fileID: 919132149155446097, guid: 371ae3ff5b956474c9882a2ff03b1740, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 7.3199997, z: 8.5}
+  - Id: ship_sailboat
+    Model: {fileID: 919132149155446097, guid: 2627b99a999aa3549b4428a4b61c80be, type: 3}
+    Folder: Coast
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 3, y: 15.099999, z: 9}
+  - Id: drawbridge
+    Model: {fileID: 919132149155446097, guid: f5f2006376f5f544fbcb6f6a95ed1040, type: 3}
+    Folder: Infrastructure
+    Role: transport
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 17.400002, y: 14.3, z: 40.08}
   - Id: bus_stop
     Model: {fileID: 919132149155446097, guid: bb7fcd5ad598ff7478d4ce9edf98058c, type: 3}
     Folder: Props
@@ -449,6 +737,15 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 1.9618876, y: 1.3499999, z: 1.815366}
+  - Id: Cliff_Straight
+    Model: {fileID: 919132149155446097, guid: 8eaba5ef08a79944aa33d309459821d9, type: 3}
+    Folder: Terrain
+    Role: rock
+    Use: cliff
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 16, y: 18.32, z: 16}
   - Id: Cow
     Model: {fileID: 919132149155446097, guid: a1655060a14703740986c05db1f8d4da, type: 3}
     Folder: Agriculture
@@ -674,6 +971,15 @@ MonoBehaviour:
     Biome: 
     Tags: []
     Size: {x: 1.8246332, y: 0.6395738, z: 1.1346085}
+  - Id: Rocks
+    Model: {fileID: 919132149155446097, guid: 3dd36a06bb53b704c9e62574470e375f, type: 3}
+    Folder: Terrain
+    Role: rock
+    Use: 
+    Placement: 
+    Biome: 
+    Tags: []
+    Size: {x: 9.221918, y: 3.7719107, z: 6.7658367}
   - Id: SignGantry
     Model: {fileID: 919132149155446097, guid: fa509c0c8f86dcb4c931c1532f445c4d, type: 3}
     Folder: Infrastructure
@@ -738,4 +1044,4 @@ MonoBehaviour:
     Tags: []
     Size: {x: 17.939665, y: 22.969833, z: 12}
   Palette: {fileID: 2100000, guid: 30eaef96c71f7e145ab463ee8df76c51, type: 2}
-  SourceStamp: 7650ad23f2a86b26
+  SourceStamp: 7510ca96e7fce643

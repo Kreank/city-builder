@@ -56,8 +56,10 @@ namespace CityBuilder.Simulation.Gateways
         public int BlockedMoveInsToday { get; private set; }
         public int BlockedMoveInsYesterday { get; private set; }
         /// <summary>Wohngebäude mit Anschluss / ohne Anschluss (Stand der letzten Stundenprüfung).</summary>
-        public int HousingConnected { get; private set; }
-        public int HousingUnconnected { get; private set; }
+        /// <remarks>Abgeleitet und sofort aktuell: neu gezählt, sobald sich Straßen oder Gebäude geändert haben (auch in der Pause).</remarks>
+        public int HousingConnected { get { RefreshHousingIfChanged(); return housingConnected; } }
+        public int HousingUnconnected { get { RefreshHousingIfChanged(); return housingUnconnected; } }
+        int housingConnected, housingUnconnected;
 
         public GatewaySystem(SimulationWorld world)
         {
@@ -251,6 +253,8 @@ namespace CityBuilder.Simulation.Gateways
                 if (!world.Settings.RequireGatewayForMoveIn) return null;
                 if (!HasAnyConnection) return "Keine Außenanbindung: Straße an den Kartenrand bauen, damit Leute kommen.";
                 if (HousingConnected > 0 && HousingUnconnected == 0) return null;
+                // Noch keine Wohnungen: angeschlossen ist die Stadt, sobald eigene Straßen am Zubringer hängen (z. B. ein Kreisverkehr)
+                if (HousingConnected == 0 && HousingUnconnected == 0 && PlayerRoadsConnected) return null;
                 string where = HasHighway ? $"an die A {HighwayNumber} (Zubringer an der Anschlussstelle)" : "an einen Außenanschluss";
                 if (HousingConnected == 0) return $"Stadt {where} anschließen, damit Leute kommen.";
                 return $"{HousingUnconnected} Wohngebäude ohne Anschluss – Straßen {where} verbinden.";
@@ -462,9 +466,59 @@ namespace CityBuilder.Simulation.Gateways
             }
         }
 
+        int housingRoadVersion = -1, housingCityVersion = -1;
+        int playerRoadsVersion = -1;
+        bool playerRoadsConnected;
+
+        /// <summary>Zählung neu, wenn sich Straßen oder Gebäude seit der letzten Zählung geändert haben (abgeleitet, ohne Spielzustand).</summary>
+        void RefreshHousingIfChanged()
+        {
+            if (world.Roads.Version == housingRoadVersion && (world.City?.Version ?? 0) == housingCityVersion) return;
+            CountHousing();
+        }
+
+        /// <summary>
+        /// Hängen eigene Straßen des Spielers (frei, Stadtstraße, nicht nur der unveränderte Zubringer-Stummel) an einem
+        /// befahrbaren Anschluss? Dann gilt die Stadt als angeschlossen, auch wenn noch keine Wohnung steht.
+        /// </summary>
+        public bool PlayerRoadsConnected
+        {
+            get
+            {
+                var roads = world.Roads;
+                if (roads.Version == playerRoadsVersion) return playerRoadsConnected;
+                playerRoadsVersion = roads.Version;
+                playerRoadsConnected = false;
+                var comps = world.Citizens?.Components;
+                if (comps == null) return false;
+                var cache = new Dictionary<int, bool>();
+                foreach (var s in roads.Segments)
+                {
+                    if (s.IsLocked || s.Type.Category != RoadCategory.City || IsUntouchedFeederStub(s)) continue;
+                    int c = comps.OfNode(s.Start.Id);
+                    if (!cache.TryGetValue(c, out bool ok)) cache[c] = ok = IsConnected(c);
+                    if (ok) { playerRoadsConnected = true; break; }
+                }
+                return playerRoadsConnected;
+            }
+        }
+
+        bool IsUntouchedFeederStub(RoadSegment s)
+        {
+            foreach (var n in new[] { s.Start, s.End })
+            {
+                if (n.SegmentIds.Count != 1) continue;
+                foreach (var end in feederEnds)
+                    if (Vector2.Distance(n.Position, end) < 1f) return true;
+            }
+            return false;
+        }
+
         void CountHousing()
         {
-            if (!world.Settings.RequireGatewayForMoveIn || world.City == null) { HousingConnected = HousingUnconnected = 0; return; }
+            housingRoadVersion = world.Roads.Version;
+            housingCityVersion = world.City?.Version ?? 0;
+            if (!world.Settings.RequireGatewayForMoveIn || world.City == null) { housingConnected = housingUnconnected = 0; return; }
             int yes = 0, no = 0;
             var cache = new Dictionary<int, bool>();
             foreach (var b in world.City.Buildings)
@@ -474,8 +528,8 @@ namespace CityBuilder.Simulation.Gateways
                 if (!cache.TryGetValue(c, out bool ok)) cache[c] = ok = IsConnected(c);
                 if (ok) yes++; else no++;
             }
-            HousingConnected = yes;
-            HousingUnconnected = no;
+            housingConnected = yes;
+            housingUnconnected = no;
         }
     }
 }

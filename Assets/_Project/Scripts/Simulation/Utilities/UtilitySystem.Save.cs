@@ -19,7 +19,8 @@ namespace CityBuilder.Simulation.Utilities
         /// (<see cref="MigrationGraceTicks"/>), damit der Spieler mit „Entlang Straßen verlegen“ nachrüsten kann.
         /// </summary>
         // v3 (Energie erweitert): Nennleistung/Standort/Ladestand je Bauwerk, Speicher je Netz, Abflusslage (v2 → Katalogwerte, leere Speicher).
-        public int SaveVersion => 3;
+        // v4 (Frei setzen): Ticks ohne Zufahrt je Bauwerk (v3 → 0).
+        public int SaveVersion => 4;
 
         public void Write(SaveWriter w)
         {
@@ -47,6 +48,7 @@ namespace CityBuilder.Simulation.Utilities
                 w.Float(f.Load);            // v2
                 w.Float(f.Rated); w.Float(f.StoredKwh); w.Float(f.Charging); w.Float(f.SiteFlow); w.Float(f.SiteHead); // v3
                 w.Float(f.Availability); w.Float(f.FeedWorkers); // v3
+                w.Int(f.NoRoadTicks); // v4
             });
             lines.WriteLayout(w, (id, l) =>
             {
@@ -122,6 +124,7 @@ namespace CityBuilder.Simulation.Utilities
                     f.Rated = r.Float(); f.StoredKwh = r.Float(); f.Charging = r.Float(); f.SiteFlow = r.Float(); f.SiteHead = r.Float();
                     f.Availability = r.Float(); f.FeedWorkers = r.Float();
                 }
+                if (version >= 4) f.NoRoadTicks = r.Int();
                 else f.Rated = type.Capacity; // v2: alle Bauwerke mit Katalogleistung (Wasserkraft/Speicher gab es nicht)
                 return new KeyValuePair<int, UtilityFacility>(id, f);
             });

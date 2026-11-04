@@ -70,7 +70,7 @@ namespace CityBuilder.Simulation.Tests
             yield return asphalt;
             foreach (var corner in layout.Corners)
             {
-                if (!corner.HasSidewalk) continue;
+                if (!corner.DrawsSidewalk) continue; // auch auslaufende Gehwege (nur ein Arm mit Gehweg)
                 var p = new Piece { Name = $"Ecke {corner.ArmA}-{corner.ArmB}" };
                 for (int k = 0; k < corner.Curb.Length - 1; k++)
                 {
@@ -358,6 +358,110 @@ namespace CityBuilder.Simulation.Tests
                 var expected = c.Point(i) + c.RightAt(i) * -6.5f;
                 Assert.True(Vector2.Distance(expected, c.OffsetAt(c.Distance(i), -6.5f)) < 1e-3f);
             }
+        }
+
+        // ------------------------------------------------------------ Übergänge (Spieltest: Zubringer, Rampen, Kuppen)
+
+        /// <summary>
+        /// Stadtstraße ↔ Rampe (wie am Zubringer der Anschlussstelle): Der Gehweg der Stadtstraße bricht nicht offen ab,
+        /// sondern läuft in der Ecke zum Fahrbahnrand der Rampe aus – ohne Überlappung mit Fahrbahnen.
+        /// </summary>
+        [Fact]
+        public void CityMeetsRamp_SidewalkTapersInsteadOfEndingOpen()
+        {
+            var net = new RoadNetwork();
+            RoadNetworkTests.Build(net, new Vector2(0, -80), new Vector2(0, 0));
+            RoadNetworkTests.Build(net, new Vector2(0, 0), new Vector2(0, 80));
+            RoadNetworkTests.Build(net, new Vector2(0, 0), new Vector2(80, 0), RoadCatalog.Ramp);
+            var node = NodeAt(net, Vector2.Zero);
+            Assert.Equal(NodeShape.Junction, JunctionGeometry.Classify(net, node));
+            var layout = JunctionGeometry.Layout(net, node);
+
+            var tapered = layout.Corners.Where(c => c.TaperedSidewalk).ToList();
+            Assert.Equal(2, tapered.Count); // beide Ecken neben der Rampe
+            Assert.Single(layout.Corners, c => c.HasSidewalk); // Ecke Stadt ↔ Stadt bleibt begehbar
+            foreach (var c in tapered)
+            {
+                Assert.False(c.HasSidewalk); // kein Fußweg (Gehwegnetz unverändert)
+                Assert.NotNull(c.Outer);
+                Assert.Equal(c.Curb.Length, c.Outer.Length);
+                var a = layout.Arms[c.ArmA];
+                var b = layout.Arms[c.ArmB];
+                // am Arm mit Gehweg beginnt die Außenkante auf seiner Gehweg-Außenkante, am Rampen-Arm endet sie auf dem Bordstein
+                var sidewalkArm = a.Spec.HasSidewalk ? a : b;
+                var sidewalkEnd = a.Spec.HasSidewalk ? c.Outer[0] : c.Outer[c.Outer.Length - 1];
+                var rampEnd = a.Spec.HasSidewalk ? c.Outer[c.Outer.Length - 1] : c.Outer[0];
+                var rampCurb = a.Spec.HasSidewalk ? c.Curb[c.Curb.Length - 1] : c.Curb[0];
+                Assert.Equal(sidewalkArm.Spec.Full, Vector2.Distance(sidewalkEnd, sidewalkArm.Point), 2);
+                Assert.True(Vector2.Distance(rampEnd, rampCurb) < 1e-3f);
+                Assert.Equal(c.Outer, c.Boundary);
+            }
+            Assert.Null(FindOverlap(AllPieces(net)));
+        }
+
+        [Fact]
+        public void JunctionRings_AreStarShapedAroundTheNode_FanCoversArea()
+        {
+            foreach (var setup in new Action<RoadNetwork>[]
+            {
+                n => { RoadNetworkTests.Build(n, new Vector2(-60, 0), new Vector2(60, 0)); RoadNetworkTests.Build(n, new Vector2(0, -60), new Vector2(0, 60)); },
+                n => { RoadNetworkTests.Build(n, new Vector2(-60, 0), new Vector2(60, 0)); RoadNetworkTests.Build(n, new Vector2(0, 0), new Vector2(40, 60)); },
+                n => { RoadNetworkTests.Build(n, new Vector2(-80, 0), new Vector2(0, 0), RoadCatalog.CityFourLane); RoadNetworkTests.Build(n, new Vector2(0, 0), new Vector2(80, 0)); },
+                n => { RoadNetworkTests.Build(n, new Vector2(-100, 0), new Vector2(100, 0)); RoadNetworkTests.Build(n, new Vector2(-87, -50), new Vector2(87, 50)); },
+            })
+            {
+                var net = new RoadNetwork();
+                setup(net);
+                var node = NodeAt(net, Vector2.Zero);
+                var layout = JunctionGeometry.Layout(net, node);
+                Assert.True(Geometry2D.IsStarShaped(layout.Ring, node.Position));
+                // Fächer um den Knoten = Fläche des Umrisses (keine Rückseiten)
+                float sum = 0f;
+                for (int i = 0; i < layout.Ring.Count; i++)
+                {
+                    float a = Geometry2D.TriangleArea(node.Position, layout.Ring[i], layout.Ring[(i + 1) % layout.Ring.Count]);
+                    Assert.True(a >= -1e-3f);
+                    sum += a;
+                }
+                Assert.Equal(Geometry2D.SignedArea(layout.Ring), sum, 1);
+            }
+            // Gegenprobe: Punkt außerhalb bzw. hinter einer Einbuchtung
+            var poly = new List<Vector2> { new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(5, 3), new Vector2(0, 10) };
+            Assert.False(Geometry2D.IsStarShaped(poly, new Vector2(5, 8)));
+            Assert.True(Geometry2D.IsStarShaped(poly, new Vector2(5, 1)));
+            Assert.False(Geometry2D.IsStarShaped(poly, new Vector2(20, 5)));
+        }
+
+        /// <summary>Knick auf einer Kuppe: das Eckstück erreicht in der Mitte die Knotenhöhe (hing früher durch).</summary>
+        [Fact]
+        public void BendOnCrest_ReachesNodeHeight_StraightGradeStaysLinear()
+        {
+            var net = new RoadNetwork();
+            Build3D(net, new Vector2(-60, 0), 0f, new Vector2(0, 0), 3f);
+            Build3D(net, new Vector2(0, 0), 3f, new Vector2(0, 60), 0f); // 90°-Knick: Eckstück ~12 m je Seite
+            var node = NodeAt(net, Vector2.Zero);
+            Assert.Equal(NodeShape.Bend, JunctionGeometry.Classify(net, node));
+            var bend = JunctionGeometry.Bend(net, node);
+            // linear hätte die Mitte (H0 + H2)/2 gelegen – tiefer als das Gelände knapp unter der Knotenhöhe
+            Assert.True((bend.H0 + bend.H2) * 0.5f < 3f - Environment.TerrainMap.UnderRoad - 0.1f, $"{bend.H0} {bend.H2}");
+            Assert.Equal(3f, bend.HeightAt(0.5f), 3);
+            Assert.Equal(bend.H0, bend.HeightAt(0f), 4);
+            Assert.Equal(bend.H2, bend.HeightAt(1f), 4);
+
+            // gleichmäßige Steigung durch den Knick: weiter linear
+            var net2 = new RoadNetwork();
+            Build3D(net2, new Vector2(-60, 0), 0f, new Vector2(0, 0), 3f);
+            Build3D(net2, new Vector2(0, 0), 3f, new Vector2(0, 60), 6f);
+            var b2 = JunctionGeometry.Bend(net2, NodeAt(net2, Vector2.Zero));
+            for (int i = 0; i <= 4; i++)
+                Assert.Equal(b2.H0 + (b2.H2 - b2.H0) * i / 4f, b2.HeightAt(i / 4f), 2);
+        }
+
+        static void Build3D(RoadNetwork net, Vector2 a, float ha, Vector2 b, float hb)
+        {
+            var plan = RoadBuilder.Plan(net, a, 8f, null, b, 8f, City, ha, hb);
+            Assert.True(plan.IsValid, plan.Error.ToString());
+            RoadBuilder.Build(net, plan);
         }
 
         [Fact]

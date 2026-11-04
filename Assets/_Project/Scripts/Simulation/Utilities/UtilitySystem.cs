@@ -65,6 +65,8 @@ namespace CityBuilder.Simulation.Utilities
         // --- Ende Energie erweitert
         /// <summary>Flughafen: Hinweis zur Hindernisfreiheit (bei <see cref="UtilityBuildError.ObstacleClearance"/>).</summary>
         public string ObstacleNote;
+        /// <summary>Frei setzen: gültig, aber das Bauwerk braucht eine Zufahrt und hat (noch) keine.</summary>
+        public bool MissingRoad;
         public bool IsValid => Error == UtilityBuildError.None;
         /// <summary>Mitte der Vorderkante (Vorschau-Pfeil).</summary>
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
@@ -388,14 +390,9 @@ namespace CityBuilder.Simulation.Utilities
             // Zufahrt an der Vorderseite (Kraftwerke, Wasserturm): Steht das Bauwerk an einer Stadtstraße (Rand ≤ RoadReach,
             // = Netzanschluss über die Straße), muss die Vorderseite zu ihr zeigen. Ohne Straße in der Nähe (Überland, Anschluss
             // per Leitung/Rohr) gilt keine Zufahrtspflicht – Brennstoff/Personal sind noch nicht simuliert.
-            if (type.NeedsRoadFront && NearCityRoad(plan.Position, plan.Front, type.Width, type.Depth) &&
-                !RoadFront.FindAccess(roads, new Footprint(plan.Position, plan.Front, type.Width, type.Depth), RoadReach, out _, out _))
-                return UtilityBuildError.NoRoadAccess;
-            // --- Energie erweitert: Zufahrt ist Pflicht (Biogas: Anlieferung von Mais/Gülle), auch ohne Straße in der Nähe
-            if (type.RequiresRoadAccess &&
-                !RoadFront.FindAccess(roads, new Footprint(plan.Position, plan.Front, type.Width, type.Depth), RoadReach, out _, out _))
-                return UtilityBuildError.NoRoadAccess;
-            // --- Ende Energie erweitert
+            // Frei setzen (Spieler, 2026-11-04): keine Zufahrtspflicht beim Setzen mehr. Bauwerke mit RequiresRoadAccess (Biogas,
+            // Speicher) arbeiten erst mit Straße an der Vorderseite und verfallen sonst nach NoRoadDays (DecayWithoutRoad).
+            plan.MissingRoad = type.RequiresRoadAccess && !HasRoadFront(plan.Position, plan.Front, type);
             return UtilityBuildError.None;
         }
 
@@ -458,6 +455,50 @@ namespace CityBuilder.Simulation.Utilities
             RemoveFacility(id);
             Budget?.Refund(f.Type.Cost * Economy.EconomyRules.DemolitionRefundShare);
             return true;
+        }
+
+        // ------------------------------------------------------------ Frei setzen (2026-11-04)
+
+        /// <summary>Tage ohne Zufahrt, bis Biogas/Speicher verfallen (wie gesetzte Gebäude).</summary>
+        public const int NoRoadDays = CitySystem.HouseNoRoadDays;
+
+        /// <summary>Ein Bauwerk ist ohne Zufahrt verfallen und wurde ohne Erstattung abgerissen.</summary>
+        public event Action<UtilityFacility> FacilityDecayedWithoutRoad;
+
+        /// <summary>Restzeit in Tagen bis zum Verfall (−1 = hat Zufahrt bzw. braucht keine).</summary>
+        public float DaysUntilNoRoadDecay(UtilityFacility f) =>
+            f == null || !f.MissingRoad ? -1f : MathF.Max(0f, NoRoadDays - f.NoRoadTicks / (float)SimulationClock.TicksPerDay);
+
+        bool HasRoadFront(Vector2 position, Vector2 front, UtilityFacilityType type) =>
+            RoadFront.FindAccess(roads, new Footprint(position, front, type.Width, type.Depth), RoadReach, out _, out _);
+
+        int accessRoadVersion = -1, accessStructureVersion = -1;
+        readonly List<UtilityFacility> decayScratch = new List<UtilityFacility>();
+
+        void UpdateRoadAccess(SimulationWorld world)
+        {
+            if (roads.Version != accessRoadVersion || StructureVersion != accessStructureVersion)
+            {
+                accessRoadVersion = roads.Version;
+                accessStructureVersion = StructureVersion;
+                foreach (var f in facilities.Values)
+                    f.MissingRoad = f.Type.RequiresRoadAccess && !HasRoadFront(f.Position, f.Front, f.Type);
+            }
+            if (world == null) return;
+            decayScratch.Clear();
+            foreach (var f in facilities.Values)
+            {
+                if (!f.MissingRoad) { f.NoRoadTicks = 0; continue; }
+                f.NoRoadTicks += TickInterval;
+                if (f.NoRoadTicks >= NoRoadDays * SimulationClock.TicksPerDay) decayScratch.Add(f);
+            }
+            if (decayScratch.Count == 0) return;
+            decayScratch.Sort((a, b) => a.Id.CompareTo(b.Id));
+            foreach (var f in decayScratch)
+            {
+                RemoveFacility(f.Id);
+                FacilityDecayedWithoutRoad?.Invoke(f);
+            }
         }
 
         public bool RemoveFacility(int id)
@@ -640,6 +681,7 @@ namespace CityBuilder.Simulation.Utilities
 
         public void Tick(SimulationWorld world)
         {
+            UpdateRoadAccess(world); // Frei setzen: Biogas/Speicher ohne Zufahrt außer Betrieb, verfallen (vor dem Netzaufbau)
             if (roads.Version != builtRoadVersion || city.Version != builtCityVersion || StructureVersion != builtStructureVersion)
             {
                 Rebuild(UtilityKind.Power);
@@ -654,7 +696,7 @@ namespace CityBuilder.Simulation.Utilities
             // Energie erweitert: Nennleistung je Bauwerk × Verfügbarkeit (Abfluss, Wind, Rohstoff; Onshore-Wind/Solar weiter konstant)
             UpdateAvailability(world);
             foreach (var f in facilities.Values)
-                if (!f.IsStorage) f.Output = f.Rated * f.Availability * OutputFactor(f);
+                if (!f.IsStorage) f.Output = f.MissingRoad ? 0f : f.Rated * f.Availability * OutputFactor(f);
             bool changed = Distribute(UtilityKind.Power) | Distribute(UtilityKind.Water) | Distribute(UtilityKind.Sewage);
             if (changed) StatusVersion++;
             UpdateDurations();

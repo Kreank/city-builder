@@ -720,7 +720,75 @@ namespace CityBuilder.Simulation.Roads
             }
             foreach (int id in inside) network.RemoveSegment(id);
 
+            ConnectNearbyDeadEnds(network, plan, built);
             return built;
+        }
+
+        /// <summary>
+        /// Straßenenden, die knapp vor dem Ring enden (Sackgasse, Richtung Mitte, gleiche Ebene) – z. B. der Zubringer
+        /// der Anschlussstelle, wenn der Kreisverkehr direkt an sein Ende gesetzt wurde –, sehen angeschlossen aus, hängen
+        /// aber nicht am Netz. Sie bekommen ein kurzes Verbindungsstück zum Ring. Ist die Lücke kürzer als ein Segment
+        /// sein darf, wird das Ende ein Stück zurückgenommen.
+        /// </summary>
+        static void ConnectNearbyDeadEnds(RoadNetwork network, RoundaboutPlan plan, List<RoadSegment> built)
+        {
+            if (built.Count == 0) return;
+            var candidates = new List<RoadNode>();
+            foreach (var n in network.Nodes)
+            {
+                if (n.SegmentIds.Count != 1) continue;
+                var seg = network.GetSegment(n.SegmentIds[0]);
+                if (seg == null || seg.IsRoundabout || seg.Type.Category != RoadCategory.City || !seg.Type.CanConnectTo(plan.Type)) continue;
+                float d = Vector2.Distance(n.Position, plan.Center);
+                float gap = d - plan.Radius;
+                if (gap < -0.5f || gap > plan.Type.HalfWidth + seg.Type.HalfWidth + 2f) continue;
+                // Die Straße muss von außen auf den Ring zulaufen
+                var away = RoadGeometry.OutgoingDirection(seg, n);
+                var radial = d > 1e-3f ? (n.Position - plan.Center) / d : Vector2.UnitX;
+                if (Vector2.Dot(away, radial) < 0.5f) continue;
+                candidates.Add(n);
+            }
+            candidates.Sort((a, b) => a.Id.CompareTo(b.Id));
+
+            foreach (var node in candidates)
+            {
+                if (!network.Contains(node) || node.SegmentIds.Count != 1) continue;
+                var seg = network.GetSegment(node.SegmentIds[0]);
+                var from = node;
+                float d = Vector2.Distance(node.Position, plan.Center);
+                var radial = d > 1e-3f ? (node.Position - plan.Center) / d : Vector2.UnitX;
+                var target = plan.Center + radial * plan.Radius;
+                float need = RoadNetwork.MinSegmentLength + 1f;
+                if (Vector2.Distance(node.Position, target) < need)
+                {
+                    // Ende zurücknehmen: Segment so zerteilen, dass das Verbindungsstück lang genug wird
+                    if (seg.Length < need * 2f + RoadNetwork.MinSegmentLength) continue;
+                    bool atStart = seg.Start == node;
+                    float back = (need - MathF.Max(0f, d - plan.Radius) + 0.5f) / seg.Length;
+                    float t = atStart ? back : 1f - back;
+                    var mid = network.SplitSegment(seg, Math.Clamp(t, 0.05f, 0.95f));
+                    foreach (int id in new List<int>(mid.SegmentIds))
+                    {
+                        var part = network.GetSegment(id);
+                        if (part != null && part.Touches(node)) { network.RemoveSegment(id); break; }
+                    }
+                    from = mid;
+                }
+                RoadSegment ringSeg = null;
+                float bestRing = 2f;
+                foreach (var s in network.Segments)
+                {
+                    if (!s.IsRoundabout) continue;
+                    float dist = Vector2.Distance(s.Evaluate(s.ClosestT(target)), target);
+                    if (dist < bestRing) { bestRing = dist; ringSeg = s; }
+                }
+                if (ringSeg == null) continue;
+                float ringHeight = ringSeg.HeightAt(ringSeg.ClosestT(target));
+                if (MathF.Abs(ringHeight - from.Height) > RoadNetwork.SameLevelTolerance) continue;
+                var connector = Plan(network, from.Position, 0.5f, null, target, 1.5f, seg.Type, from.Height, ringHeight);
+                if (connector.IsValid && connector.EndAnchor.Kind != AnchorKind.Free)
+                    built.AddRange(BuildUncharged(network, connector));
+            }
         }
         // ------------------------------------------------------------ Stadtkasse
 
@@ -745,12 +813,17 @@ namespace CityBuilder.Simulation.Roads
         }
 
         /// <summary>Neubauwert eines Segments (Länge × Preis/m × Brücken-/Tunnelfaktor) – Basis für Unterhalt und Abrisserlös.</summary>
+        /// <summary>Bis zu diesem Abstand Fahrbahn ↔ Gelände gilt eine Straße beim Neubauwert als ebenerdig.</summary>
+        public const float GroundLevelTolerance = 0.5f;
+
         public static float SegmentValue(RoadSegment segment)
         {
             float min = float.MaxValue, max = float.MinValue;
             for (int i = 0; i <= 8; i++)
             {
                 float e = segment.ElevationAt(i / 8f);
+                // Ebenerdig = Gelände knapp unter der Fahrbahn (TerrainMap.UnderRoad) – kein Brückenzuschlag
+                if (MathF.Abs(e) <= GroundLevelTolerance) e = 0f;
                 min = MathF.Min(min, e);
                 max = MathF.Max(max, e);
             }

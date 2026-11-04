@@ -146,7 +146,48 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(1f, s.CoverageAt(ServiceKinds.Park, new Vector2(300, 360)), 3);
             Assert.Equal(0f, s.CoverageAt(ServiceKinds.Park, new Vector2(300, 300 + 8 + ServiceCatalog.ParkSmall.Range + 5f)));
             // Polizei braucht dagegen eine Zufahrt
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.PoliceStation, new Vector2(-300, -300)).Error);
+            Assert.True(s.Plan(ServiceCatalog.PoliceStation, new Vector2(-300, -300)) is var nr1 && nr1.IsValid && nr1.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
+        }
+
+        // ------------------------------------------------------------ Frei setzen (2026-11-04)
+
+        [Fact]
+        public void FreePlacement_ServiceAndBiogas_WaitForRoad_OrDecay()
+        {
+            var w = SimulationWorld.CreateDefault();
+            var s = w.Services;
+            int decayed = 0, utilDecayed = 0;
+            s.FacilityDecayedWithoutRoad += _ => decayed++;
+            w.Utilities.FacilityDecayedWithoutRoad += _ => utilDecayed++;
+
+            // Polizei und Klinik ohne Straße: gültig, ohne Wirkung
+            var waiting = s.Build(s.Plan(ServiceCatalog.PoliceStation, new Vector2(-200, 200)));
+            var lonely = s.Build(s.Plan(ServiceCatalog.Clinic, new Vector2(250, -250)));
+            var biogasPlan = w.Utilities.PlanFacility(UtilityCatalog.BiogasPlant, new Vector2(300, 300));
+            Assert.True(biogasPlan.IsValid && biogasPlan.MissingRoad, biogasPlan.Error.ToString());
+            var biogas = w.Utilities.BuildFacility(biogasPlan);
+            Assert.NotNull(waiting);
+            Assert.NotNull(lonely);
+            Assert.NotNull(biogas);
+
+            for (int i = 0; i < SimulationClock.TicksPerDay; i++) w.Step();
+            Assert.True(waiting.MissingRoad);
+            Assert.InRange(s.DaysUntilNoRoadDecay(waiting), 1.5f, 2.5f);
+            Assert.True(biogas.MissingRoad);
+            Assert.Equal(0f, biogas.Output);
+
+            // Straße vor die Vorderseite der Polizei → Zufahrt, bleibt stehen
+            var mid = waiting.Position + waiting.Front * (ServiceCatalog.PoliceStation.Depth * 0.5f + RoadCatalog.CityTwoLane.HalfWidth + 0.5f);
+            var side = new Vector2(-waiting.Front.Y, waiting.Front.X) * 60f;
+            Road(w, mid - side, mid + side);
+            for (int i = 0; i < 2 * SimulationClock.TicksPerDay + 20; i++) w.Step();
+
+            Assert.NotNull(s.GetFacility(waiting.Id));
+            Assert.True(waiting.HasAccess);
+            Assert.Equal(-1f, s.DaysUntilNoRoadDecay(waiting));
+            Assert.Null(s.GetFacility(lonely.Id));
+            Assert.Equal(1, decayed);
+            Assert.Equal(1, utilDecayed);
         }
 
         // ------------------------------------------------------------ Abdeckung von Gebäuden, Überlastung
@@ -262,7 +303,7 @@ namespace CityBuilder.Simulation.Tests
             var s = w.Services;
             Assert.Equal(ServiceBuildError.OverlapsRoad, s.Plan(ServiceCatalog.PoliceStation, new Vector2(100, 5)).Error);
             Assert.Equal(ServiceBuildError.OutOfWorld, s.Plan(ServiceCatalog.Hospital, w.Max - new Vector2(5, 5)).Error);
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.Library, new Vector2(100, 120)).Error);
+            Assert.True(s.Plan(ServiceCatalog.Library, new Vector2(100, 120)) is var nr2 && nr2.IsValid && nr2.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
 
             var school = s.TryBuild(ServiceCatalog.PrimarySchool, new Vector2(100, 20), 180f); // Vorderseite zur Straße (Süden)
             Assert.NotNull(school);

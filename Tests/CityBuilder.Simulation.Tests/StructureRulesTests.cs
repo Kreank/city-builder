@@ -166,11 +166,11 @@ namespace CityBuilder.Simulation.Tests
             var s = w.Services;
             Assert.True(s.PlanAligned(ServiceCatalog.Clinic, new Vector2(0, 20), 15f).IsValid);  // leicht schräg: Zufahrt bleibt
             var side = s.PlanAligned(ServiceCatalog.Clinic, new Vector2(0, 20), 90f);           // Vorderseite längs der Straße
-            Assert.Equal(ServiceBuildError.NoRoadAccess, side.Error);
+            Assert.True(side is var nr1 && nr1.IsValid && nr1.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             var back = s.PlanAligned(ServiceCatalog.Clinic, new Vector2(0, 20), 180f);          // Rücken zur Straße
-            Assert.Equal(ServiceBuildError.NoRoadAccess, back.Error);
+            Assert.True(back is var nr2 && nr2.IsValid && nr2.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             // Rückseite an der Straße zählt nicht mehr als Zufahrt (früher: irgendein Rand ≤ 8 m)
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.Clinic, new Vector2(0, -16), 180f).Error);
+            Assert.True(s.Plan(ServiceCatalog.Clinic, new Vector2(0, -16), 180f) is var nr3 && nr3.IsValid && nr3.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             Assert.True(s.Plan(ServiceCatalog.Clinic, new Vector2(0, -16), 0f).IsValid);
             // Parks brauchen keine Vorderseite und richten sich nicht aus
             var park = s.PlanAligned(ServiceCatalog.ParkSmall, new Vector2(0, 30), 90f);
@@ -188,7 +188,7 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(coal.IsValid, coal.Error.ToString());
             Assert.True(coal.Aligned);
             Assert.Equal(1f, coal.Front.Y, 3); // Vorderseite nach Norden zur Straße
-            Assert.Equal(UtilityBuildError.NoRoadAccess, u.PlanFacilityAligned(UtilityCatalog.CoalPlant, new Vector2(0, -40), 180f).Error);
+            Assert.True(u.PlanFacilityAligned(UtilityCatalog.CoalPlant, new Vector2(0, -40), 180f) is var nr4 && nr4.IsValid); // Frei setzen: gültig (Kraftwerk braucht keine Zufahrt)
             // Überland ohne Straße in der Nähe: keine Zufahrtspflicht (Anschluss per Leitung)
             Assert.True(u.PlanFacility(UtilityCatalog.CoalPlant, new Vector2(0, 400)).IsValid);
             var wind = u.PlanFacilityAligned(UtilityCatalog.WindTurbine, new Vector2(0, 20), 45f);
@@ -217,7 +217,7 @@ namespace CityBuilder.Simulation.Tests
             // Regeln: nicht auf die Straße, nicht auf ein anderes Bauwerk, nicht mit dem Rücken zur Straße
             Assert.Equal(ServiceBuildError.OverlapsRoad, s.PlanMove(id, new Vector2(0, 5), Vector2.UnitY).Error);
             Assert.Equal(ServiceBuildError.OverlapsFacility, s.PlanMove(id, new Vector2(100, 40), -Vector2.UnitY).Error);
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.PlanMove(id, new Vector2(0, -40), -Vector2.UnitY).Error);
+            Assert.True(s.PlanMove(id, new Vector2(0, -40), -Vector2.UnitY) is var nr5 && nr5.IsValid && nr5.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             // Ein Stück entlang der Straße (überlappt die eigene alte Fläche – erlaubt)
             var target = s.PlanAligned(ServiceCatalog.Landfill, new Vector2(-80, 40), 0f, id);
             Assert.True(target.IsValid, target.Error.ToString());

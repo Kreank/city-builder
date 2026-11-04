@@ -144,8 +144,7 @@ namespace CityBuilder.Game.Zoning
             if (kb == null) return;
             if (kb.digit6Key.wasPressedThisFrame && !kb.shiftKey.isPressed) tool.ToggleMode(RoadTool.Mode.House); // erneut 6 = Auswählen
             if (!Active) return;
-            if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
-            if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
+            { float turn = GameKeyboard.RotateInput(kb, 15f); if (turn != 0f) Rotate(turn); } // , . oder Strg links + Mausrad
         }
 
         void LateUpdate()

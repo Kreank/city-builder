@@ -173,6 +173,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Unterirdisch-Ansicht (X, automatisch beim Bauen unter 0 m) macht den Boden durchsichtig.
 - `RoadTemplates`: Raute, Kleeblatt, Dreieck – Quadrant 4 wird beschrieben und um 90° gedreht (A↔B tauschen).
 - `RoadNetwork.SegmentReplaced` (Zerteilen/Umbau/Umdrehen) → Verkehrsregeln wandern mit.
+- **Übergänge überarbeitet (2026-11-04, Spielertest „Boden scheint durch“):** Gelände unter überlappenden Straßen richtet sich nach der
+  **niedrigsten** Fahrbahn (`RoadRule`, ebenso Gleise), `TerrainMap.UnderRoad` 0,2 m; Knick-Eckstücke mit Höhenverlauf
+  (`BendLayout.HeightAt`); Gehweg läuft an Rampen keilförmig aus (`TaperedSidewalk`); Mesh: Brüstungen/Trogwände enden am gekürzten
+  Straßenende, Seitenschürze 0,6 m unter Gelände, Sackgassen-Kappen, sternförmige Kreuzungsflächen als Fächer auf Knotenhöhe; Kamera-
+  Near-Ebene wächst mit dem Zoom (gegen Z-Fighting). Kreisverkehr verbindet Sackgassen, die auf den Ring zulaufen
+  (`RoadBuilder.ConnectNearbyDeadEnds`). Optik ungeprüft; offen: Stufe Damm → Brücke am Zubringer-Stummel, Vorschau des Verbindungsstücks.
 - **Bauwerks-Sperre (UX-Runde)** `Simulation/Roads/StructureRules.cs`: Straßen reißen Dienste, Versorger und Busdepots
   **nicht** mehr ab. Bauwerksarten melden sich mit einer Zeile an: `roads.RegisterStructures(() => blocks)` (je Bauwerk ein
   `StructureBlock` = Art, Id, Name, `Footprint`, Höhe; angemeldet: `ServiceSystem` „service“, `UtilitySystem` „utility“,
@@ -442,6 +448,12 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
   Zustände werden jedes Frame aus den Quellen gelesen → Tasten und Knöpfe bleiben synchron. Die Kategorie folgt dem Modus.
 - Icons: `HudIcon` zeichnet per Painter2D (24er-Raster, Farbe = `color`), keine Bilddateien.
+- **Bauleiste aufgeräumt (Spieltest „zu viele Symbole“):** `GameHud.Tiles.cs` – `ThumbTile` (Vorschaubild des 3D-Modells + Name +
+  Kosten, Details im Tooltip; ohne Modell schlichtes Icon in Gruppenfarbe) und Gruppen-Reiter (`BeginGroups/AddGroup/AddToGroup/
+  FinishGroups`; Reiter folgt dem aktiven Werkzeug, Klick auf einen Reiter wählt nichts, gemerkt je Kategorie). Versorgung: Strom
+  erzeugen | Strom verteilen | Wasser | Abwasser | Werkzeuge; Dienste: Sicherheit | Gesundheit | Bildung | Parks & Freizeit |
+  Wahrzeichen | Müll | Medien | Umwelt. Bilder rendert `ModelThumbnails` (Laufzeit, Ebene 31, weit außerhalb der Karte,
+  orthografische 3/4-Ansicht, URP `RenderPipeline.StandardRequest`, 2 je Frame, Cache je Schlüssel). Optik ungeprüft.
 - Mausblockade: `UiBlocker.RegisterToolkitRoot` → `IsPointerOverUi` prüft zusätzlich `panel.Pick`. Reine Layout-Container
   haben `PickingMode.Ignore`, nur echte Flächen blockieren. IMGUI-Fenster richten sich nach `HudLayout` (Top/Bottom/LeftInset).
 - Meldungen: `HudMessages.Info/Warning(title, text, icon, key)` – gleicher `key` ersetzt die alte Meldung.
@@ -1076,7 +1088,16 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (`DecayWithoutRoad` in `UpdateBuildings`), dann Abriss ohne Erstattung + Event `HouseDecayedWithoutRoad` (HUD-Meldung in
   `LandValueAlerts`). Bekommt eine Baustelle ihre Straße (`RevalidateHouseAccess`), startet sie wieder neuwertig. Gilt auch für
   fertige Häuser, deren Straße abgerissen wird. Inspektor: „Ohne Straße – verfällt in …“ (`DaysUntilNoRoadDecay`). Kein neues
-  Spielstandfeld (läuft über `Condition`). Dienste/Versorger/Depots verlangen weiter eine Zufahrt.
+  Spielstandfeld (läuft über `Condition`). **Dienste** (`NeedsRoadFront`) ebenso: Plan gültig ohne Zufahrt (`ServicePlan.MissingRoad`),
+  ohne Straße keine Wirkung, nach `ServiceSystem.NoRoadDays` (= 3) Tagen Abriss ohne Erstattung (`FacilityDecayedWithoutRoad`,
+  `NoRoadTicks`, services v2). **Versorger:** keine Zufahrtspflicht beim Setzen mehr; Biogas/Speicher (`RequiresRoadAccess`) sind
+  ohne Straße außer Betrieb (`UtilityFacility.MissingRoad`, Leistung 0) und verfallen ebenso (utilities v4); Kraftwerke u. a. laufen
+  über Leitungen wie bisher. HUD-Meldung gemeinsam in `LandValueAlerts`, Inspektor „Ohne Straße – verfällt in …“. Depots verlangen
+  weiter eine Zufahrt.
+- **Drehen beim Setzen (2026-11-04, Spieler):** **Strg links + Mausrad** (15°/Raste, Flughafen 5°) zusätzlich zu `,`/`.` in Haus-,
+  Dienste-, Versorgungs-, ÖPNV-, Flughafen-, Vorlagen-Werkzeug und beim Verschieben (`GameKeyboard.RotateInput`); solange Strg links
+  gehalten wird, zoomt die Kamera nicht. Vorschau-Geister (`PlacementGhost.ShowModel`) passen das Modell wie die Ansichten an
+  (Einheitenkorrektur, mehrere Anlagen wie beim Offshore-Park); Verschieben zeigt jetzt auch das echte Modell.
 - **Bevölkern:** kein Sonderweg – gesetzte Häuser sind normale Wohnungen (Zuzug, Umzug, `HomeScore`, Wohnkomfort je Zone).
 - **Aufstieg nach Bedürfnissen** (`Zoning/HouseRules`, datengetrieben; Auswertung `LandValue/LandValueSystem.Houses.cs`, täglich
   in `EvaluateBuildings` statt der G6-Regeln): je Stufe eine `HouseLevelRule` (neue harte `HouseNeed`s, weiche Zufriedenheit/
@@ -1763,7 +1784,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   Gateway. `ConnectionHint` („Stadt an die A 7 (Zubringer an der Anschlussstelle) anschließen, damit Leute kommen.“) solange ein
   Wohngebäude ohne Anschluss ist (Stundenprüfung). **Bahn:** ein Personenbahnhof in Betrieb im Netzteil zählt als Anschluss
   (`RailEntryFor` → Zugangsknoten des Bahnhofs, abwechselnd nach Wichtigkeit mit der Autobahn; `RailGatewayOfNode` ordnet
-  Bahnhofsknoten dem Rail-Gateway zu, `OfNode` fällt darauf zurück).
+  Bahnhofsknoten dem Rail-Gateway zu, `OfNode` fällt darauf zurück). **`ConnectionHint`** wird sofort nach Straßen-/Gebäudeänderung neu
+  gezählt (auch in der Pause) und verschwindet schon, wenn eigene Straßen am Zubringer hängen (`PlayerRoadsConnected`), nicht erst mit
+  der ersten Wohnung (Spielertest: Kreisverkehr am Zubringer „zählte nicht“, Test `FeederRoundaboutTests`).
 - **Handel** (Hook `GoodsSystem.PreferredGateway`, `RequireGatewayForTrade`): `TradeNode(gut, import, vertrag, netzteil)` – Vertrag →
   Partner des laufenden Vertrags (`ContractPartner`), Weltmarkt → günstigstes Lieferland (Preis + Fracht) bzw. bester Abnehmer
   (`SpotPartner`, täglich); `GatewayToward(land)`: Landweg → Gateway Richtung Handelsort des Landes, Seeweg → Gateway Richtung Hafen

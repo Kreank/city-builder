@@ -462,18 +462,23 @@ namespace CityBuilder.Game.UI.Hud
             tools.Add(PValue(() => $"{utilityTool.Rotation:0}°"));
             tools.Add(PBtn("+15°", () => utilityTool.Rotate(15f), null, "Bauwerk drehen (.)"));
             tools.Add(Container("cb-spacer"));
+            // Aufgeräumt: Info-Ansichten als eine Segmentgruppe „Ansicht“ statt vier einzelner Knöpfe
+            if (utilityOverlay != null || envOverlay != null) tools.Add(PLabel("Ansicht"));
+            var views = Container("cb-segment");
             if (utilityOverlay != null)
             {
-                tools.Add(PBtn("Strom-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Power),
-                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Info-Ansicht Strom (O)"));
-                tools.Add(PBtn("Wasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Water),
-                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Info-Ansicht Wasser (O)"));
-                tools.Add(PBtn("Abwasser-Ansicht", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Sewage),
-                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Info-Ansicht Abwasser (O)")); // G3 erweitert
+                views.Add(PBtn("Strom", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Power),
+                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Power, "Info-Ansicht Strom (O): versorgte Gebäude grün, unversorgte rot", "cb-seg-btn"));
+                views.Add(PBtn("Wasser", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Water),
+                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Water, "Info-Ansicht Wasser (O)", "cb-seg-btn"));
+                views.Add(PBtn("Abwasser", () => utilityOverlay.Toggle(UtilityOverlayView.Overlay.Sewage),
+                    () => utilityOverlay.Current == UtilityOverlayView.Overlay.Sewage, "Info-Ansicht Abwasser (O)", "cb-seg-btn")); // G3 erweitert
             }
             if (envOverlay != null) // G3 erweitert: Wasserverschmutzung
-                tools.Add(PBtn("Wasserqualität", () => envOverlay.Toggle(CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality),
-                    () => envOverlay.Current == CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality, "Verschmutzung der Gewässer (braun = verschmutzt)"));
+                views.Add(PBtn("Qualität", () => envOverlay.Toggle(CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality),
+                    () => envOverlay.Current == CityBuilder.Game.Environment.EnvironmentOverlayView.Overlay.WaterQuality,
+                    "Wasserqualität: Verschmutzung der Gewässer (braun = verschmutzt)", "cb-seg-btn"));
+            if (views.childCount > 0) tools.Add(views);
             tools.Add(PBtn("Unterirdisch", tool.ToggleUndergroundView, () => tool.UndergroundView, "Unterirdisch-Ansicht (X) – Rohre, Kanäle und Erdkabel liegen unter dem Gelände"));
             panelBody.Add(tools);
 
@@ -496,17 +501,28 @@ namespace CityBuilder.Game.UI.Hud
             panelBody.Add(along);
             // --- Ende
 
-            var tiles = Container("cb-tiles");
+            // Aufgeräumt: Gruppen-Reiter statt einer langen Reihe, Kacheln mit Vorschaubild des Modells, Unterzeile = Kosten
+            var groups = BeginGroups(Category.Utilities);
+            var gGenerate = AddGroup(groups, "Strom erzeugen", HudIconKind.Power, PowerSwatch,
+                "Kraftwerke, Wind, Sonne, Wasserkraft, Biogas, Atom – große speisen in die Hochspannung, kleine auch ins Ortsnetz");
+            var gDistribute = AddGroup(groups, "Strom verteilen", HudIconKind.Power, PowerSwatch,
+                "Kraftwerk → Hochspannung → Umspannwerk → Ortsnetz (Freileitung/Erdkabel) → Haus · Speicher puffern das Netz");
+            var gWater = AddGroup(groups, "Wasser", HudIconKind.Water, WaterSwatch, "Pumpe am Ufer, Brunnen/Wasserturm, Wasserrohre selbst verlegen");
+            var gSewage = AddGroup(groups, "Abwasser", HudIconKind.Pipe, SewageSwatch, "Kläranlage oder Auslass, Abwasserkanäle selbst verlegen");
+            var gTools = AddGroup(groups, "Werkzeuge", HudIconKind.Road, TrafficSwatch, "Netz automatisch entlang der Straßen verlegen (Vorschau mit Kosten)");
             foreach (var type in UtilityCatalog.All)
             {
                 var t = type;
                 string unit = UtilityCatalog.Unit(t.Kind);
                 string power = t.IsSubstation ? $"{BuildLabels.Number(t.Capacity / 1000f)} MW" : $"{BuildLabels.Number(t.Capacity)} {unit}";
-                tiles.Add(Tile(BuildLabels.FacilityName(t), power,
+                Func<bool> on = () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Facility && utilityTool.SelectedType == t;
+                var group = t.Kind == UtilityKind.Water ? gWater : t.Kind == UtilityKind.Sewage ? gSewage
+                    : t.IsGenerator ? gGenerate : gDistribute;
+                AddToGroup(group, ThumbTile(BuildLabels.FacilityName(t), BuildLabels.Money(t.Cost),
                     t.Kind == UtilityKind.Power ? PowerSwatch : t.Kind == UtilityKind.Sewage ? SewageSwatch : WaterSwatch,
                     t.Kind == UtilityKind.Power ? HudIconKind.Power : t.Kind == UtilityKind.Sewage ? HudIconKind.Pipe : HudIconKind.Water,
-                    () => utilityTool.SelectFacility(t),
-                    () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.Facility && utilityTool.SelectedType == t,
+                    "fac:" + t.Id, ModelThumbnails.Facility(t.Id),
+                    () => utilityTool.SelectFacility(t), on,
                     $"{t.DisplayName} · {(t.IsSubstation ? "Umspannkapazität" : "Leistung")} {power} · Fläche {t.Width:0}×{t.Depth:0} m · " +
                     $"Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerDay)}/Tag (Stadtkasse)" +
                     (t.NeedsWater ? " · muss am Wasser stehen" : "") +
@@ -523,32 +539,33 @@ namespace CityBuilder.Game.UI.Hud
                     (t.Output == OutputModel.Hydro ? " · nur im Fluss (Wehr quer zum Fluss) · Leistung je Standort aus Abfluss und Fallhöhe (Uferhöhe), schwankt mit dem Niederschlag · Fluss bleibt durchgängig" : "") +
                     (t.Site == FacilitySite.Sea ? " · nur im offenen Meer · Wind schwankt stündlich (Ø ≈ 50 %) · Anschluss per Hochspannungs-Seekabel" : "") +
                     (t.Output == OutputModel.Biogas ? $" · braucht Zufahrt (Anlieferung) · Rohstoff aus Bauernhöfen im Umkreis {UtilitySystem.BiogasFeedRadius / 1000f:0} km, sonst {UtilitySystem.BiogasBaseShare * 100f:0} % Grundlast" : "") +
-                    (t.IsStorage ? $" · speichert {t.StorageKwh / 1000f:0} MWh · lädt bei Überschuss, liefert bei Unterdeckung (nach den Kraftwerken)" : "")));
+                    (t.IsStorage ? $" · speichert {t.StorageKwh / 1000f:0} MWh · lädt bei Überschuss, liefert bei Unterdeckung (nach den Kraftwerken)" : "")), on);
             }
-            tiles.Add(Container("cb-tile-sep"));
             float reach = ConnectionRules.BuildingReach;
-            LineTile(tiles, UtilityTool.UtilityAction.HighVoltageLine, PowerSwatch, HudIconKind.Power,
-                $"Hochspannung vom Kraftwerk zum Umspannwerk · große Masten (Spannweite bis {UtilityCatalog.HighVoltageLine.MaxSpan:0} m) · keine Hausanschlüsse");
-            LineTile(tiles, UtilityTool.UtilityAction.SubseaCable, PowerSwatch, HudIconKind.Underground, // Energie erweitert
+            // Leitungen hinter die Bauwerke ihrer Gruppe (Hochspannung mit Mast-Modell, sonst schlichtes Icon)
+            LineTile(gDistribute, UtilityTool.UtilityAction.HighVoltageLine, PowerSwatch, HudIconKind.Power,
+                $"Hochspannung vom Kraftwerk zum Umspannwerk · große Masten (Spannweite bis {UtilityCatalog.HighVoltageLine.MaxSpan:0} m) · keine Hausanschlüsse",
+                "extra:power_pylon", ModelThumbnails.Extra(CityBuilder.Game.Assets.OwnModelRoles.Infrastructure, "power_pylon"));
+            LineTile(gDistribute, UtilityTool.UtilityAction.SubseaCable, PowerSwatch, HudIconKind.Underground, // Energie erweitert
                 "Hochspannung ohne Masten: Seekabel vom Offshore-Windpark zum Umspannwerk an Land oder Erdkabel unter Straßen · dreimal so teuer wie die Freileitung");
-            LineTile(tiles, UtilityTool.UtilityAction.PowerLine, PowerSwatch, HudIconKind.Power,
+            LineTile(gDistribute, UtilityTool.UtilityAction.PowerLine, PowerSwatch, HudIconKind.Power,
                 $"Ortsnetz als Freileitung vom Umspannwerk entlang der Straße · billig · kleine Masten neben der Straße brauchen Platz " +
                 $"(Abstand ≤ {UtilitySystem.MaxPoleSpan:0} m, kein Abriss) · Gebäude ≤ {reach:0} m angeschlossen, Seil zum Haus");
-            LineTile(tiles, UtilityTool.UtilityAction.PowerCable, PowerSwatch, HudIconKind.Underground,
+            LineTile(gDistribute, UtilityTool.UtilityAction.PowerCable, PowerSwatch, HudIconKind.Underground,
                 $"Ortsnetz als Erdkabel unter dem Gehweg · teurer, braucht keinen Platz · Gebäude ≤ {reach:0} m angeschlossen");
-            LineTile(tiles, UtilityTool.UtilityAction.WaterPipe, WaterSwatch, HudIconKind.Pipe,
+            LineTile(gWater, UtilityTool.UtilityAction.WaterPipe, WaterSwatch, HudIconKind.Pipe,
                 $"Wasserrohr selbst verlegen (Straßen führen kein Wasser mit) · unter dem Gehweg einrasten · Gebäude ≤ {reach:0} m angeschlossen");
             // --- G3 erweitert: Abwasserkanal
-            LineTile(tiles, UtilityTool.UtilityAction.SewagePipe, SewageSwatch, HudIconKind.Pipe,
+            LineTile(gSewage, UtilityTool.UtilityAction.SewagePipe, SewageSwatch, HudIconKind.Pipe,
                 $"Abwasserkanal (unterirdisch, selbst verlegen) · Gebäude mit Zufahrt ≤ {reach:0} m vom Kanal sind angeschlossen · am besten entlang der Straßen, Kette bis zur Kläranlage/zum Auslass");
             // --- Netze selbst verlegt: Hilfe für bestehende Städte und normales Bauen
-            tiles.Add(Tile("Entlang Straßen", "Vorschau + Kosten", PowerSwatch, HudIconKind.Road,
-                () => utilityTool.SelectAlong(utilityTool.AlongType),
-                () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.AlongRoads,
+            Func<bool> alongOn = () => utilityTool.Active && utilityTool.Current == UtilityTool.UtilityAction.AlongRoads;
+            AddToGroup(gTools, ThumbTile("Entlang Straßen", "Vorschau + Kosten", TrafficSwatch, HudIconKind.Road, null, null,
+                () => utilityTool.SelectAlong(utilityTool.AlongType), alongOn,
                 "Netz entlang Straßen verlegen: Erdkabel, Freileitung, Wasserrohr oder Kanal automatisch entlang der Straße unter dem Mauszeiger " +
-                "oder aller Stadtstraßen – zu den normalen Kosten, Vorschau mit Kosten und neu angeschlossenen Gebäuden"));
+                "oder aller Stadtstraßen – zu den normalen Kosten, Vorschau mit Kosten und neu angeschlossenen Gebäuden"), alongOn);
             // --- Ende
-            panelBody.Add(tiles);
+            FinishGroups(groups);
 
             var info = Container("cb-info-row");
             info.Add(BalanceLabel(u, UtilityKind.Power));
@@ -561,12 +578,13 @@ namespace CityBuilder.Game.UI.Hud
         }
 
         /// <summary>Kachel eines Leitungs-Werkzeugs (Name, Preis je Meter aus der Leitungsart).</summary>
-        void LineTile(VisualElement tiles, UtilityTool.UtilityAction action, Color swatch, HudIconKind icon, string tip)
+        void LineTile(TileGroup group, UtilityTool.UtilityAction action, Color swatch, HudIconKind icon, string tip,
+            string thumbKey = null, Func<GameObject> build = null)
         {
             var t = UtilityTool.LineTypeOf(action);
-            tiles.Add(Tile(ShortLineName(t), $"{t.CostPerMeter:0} €/m", swatch, icon,
-                () => utilityTool.Select(action),
-                () => utilityTool.Active && utilityTool.Current == action, tip));
+            Func<bool> on = () => utilityTool.Active && utilityTool.Current == action;
+            AddToGroup(group, ThumbTile(ShortLineName(t), $"{t.CostPerMeter:0} €/m", swatch, icon, thumbKey, build,
+                () => utilityTool.Select(action), on, tip), on);
         }
 
         static string ShortLineName(UtilityLineType t)
@@ -615,36 +633,72 @@ namespace CityBuilder.Game.UI.Hud
             }
             panelBody.Add(tools);
 
-            var tiles = Container("cb-tiles");
-            string lastKind = null;
+            // Aufgeräumt: Reiter je Aufgabe statt einer langen Reihe, Kacheln mit Vorschaubild, Unterzeile = Baukosten
+            var groups = BeginGroups(Category.Services);
+            var gSafety = AddGroup(groups, "Sicherheit", HudIconKind.Shield, BuildLabels.Hex(0x4A7FD6), "Polizei und Feuerwehr – Reichweite über das Straßennetz");
+            var gHealth = AddGroup(groups, "Gesundheit", HudIconKind.Service, BuildLabels.Hex(0xD65A5A), "Klinik und Krankenhaus");
+            var gEducation = AddGroup(groups, "Bildung", HudIconKind.People, BuildLabels.Hex(0xE0A21B), "Grundschule, Oberschule, Bibliothek");
+            var gLeisure = AddGroup(groups, "Parks & Freizeit", HudIconKind.Tree, BuildLabels.Hex(0x5FA35A), "Parks (Fußweg), Spiel- und Sportplätze, Freibad, Stadion, Riesenrad");
+            var gLandmark = AddGroup(groups, "Wahrzeichen", HudIconKind.Flag, BuildLabels.Hex(0xB08A4E), "Rathaus (einmalig), Kirche, Museum, Burg, Denkmäler – Bodenwert und Stolz");
+            var gGarbage = AddGroup(groups, "Müll", HudIconKind.Bulldoze, BuildLabels.Hex(0x8D8F96), "Müllhalde und Verbrennungsanlage");
+            var gMedia = AddGroup(groups, "Medien", HudIconKind.Noise, ServiceSwatch, "Zeitung, Radio, TV – Reichweite, Schlagzeilen aus echten Ereignissen");
+            var gEnvironment = AddGroup(groups, "Umwelt", HudIconKind.Air, BuildLabels.Hex(0x3E9E7A), "Bäume pflanzen, Lärmschutzwand");
+            var gOther = AddGroup(groups, "Weitere", HudIconKind.Service, ServiceSwatch, "Weitere Dienste");
+            TileGroup GroupOf(string kind)
+            {
+                switch (kind)
+                {
+                    case ServiceKinds.Police: case ServiceKinds.Fire: return gSafety;
+                    case ServiceKinds.Health: return gHealth;
+                    case ServiceKinds.Education: case ServiceKinds.Library: return gEducation;
+                    case ServiceKinds.Park: case ServiceKinds.Leisure: return gLeisure;
+                    case ServiceKinds.Landmark: return gLandmark;
+                    case ServiceKinds.Garbage: return gGarbage;
+                    case ServiceKinds.Media: return gMedia;
+                    default: return gOther;
+                }
+            }
+            Color AccentOf(TileGroup g) =>
+                g == gSafety ? BuildLabels.Hex(0x4A7FD6) : g == gHealth ? BuildLabels.Hex(0xD65A5A) : g == gEducation ? BuildLabels.Hex(0xE0A21B)
+                : g == gLeisure ? BuildLabels.Hex(0x5FA35A) : g == gLandmark ? BuildLabels.Hex(0xB08A4E) : g == gGarbage ? BuildLabels.Hex(0x8D8F96)
+                : g == gEnvironment ? BuildLabels.Hex(0x3E9E7A) : ServiceSwatch;
+            HudIconKind IconOf(TileGroup g) =>
+                g == gSafety ? HudIconKind.Shield : g == gEducation ? HudIconKind.People : g == gLeisure ? HudIconKind.Tree
+                : g == gLandmark ? HudIconKind.Flag : g == gGarbage ? HudIconKind.Bulldoze : g == gMedia ? HudIconKind.Noise : HudIconKind.Service;
+
             foreach (var type in ServiceCatalog.All)
             {
                 var t = type;
-                if (lastKind != null && t.Kind != lastKind) tiles.Add(Container("cb-tile-sep"));
-                lastKind = t.Kind;
+                var group = GroupOf(t.Kind);
                 string range = t.Broadcast ? $"Funkradius {t.Range:0} m" : t.Walking ? $"Fußweg {t.Range:0} m" : $"Reichweite {t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielmin.)"; // G4 erw.: Funk
-                tiles.Add(Tile(ServiceTool.ShortName(t), $"{BuildLabels.Number(t.Capacity)} {t.CapacityUnit}", ServiceSwatch, HudIconKind.Service,
-                    () => serviceTool.SelectType(t),
-                    () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t,
+                Func<bool> on = () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.Place && serviceTool.SelectedType == t;
+                AddToGroup(group, ThumbTile(ServiceTool.ShortName(t), BuildLabels.Money(t.Cost), AccentOf(group),
+                    t.Kind == ServiceKinds.Fire ? HudIconKind.Flame : IconOf(group),
+                    "svc:" + t.Id, ModelThumbnails.Service(t.Id),
+                    () => serviceTool.SelectType(t), on,
                     $"{t.DisplayName} · {ServiceKinds.DisplayName(t.Kind)} · Kapazität {BuildLabels.Number(t.Capacity)} {t.CapacityUnit}/Tag · {range} · " +
-                    $"Fläche {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerWeek)}/Woche"));
+                    $"Fläche {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)}, Unterhalt {BuildLabels.Money(t.UpkeepPerWeek)}/Woche"), on);
             }
-            // --- Eigene Assets: Lärmschutzwand (Linienbauwerk wie Leitungen) im Dienste-Werkzeug
-            tiles.Add(Container("cb-tile-sep"));
-            tiles.Add(Tile("Lärmschutzwand", $"{CityBuilder.Simulation.Environment.NoiseBarrierSystem.CostPerMeter:0} €/m", ServiceSwatch, HudIconKind.Road,
-                () => serviceTool.Select(ServiceTool.ServiceAction.NoiseBarrier),
-                () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.NoiseBarrier,
-                "Lärmschutzwand entlang von Straßen ziehen (rastet neben dem Gehweg ein, Strg = frei) · dämpft den Straßenlärm dahinter · " +
-                "Klick = Punkt, RMB/Esc = fertig"));
-            // --- Ende Eigene Assets
             // --- Umwelt (Etappe 6): Bäume pflanzen (Pinsel)
-            tiles.Add(Tile("Bäume pflanzen", $"{CityBuilder.Simulation.Environment.EcologyRules.CostPerTree:0} €/Baum", ServiceSwatch, HudIconKind.Tree,
-                () => serviceTool.Select(ServiceTool.ServiceAction.PlantTrees),
-                () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.PlantTrees,
+            var envAccent = AccentOf(gEnvironment);
+            Func<bool> treesOn = () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.PlantTrees;
+            var treeCatalog = CityBuilder.Game.Assets.AssetCatalog.Instance;
+            var tree = treeCatalog != null ? CityBuilder.Game.Assets.AssetCatalog.Pick(treeCatalog.Trees, 0) : null;
+            AddToGroup(gEnvironment, ThumbTile("Bäume pflanzen", $"{CityBuilder.Simulation.Environment.EcologyRules.CostPerTree:0} €/Baum", envAccent, HudIconKind.Tree,
+                "tree:0", ModelThumbnails.Mesh(tree),
+                () => serviceTool.Select(ServiceTool.ServiceAction.PlantTrees), treesOn,
                 "Aufforsten auf freier Fläche: Setzlinge wachsen in ~2 Monaten zum Wald, filtern Abgas, Boden erholt sich schneller · " +
-                "LMB halten = pflanzen, [ ] = Pinselgröße"));
+                "LMB halten = pflanzen, [ ] = Pinselgröße"), treesOn);
             // --- Ende Umwelt
-            panelBody.Add(tiles);
+            // --- Eigene Assets: Lärmschutzwand (Linienbauwerk wie Leitungen) im Dienste-Werkzeug
+            Func<bool> wallOn = () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.NoiseBarrier;
+            AddToGroup(gEnvironment, ThumbTile("Lärmschutzwand", $"{CityBuilder.Simulation.Environment.NoiseBarrierSystem.CostPerMeter:0} €/m", envAccent, HudIconKind.Noise,
+                "extra:noise_barrier", ModelThumbnails.Extra(CityBuilder.Game.Assets.OwnModelRoles.Infrastructure, "noise_barrier"),
+                () => serviceTool.Select(ServiceTool.ServiceAction.NoiseBarrier), wallOn,
+                "Lärmschutzwand entlang von Straßen ziehen (rastet neben dem Gehweg ein, Strg = frei) · dämpft den Straßenlärm dahinter · " +
+                "Klick = Punkt, RMB/Esc = fertig"), wallOn);
+            // --- Ende Eigene Assets
+            FinishGroups(groups);
 
             var info = Container("cb-info-row");
             var summary = Text("", "cb-muted");

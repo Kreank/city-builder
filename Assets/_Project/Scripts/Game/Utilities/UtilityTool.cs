@@ -205,8 +205,7 @@ namespace CityBuilder.Game.Utilities
             if (kb == null) return;
             if (kb.jKey.wasPressedThisFrame) tool.ToggleMode(RoadTool.Mode.Utility); // UX: erneut J = Auswählen
             if (!Active) return;
-            if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
-            if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
+            { float turn = GameKeyboard.RotateInput(kb, 15f); if (turn != 0f) Rotate(turn); } // , . oder Strg links + Mausrad
             // Esc/Rechtsklick: über RoadTool.RegisterOperation (beendet die Kette, sonst zurück zum Auswählen)
         }
 
@@ -296,7 +295,7 @@ namespace CityBuilder.Game.Utilities
             // Vorschau mit dem echten Modell in Baudrehung (sonst Quader)
             var catalog = CityBuilder.Game.Assets.OwnModelCatalog.Instance;
             ShowGhost(plan.Position, plan.Front, SelectedType.Width, SelectedType.Depth, plan.Height, 4f, plan.IsValid, SelectedType.NeedsRoadFront,
-                catalog != null ? catalog.Facility(SelectedType.Id) : null);
+                catalog != null ? catalog.Facility(SelectedType.Id) : null, SelectedType.Units);
             var t = SelectedType;
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°";
             string power = t.IsSubstation ? $"Umspannkapazität {t.Capacity / 1000f:0.#} MW" : $"{t.Capacity:0} {UtilityCatalog.Unit(t.Kind)}";
@@ -311,6 +310,8 @@ namespace CityBuilder.Game.Utilities
             if (t.IsSubstation) info += " · Hochspannung an einen Rand, Ortsnetz an einen anderen";
             else if (t.Kind == UtilityKind.Power) info += t.FeedsLocalGrid ? " · speist ins Ortsnetz oder in die Hochspannung" : " · Hochspannung zum Umspannwerk verlegen";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
+            if (plan.IsValid && plan.MissingRoad) // Frei setzen: Biogas/Speicher brauchen später eine Straße
+                info = $"Noch keine Straße – arbeitet erst mit Stadtstraße vor der Vorderseite (Pfeil), sonst verfällt es nach {UtilitySystem.NoRoadDays} Tagen · " + info;
             SetLabel(plan.IsValid ? info : plan.ObstacleNote ?? ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 8f)); // Flughafen: Hinweis zur Einflugschneise
             if (clicked && plan.IsValid) Utilities.BuildFacility(plan);
         }
@@ -498,13 +499,13 @@ namespace CityBuilder.Game.Utilities
         }
 
         void ShowGhost(SimVector2 pos, SimVector2 front, float width, float depth, float height, float tall, bool valid, bool showFront,
-                       GameObject model = null)
+                       GameObject model = null, int units = 1)
         {
             if (frontMarker == null) frontMarker = new PlacementGhost(transform, "Utility Front");
             if (model != null)
             {
                 ghost.SetActive(false);
-                frontMarker.ShowModel(model, pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront);
+                frontMarker.ShowModel(model, pos, front, width, depth, height, tall, valid ? okMaterial : badMaterial, showFront, units);
                 return;
             }
             ghost.SetActive(true);

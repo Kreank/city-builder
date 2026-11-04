@@ -285,10 +285,11 @@ namespace CityBuilder.Simulation.Rail
         // ------------------------------------------------------------ Gelände, Grundstücke, Bauwerke
 
         /// <summary>Wie die Straßenregel der Welt: unter ebenerdigen Gleisen liegt das Gelände knapp unter dem Schotterbett.</summary>
-        float TrackRule(Vector2 p, float proposed)
+        float TrackRule(Vector2 p, float proposed, out bool underTrack)
         {
+            underTrack = false;
             if (Tracks.SegmentCount == 0) return proposed;
-            float result = proposed;
+            float under = float.MaxValue, beside = float.MaxValue;
             float margin = terrain.RoadMargin;
             foreach (var s in Tracks.Segments)
             {
@@ -304,9 +305,11 @@ namespace CityBuilder.Simulation.Rail
                 float limit = s.FollowsTerrain ? TerrainMap.MaxCutFill + 0.5f : TerrainMap.ConformRange + 0.5f;
                 if (natural > limit || natural < -limit) continue;
                 float surface = h - TerrainMap.UnderRoad;
-                result = d <= s.Type.HalfWidth ? surface : MathF.Min(result, surface);
+                if (d <= s.Type.HalfWidth) under = MathF.Min(under, surface);
+                else beside = MathF.Min(beside, surface);
             }
-            return result;
+            underTrack = under < float.MaxValue;
+            return MathF.Min(underTrack ? under : proposed, beside);
         }
 
         /// <summary>

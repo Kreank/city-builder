@@ -80,7 +80,14 @@ namespace CityBuilder.Simulation.Rail
 
             // Gelände: Gleise haben Vorrang wie Straßen; Terraforming unter Gleisen und Bahnhöfen gesperrt
             var previousRule = terrain.RoadRule;
-            terrain.RoadRule = (p, proposed) => TrackRule(p, previousRule != null ? previousRule(p, proposed) : proposed);
+            terrain.RoadRule = (p, proposed) =>
+            {
+                float result = TrackRule(p, previousRule != null ? previousRule(p, proposed) : proposed, out bool underTrack);
+                // Unter einem Gleis setzt die Gleisregel die Höhe – am Bahnübergang darf sie trotzdem nicht über die Straße
+                // ragen: die Straßenregel noch einmal anwenden (sie nimmt dort die niedrigere Fläche).
+                if (underTrack && previousRule != null) result = MathF.Min(result, previousRule(p, result));
+                return result;
+            };
             var previousLocks = terrain.LockQuery;
             terrain.LockQuery = (lo, hi) =>
             {

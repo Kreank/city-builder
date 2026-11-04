@@ -56,6 +56,11 @@ namespace CityBuilder.Simulation.Services
         public string Kind => Type.Kind;
         public Vector2 Side => new Vector2(-Front.Y, Front.X);
         public bool HasAccess => AccessSegmentId >= 0;
+        /// <summary>Frei setzen: Ticks ohne Zufahrt (nur Dienste mit <see cref="ServiceType.NeedsRoadFront"/>); nach
+        /// <see cref="ServiceSystem.NoRoadDays"/> Tagen verfällt das Gebäude.</summary>
+        public int NoRoadTicks { get; internal set; }
+        /// <summary>Braucht eine Zufahrt und hat keine (wirkt nicht, verfällt).</summary>
+        public bool MissingRoad => Type.NeedsRoadFront && !HasAccess;
         public bool IsFull => Type.Storage > 0f && Stored >= Type.Storage;
         /// <summary>Wirksame Kapazität (volle Müllhalde = 0).</summary>
         public float EffectiveCapacity => IsFull ? 0f : Type.Capacity;
@@ -105,6 +110,8 @@ namespace CityBuilder.Simulation.Services
         /// <summary>Flughafen: Hinweis zur Hindernisfreiheit (bei <see cref="ServiceBuildError.ObstacleClearance"/>).</summary>
         public string ObstacleNote;
         public bool IsValid => Error == ServiceBuildError.None;
+        /// <summary>Frei setzen: gültig, aber (noch) ohne Zufahrt – wirkt erst mit Straße, verfällt sonst.</summary>
+        public bool MissingRoad => Type.NeedsRoadFront && AccessSegmentId < 0;
         /// <summary>Mitte der Vorderkante (Anschlusspunkt, Vorschau-Pfeil).</summary>
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);
     }

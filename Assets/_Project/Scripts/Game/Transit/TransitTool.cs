@@ -128,8 +128,7 @@ namespace CityBuilder.Game.Transit
             if (kb.digit5Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
                 tool.ToggleMode(RoadTool.Mode.Transit); // UX: erneut 5 = Auswählen
             if (!Active) { drawing.Clear(); return; }
-            if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
-            if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
+            { float turn = GameKeyboard.RotateInput(kb, 15f); if (turn != 0f) Rotate(turn); } // , . oder Strg links + Mausrad
             if (Current == TransitAction.Line)
             {
                 if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) FinishLine();

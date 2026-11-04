@@ -83,6 +83,28 @@ namespace CityBuilder.Simulation.Roads
 
         public static float TriangleArea(Vector2 a, Vector2 b, Vector2 c) => Cross(b - a, c - a) * 0.5f;
 
+        /// <summary>
+        /// Ist das Polygon (gegen den Uhrzeigersinn) von <paramref name="center"/> aus sternförmig – sieht man jede Kante
+        /// von vorn und umläuft der Rand den Punkt genau einmal? Dann ergibt ein Fächer um den Punkt eine gültige Fläche.
+        /// </summary>
+        public static bool IsStarShaped(IReadOnlyList<Vector2> poly, Vector2 center)
+        {
+            int n = poly.Count;
+            if (n < 3) return false;
+            double sweep = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                var a = poly[i] - center;
+                var b = poly[(i + 1) % n] - center;
+                if ((poly[i] - poly[(i + 1) % n]).LengthSquared() < 1e-8f) continue;
+                float cross = Cross(a, b);
+                // Kante von hinten gesehen (Rückseite) → kein Stern; kleine Toleranz für kollineare Punkte
+                if (cross < -1e-3f * MathF.Max(1f, a.Length() * b.Length())) return false;
+                sweep += Math.Atan2(cross, Vector2.Dot(a, b));
+            }
+            return Math.Abs(sweep - 2.0 * Math.PI) < 1e-2;
+        }
+
         static bool InTriangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
         {
             const float e = 1e-6f;

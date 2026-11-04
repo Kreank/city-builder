@@ -78,17 +78,27 @@ namespace CityBuilder.Game.UI.Hud
             panelBody.Add(tools);
 
             var tiles = Container("cb-tiles");
+            var assets = CityBuilder.Game.Assets.AssetCatalog.Instance;
+            var levelInZone = new System.Collections.Generic.Dictionary<ZoneType, int>();
             foreach (var type in HouseCatalog.All)
             {
                 var t = type;
                 var kind = DemandReport.KindOf(t.Zone);
-                string sub = t.HasHomes && t.JobsAtLevel(1) > 0 ? $"{t.HouseholdsAtLevel(1)} Whg. · {t.JobsAtLevel(1)} Jobs"
-                    : t.HasHomes ? $"{t.HouseholdsAtLevel(1)}–{t.HouseholdsAtLevel(HouseRules.MaxLevelFor(t.Zone))} Whg."
+                string capacity = t.HasHomes && t.JobsAtLevel(1) > 0 ? $"{t.HouseholdsAtLevel(1)} Wohnungen · {t.JobsAtLevel(1)} Jobs"
+                    : t.HasHomes ? $"{t.HouseholdsAtLevel(1)}–{t.HouseholdsAtLevel(HouseRules.MaxLevelFor(t.Zone))} Wohnungen"
                     : $"{t.JobsAtLevel(1)}–{t.JobsAtLevel(HouseRules.MaxLevelFor(t.Zone))} Jobs";
-                var tile = Tile(t.DisplayName, sub, GroupSwatch(t.Group), t.Group == PlaceableGroup.Industrial ? HudIconKind.Briefcase : HudIconKind.LandValue,
+                // Vorschaubild = Katalogmodell der Zone wie in der Bauvorschau (BuildingView.PickForLevel); teilen sich zwei
+                // Bauarten eine Zone (Gewerbe-/Industriehalle), zeigt die größere ein Modell der nächsten Stufe
+                levelInZone.TryGetValue(t.Zone, out int before);
+                levelInZone[t.Zone] = before + 1;
+                int level = Mathf.Clamp(before + 1, 1, 3);
+                var entry = assets != null ? BuildingView.PickForLevel(assets.Buildings(t.Zone), 0, level) : null;
+                var tile = ThumbTile(t.DisplayName, BuildLabels.Money(t.Cost), GroupSwatch(t.Group),
+                    t.Group == PlaceableGroup.Industrial ? HudIconKind.Briefcase : HudIconKind.LandValue,
+                    entry != null ? $"bld:{t.Zone}:{level}:{entry.Name}" : null, CityBuilder.Game.UI.Hud.ModelThumbnails.Mesh(entry),
                     () => ht.SelectType(t),
                     () => ht.Active && ht.Current == HouseTool.HouseAction.Place && ht.SelectedType == t,
-                    () => $"{t.DisplayName}: {t.Description} · Grundstück {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)} · " +
+                    () => $"{t.DisplayName}: {t.Description} · {capacity} · Grundstück {t.Width:0}×{t.Depth:0} m · Baukosten {BuildLabels.Money(t.Cost)} · " +
                           $"Nachfrage {DemandReport.NameOf(kind)} {Mathf.Clamp(DemandReport.ValueOf(city, kind), 0f, 100f):0} %");
                 // Nachfrage ihrer Art als Balken (wie früher die Zonenkacheln)
                 var bar = Container("cb-bar");

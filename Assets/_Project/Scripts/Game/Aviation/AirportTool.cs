@@ -126,8 +126,7 @@ namespace CityBuilder.Game.Aviation
             if (!Active) return;
             if (float.IsNaN(angle) && tool.Runner?.World?.Aviation != null) AlignToWind();
             float step = kb.shiftKey.isPressed ? 1f : 5f;
-            if (kb.commaKey.wasPressedThisFrame) angle -= step;
-            if (kb.periodKey.wasPressedThisFrame) angle += step;
+            angle += GameKeyboard.RotateInput(kb, step); // , . oder Strg links + Mausrad
             if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) FlipSide();
         }
 

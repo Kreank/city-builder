@@ -309,7 +309,7 @@ namespace CityBuilder.Simulation.Tests
 
             // Zeitung: Zustellung übers Straßennetz → braucht Zufahrt; Funk nicht
             var offRoad = new Vector2(-150, 250);
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.Newspaper, offRoad).Error);
+            Assert.True(s.Plan(ServiceCatalog.Newspaper, offRoad) is var nr1 && nr1.IsValid && nr1.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             Assert.True(s.Plan(ServiceCatalog.RadioStation, offRoad).IsValid);
 
             // Radio weit weg (Funkradius 900 m) erreicht die Stadt nicht

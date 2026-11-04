@@ -14,7 +14,8 @@ namespace CityBuilder.Simulation.Services
     public sealed partial class ServiceSystem : ISaveable
     {
         public string SaveId => "services";
-        public int SaveVersion => 1;
+        // v2: Frei setzen – Ticks ohne Zufahrt je Dienstgebäude (v1 → 0)
+        public int SaveVersion => 2;
 
         public void Write(SaveWriter w)
         {
@@ -36,6 +37,7 @@ namespace CityBuilder.Simulation.Services
                 w.Float(f.Stored);
                 w.Float(f.CollectedPerDay);
                 w.Bool(f.Reach != null);
+                w.Int(f.NoRoadTicks); // v2
             });
             states.WriteLayout(w, (id, s) =>
             {
@@ -82,6 +84,7 @@ namespace CityBuilder.Simulation.Services
                     Stored = r.Float(), CollectedPerDay = r.Float(),
                 };
                 bool hasReach = r.Bool();
+                if (version >= 2) f.NoRoadTicks = r.Int();
                 // Reichweite aus dem gespeicherten Anschluss neu (reine Funktion des Straßennetzes)
                 if (hasReach) f.Reach = ComputeReach(f.AccessSegmentId, f.AccessT, f.Type.RangeSeconds);
                 return new KeyValuePair<int, ServiceFacility>(id, f);

@@ -44,6 +44,11 @@ namespace CityBuilder.Simulation.Utilities
         public float Availability { get; internal set; } = 1f;
         /// <summary>Biogas: genutzte Rohstoffbasis (Beschäftigte der Bauernhöfe im Umkreis, die diese Anlage beliefern).</summary>
         public float FeedWorkers { get; internal set; }
+        /// <summary>Frei setzen: braucht eine Zufahrt (<see cref="UtilityFacilityType.RequiresRoadAccess"/>) und hat keine →
+        /// außer Betrieb, verfällt nach <see cref="UtilitySystem.NoRoadDays"/> Tagen.</summary>
+        public bool MissingRoad { get; internal set; }
+        /// <summary>Ticks ohne Zufahrt (s. <see cref="MissingRoad"/>).</summary>
+        public int NoRoadTicks { get; internal set; }
         public bool IsStorage => Type.IsStorage;
         public bool IsGenerator => Type.IsGenerator;
         /// <summary>Ladestand 0..1 eines Speichers.</summary>

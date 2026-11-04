@@ -47,13 +47,50 @@ namespace CityBuilder.Simulation.Tests
 
             RoadBuilder.Build(world.Roads, RoadBuilder.Plan(world.Roads, new Vector2(-100, 0), 0f, null, new Vector2(100, 0), 0f,
                 RoadCatalog.CityTwoLane, 0f, 0f));
-            Assert.InRange(hilly.HeightAt(new Vector2(0, 0)), -0.15f, -0.05f); // unter der Straße abgetragen (knapp unter Fahrbahn)
+            Assert.InRange(hilly.HeightAt(new Vector2(0, 0)), -TerrainMap.UnderRoad - 0.03f, -TerrainMap.UnderRoad + 0.03f); // unter der Straße abgetragen (knapp unter Fahrbahn)
             Assert.InRange(hilly.HeightAt(new Vector2(0, 40)), 2.9f, 3.01f);  // weit weg unverändert
 
             // Brücke 10 m über Gelände: keine Anpassung
             RoadBuilder.Build(world.Roads, RoadBuilder.Plan(world.Roads, new Vector2(-100, 200), 0f, null, new Vector2(100, 200), 0f,
                 RoadCatalog.CityTwoLane, 13f, 13f));
             Assert.InRange(hilly.HeightAt(new Vector2(0, 200)), 2.99f, 3.01f);
+        }
+
+        /// <summary>
+        /// Spieltest „Boden scheint durch die Straße“: Wo zwei ebenerdige Straßen mit leicht verschiedener Höhe übereinander
+        /// liegen (Kreuzung am Hang, Einmündung einer ansteigenden Straße), muss das Gelände unter der niedrigeren liegen.
+        /// Früher gewann die zuletzt geprüfte Straße und das Gelände ragte durch die tiefere Fahrbahn.
+        /// </summary>
+        [Fact]
+        public void OverlappingRoads_TerrainStaysBelowTheLowerSurface()
+        {
+            var world = SimulationWorld.CreateDefault(new WorldSettings { SizeMeters = 1024f });
+            var t = world.Terrain;
+            // A: waagerecht auf 0 m; B: zweigt ab und steigt auf 3,5 m (5,8 %, ebenerdig mit Damm)
+            RoadBuilder.Build(world.Roads, RoadBuilder.Plan(world.Roads, new Vector2(-100, 0), 0f, null, new Vector2(100, 0), 0f,
+                RoadCatalog.CityTwoLane, 0f, 0f));
+            var plan = RoadBuilder.Plan(world.Roads, new Vector2(0, 0), 8f, null, new Vector2(0, 60), 0f, RoadCatalog.CityTwoLane, 0f, 3.5f);
+            Assert.True(plan.IsValid, plan.Error.ToString());
+            RoadBuilder.Build(world.Roads, plan);
+            var a = world.Roads.Segments.First(s => s.Start.Position.X < -50f);
+            float hw = RoadCatalog.CityTwoLane.HalfWidth;
+            int checkedPoints = 0;
+            for (int y = 0; y < t.Resolution; y++)
+            for (int x = 0; x < t.Resolution; x++)
+            {
+                var p = t.PointAt(x, y);
+                if (System.MathF.Abs(p.Y) > hw || System.MathF.Abs(p.X) > hw) continue; // unter beiden Straßen
+                foreach (var s in world.Roads.Segments)
+                {
+                    float st = s.ClosestT(p);
+                    if (Vector2.Distance(s.Evaluate(st), p) > hw) continue;
+                    Assert.True(t[x, y] <= s.HeightAt(st) - TerrainMap.UnderRoad + 0.01f,
+                        $"Gelände {t[x, y]:0.00} bei {p} über Straße {s.Id} ({s.HeightAt(st):0.00})");
+                    checkedPoints++;
+                }
+            }
+            Assert.True(checkedPoints > 4);
+            Assert.True(t.HeightAt(new Vector2(0, 2)) <= a.HeightAt(a.ClosestT(new Vector2(0, 2))) - TerrainMap.UnderRoad + 0.01f);
         }
 
         [Fact]

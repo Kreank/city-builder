@@ -94,7 +94,9 @@ namespace CityBuilder.Game
 
                 float scroll = mouse.scroll.ReadValue().y;
                 // Mausrad über Fenstern scrollt dort, nicht die Kamera
-                if (Mathf.Abs(scroll) > 0.01f && !CityBuilder.Game.UI.UiBlocker.IsPointerOverUi(mouse.position.ReadValue()))
+                // Strg links + Mausrad dreht die Bauvorschau (GameKeyboard.WheelRotateSteps), dann kein Zoom
+                if (Mathf.Abs(scroll) > 0.01f && !GameKeyboard.WheelRotateHeld &&
+                    !CityBuilder.Game.UI.UiBlocker.IsPointerOverUi(mouse.position.ReadValue()))
                     targetDistance *= 1f - Mathf.Sign(scroll) * zoomStep;
             }
 
@@ -114,6 +116,18 @@ namespace CityBuilder.Game
             Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
             transform.position = focus - rot * Vector3.forward * distance;
             transform.rotation = rot;
+            AdaptNearPlane();
+        }
+
+        // Tiefenpuffer-Genauigkeit: Mit fester Near-Ebene 0,5 m reicht die Auflösung in 1–2 km Entfernung nicht mehr für die
+        // ~0,2 m zwischen Fahrbahn und Gelände – der Boden flimmert durch die Straße (Z-Fighting). Die Near-Ebene wächst
+        // deshalb mit dem Zoom (1 % der Entfernung, 0,5…20 m); näher als das ist beim Herauszoomen ohnehin nichts.
+        Camera cam;
+        void AdaptNearPlane()
+        {
+            if (cam == null) cam = GetComponent<Camera>();
+            if (cam == null) return;
+            cam.nearClipPlane = Mathf.Clamp(distance * 0.01f, 0.5f, 20f);
         }
     }
 }

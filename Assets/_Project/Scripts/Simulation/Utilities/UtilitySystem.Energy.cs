@@ -354,7 +354,7 @@ namespace CityBuilder.Simulation.Utilities
             {
                 storageOffer.Clear();
                 storageScratch.Clear();
-                foreach (var f in facilities.Values) if (f.IsStorage) storageScratch.Add(f);
+                foreach (var f in facilities.Values) if (f.IsStorage && !f.MissingRoad) storageScratch.Add(f); // Frei setzen: ohne Zufahrt außer Betrieb
                 if (storageScratch.Count == 0) return false;
                 storageScratch.Sort((a, b) => a.Id.CompareTo(b.Id));
             }

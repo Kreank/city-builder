@@ -635,6 +635,133 @@
     background-color: var(--cb-border);
 }
 
+/* Kachel mit Vorschaubild (Bauleiste aufgeräumt): Bild des 3D-Modells bzw. schlichtes Icon in der Gruppenfarbe,
+   darunter Name + eine Unterzeile (Kosten); Details im Tooltip */
+.cb-tile--thumb {
+    width: 104px;
+    height: 124px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.cb-tile__thumb {
+    width: 88px;
+    height: 64px;
+    margin-bottom: 5px;
+    border-radius: var(--cb-radius-button);
+    border-bottom-width: 2px;
+    border-bottom-color: var(--cb-border);
+    background-color: var(--cb-surface-2);
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.cb-tile--thumb:hover .cb-tile__thumb {
+    background-color: var(--cb-surface);
+}
+
+.cb-tile--thumb.cb-on .cb-tile__thumb {
+    background-color: rgba(43, 179, 163, 0.16);
+}
+
+.cb-tile__thumb-icon {
+    width: 28px;
+    height: 28px;
+    opacity: 0.85;
+}
+
+.cb-tile__thumb-image {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 2px;
+    bottom: 2px;
+}
+
+.cb-tile--thumb > .cb-tile__name {
+    font-size: var(--cb-font-xs);
+    max-height: 30px;
+    overflow: hidden;
+}
+
+.cb-tile--thumb > .cb-tile__sub {
+    margin-top: 1px;
+    color: var(--cb-text-secondary);
+}
+
+.cb-tile--thumb > .cb-bar {
+    width: 72px;
+    margin-top: 4px;
+}
+
+/* Gruppen-Reiter über den Kacheln (Versorgung: Strom erzeugen | Strom verteilen | Wasser | Abwasser | Werkzeuge …) */
+.cb-group-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-self: flex-start;
+    padding-left: 3px;
+    padding-right: 3px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    margin-left: 4px;
+    margin-bottom: 4px;
+    border-radius: var(--cb-radius-button);
+    background-color: var(--cb-surface-2);
+}
+
+.cb-group-tab {
+    flex-direction: row;
+    align-items: center;
+    height: 28px;
+    padding-left: 10px;
+    padding-right: 8px;
+    margin-left: 1px;
+    margin-right: 1px;
+    border-radius: 6px;
+    color: var(--cb-text-muted);
+    transition-property: background-color, color;
+    transition-duration: 0.12s;
+}
+
+.cb-group-tab:hover {
+    color: var(--cb-text);
+}
+
+.cb-group-tab.cb-on {
+    background-color: var(--cb-card);
+    color: var(--cb-text);
+}
+
+.cb-group-tab__label {
+    margin-left: 6px;
+    font-size: var(--cb-font-s);
+    -unity-font-style: bold;
+}
+
+.cb-group-tab__count {
+    margin-left: 6px;
+    min-width: 16px;
+    padding-left: 4px;
+    padding-right: 4px;
+    border-radius: 8px;
+    font-size: var(--cb-font-xs);
+    -unity-text-align: middle-center;
+    color: var(--cb-text-muted);
+    background-color: var(--cb-border-soft);
+}
+
+/* Reiter, in dem das aktive Werkzeug liegt */
+.cb-group-tab--active > .cb-group-tab__count {
+    background-color: var(--cb-action);
+    color: var(--cb-on-action);
+}
+
+.cb-group-body {
+    min-height: 132px;
+}
+
 /* Balken (Nachfrage in Zonen-Kacheln) */
 .cb-bar {
     width: 84px;

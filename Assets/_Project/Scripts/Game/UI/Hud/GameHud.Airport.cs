@@ -48,7 +48,9 @@ namespace CityBuilder.Game.UI.Hud
                 var t = type;
                 var action = t.Class == AirportClass.Airfield ? AirportTool.AirportAction.Airfield : AirportTool.AirportAction.Airport;
                 float len = t.RunwayLengthFor(runner.World.Settings.SizeMeters);
-                tiles.Add(Tile(t.DisplayName, BuildLabels.Money((float)t.Cost), AirportSwatch, HudIconKind.Plane,
+                string model = t.Class == AirportClass.Airfield ? "air_small" : "air_airliner";
+                tiles.Add(ThumbTile(t.DisplayName, BuildLabels.Money((float)t.Cost), AirportSwatch, HudIconKind.Plane,
+                    "tr:" + model, ModelThumbnails.Transport(model),
                     () => at.Select(action),
                     () => at.Active && at.Current == action,
                     $"{t.DisplayName} · Bahn {len:0} m" + (len < t.NominalRunwayLength ? $" (echt {t.NominalRunwayLength:0} m – auf dieser Karte verkürzt)" : "") +
@@ -57,7 +59,8 @@ namespace CityBuilder.Game.UI.Hud
                     (t.CargoLoadsPerDay > 0 ? $"Luftfracht {t.CargoLoadsPerDay} Ladungen/Tag (Elektronik) · " : "") +
                     $"Unterhalt {BuildLabels.Money((float)t.UpkeepPerWeek)}/Woche · Gelände wird eingeebnet (Erdarbeiten kosten)"));
             }
-            tiles.Add(Tile("Terminal ausbauen", "Ausbau", AirportSwatch, HudIconKind.LandValue,
+            tiles.Add(ThumbTile("Terminal ausbauen", "Ausbau", AirportSwatch, HudIconKind.LandValue,
+                "tr:air_terminal", ModelThumbnails.Transport("air_terminal"),
                 () => at.Select(AirportTool.AirportAction.Expand),
                 () => at.Active && at.Current == AirportTool.AirportAction.Expand,
                 "Flughafen anklicken: mehr Terminal-Module, Abstellpositionen und Fluggäste je Stunde"));

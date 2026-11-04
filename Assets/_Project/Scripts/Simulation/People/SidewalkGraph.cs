@@ -265,7 +265,7 @@ namespace CityBuilder.Simulation.People
         /// <summary>Gehweg um ein Knick-Eckstück: versetzte Mittellinie des Eckstücks (gleiche Seite wie Start/Ziel).</summary>
         static void BendCorner(BendLayout bend, Vector2 from, Vector2 to, float h0, float h1, List<Vector2> pts, List<float> hs, List<bool> low)
         {
-            var curve = new SampledCurve(bend.P0, bend.Control, bend.P2, t => bend.H0 + (bend.H2 - bend.H0) * t);
+            var curve = new SampledCurve(bend.P0, bend.Control, bend.P2, bend.HeightAt); // gleiche Höhe wie das Eckstück-Mesh
             // Versatz-Seite und Laufrichtung so wählen, dass die Enden zu den Gehweg-Enden passen
             float off = MathF.Abs(SidewalkOffset(bend.Type, +1));
             Vector2[] best = null;

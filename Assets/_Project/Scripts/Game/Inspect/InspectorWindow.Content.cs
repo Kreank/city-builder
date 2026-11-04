@@ -103,10 +103,13 @@ namespace CityBuilder.Game.Inspect
                 ui.Field("Zufahrt", seg != null ? $"{seg.Type.DisplayName} (Segment {seg.Id})" : "keine", seg != null ? Tone.None : Tone.Warn);
                 // Frei setzen: ohne Straße ruht der Bau, das Gebäude verfällt
                 float left = world.City.DaysUntilNoRoadDecay(b);
-                if (left >= 0f)
-                    ui.Field("Ohne Straße", left >= 1f ? $"verfällt in ≈ {left:0.0} Tagen" : $"verfällt in ≈ {left * 24f:0} Stunden", Tone.Bad);
+                if (left >= 0f) ui.Field("Ohne Straße", RoadDecayText(left), Tone.Bad);
             }
         }
+
+        /// <summary>Frei setzen: Restzeit bis zum Verfall ohne Straße als Text.</summary>
+        static string RoadDecayText(float days) =>
+            days >= 1f ? $"verfällt in ≈ {days:0.0} Tagen" : $"verfällt in ≈ {Mathf.Max(0f, days) * 24f:0} Stunden";
 
         static void UtilityField(Ui ui, SimulationWorld world, Building b, UtilityKind kind)
         {
@@ -655,6 +658,8 @@ namespace CityBuilder.Game.Inspect
                 if (t.Pollution > 0f) ui.Field("Abgas", $"{t.Pollution:0.##} im Umkreis {t.PollutionRadius:0} m");
                 if (t.NeedsWater) ui.Field("Standort", "braucht Wasser in Reichweite");
                 ui.Field("Vorderseite", t.NeedsRoadFront ? "braucht Zufahrt zur Straße (Pfeil in der Vorschau)" : "beliebig (keine Zufahrt nötig)", Tone.Muted); // UX
+                if (f.MissingRoad) // Frei setzen: Biogas/Speicher ohne Straße außer Betrieb
+                    ui.Field("Ohne Straße", "außer Betrieb · " + RoadDecayText(world.Utilities.DaysUntilNoRoadDecay(f)), Tone.Bad);
                 // --- G3 erweitert: Abwasser, Pumpe, Atom
                 var wq = world.WaterQuality;
                 if (wq != null && t.Kind == UtilityKind.Sewage)
@@ -798,6 +803,8 @@ namespace CityBuilder.Game.Inspect
                     ? $"Fußweg {t.Range:0} m (Luftlinie)"
                     : $"{t.Range:0.#} min Fahrzeit (≈ {t.RangeGameMinutes:0} Spielminuten) übers Straßennetz (voll bis {ServiceSystem.FullEffectShare * 100f:0} %)" +
                       (f.HasAccess ? "" : " · keine Zufahrt"), !t.Walking && !f.HasAccess ? Tone.Warn : Tone.None);
+                if (f.MissingRoad) // Frei setzen: ohne Straße verfällt das Gebäude
+                    ui.Field("Ohne Straße", RoadDecayText(world.Services.DaysUntilNoRoadDecay(f)), Tone.Bad);
                 if (t.Storage > 0f) ui.Field("Lager", $"{f.Stored:0} / {t.Storage:0} t");
                 if (f.Kind == ServiceKinds.Garbage) ui.Field("Abgeholt", $"{f.CollectedPerDay:0.#} t/Tag");
             }

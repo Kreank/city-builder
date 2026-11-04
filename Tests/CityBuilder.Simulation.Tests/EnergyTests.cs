@@ -161,7 +161,7 @@ namespace CityBuilder.Simulation.Tests
             var u = w.Utilities;
             Road(w, new Vector2(0, 0), new Vector2(400, 0));
             var t = UtilityCatalog.BiogasPlant;
-            Assert.Equal(UtilityBuildError.NoRoadAccess, u.PlanFacility(t, new Vector2(200, 300)).Error); // Überland ohne Zufahrt
+            Assert.True(u.PlanFacility(t, new Vector2(200, 300)) is var nr1 && nr1.IsValid && nr1.MissingRoad); // Frei setzen: gültig, ohne Zufahrt // Überland ohne Zufahrt
             var a = u.BuildFacility(u.PlanFacilityAligned(t, new Vector2(80, 30)));
             var b = u.BuildFacility(u.PlanFacilityAligned(t, new Vector2(300, 30)));
             Assert.NotNull(a);

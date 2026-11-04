@@ -146,7 +146,10 @@ namespace CityBuilder.Simulation.Environment
         /// weicher Übergang (Böschung). Brücken-, Trog- und Tunnelabschnitte bleiben unberührt.
         /// </summary>
         /// <summary>So tief liegt das Gelände unter einer ebenerdigen Fahrbahn (damit es nie durchscheint).</summary>
-        public const float UnderRoad = 0.12f;
+        /// <remarks>0,2 m (früher 0,12): mit der Fahrbahn 0,05 m über der Straßenhöhe bleiben 0,25 m Luft – genug gegen
+        /// Z-Fighting aus der Ferne und gegen die Abweichung zwischen Gelände-Dreiecken und gekrümmten Höhenprofilen.
+        /// Die Kante zum Gelände verdeckt die Seitenschürze des Straßen-Meshes.</remarks>
+        public const float UnderRoad = 0.2f;
 
         /// <summary>
         /// Vorrangregel der Straßen: (Punkt, vorgeschlagene Höhe) → erlaubte Höhe. Unter ebenerdigen Straßen

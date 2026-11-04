@@ -584,8 +584,7 @@ namespace CityBuilder.Game.Roads
             if (kb.f10Key.wasPressedThisFrame) ToggleBlockGrid();      // Bauhilfe: Blockraster (Querstraßen-Abstände)
             if (kb.pageUpKey.wasPressedThisFrame) ChangeHeight(HeightStep);
             if (kb.pageDownKey.wasPressedThisFrame) ChangeHeight(-HeightStep);
-            if (kb.commaKey.wasPressedThisFrame) RotateTemplate(-15f);
-            if (kb.periodKey.wasPressedThisFrame) RotateTemplate(15f);
+            { float turn = GameKeyboard.RotateInput(kb, 15f); if (turn != 0f) RotateTemplate(turn); } // , . oder Strg links + Mausrad
             // Esc: HandleCancelInput (LateUpdate, nach den Fenstern)
         }
 

@@ -36,13 +36,15 @@ namespace CityBuilder.Game.UI.Hud
 
             var tiles = Container("cb-tiles");
             var type = HarborCatalog.Cargo;
-            tiles.Add(Tile(type.DisplayName, BuildLabels.Money((float)type.Cost), HarborSwatch, HudIconKind.Ship,
+            tiles.Add(ThumbTile(type.DisplayName, BuildLabels.Money((float)type.Cost), HarborSwatch, HudIconKind.Ship,
+                "tr:harbor_crane", ModelThumbnails.Transport("harbor_crane"),
                 () => ht.Select(ShippingTool.HarborAction.Harbor),
                 () => ht.Active && ht.Current == ShippingTool.HarborAction.Harbor,
                 $"{type.DisplayName} · Kai {type.Width:0} m, {type.Berths} Liegeplätze · Binnenschiffe am Fluss, Küstenfrachter am tiefen Seeweg · " +
                 $"Import/Export der Firmen und Seehandel per Schiff (Fracht {ShippingRules.InlandFreightShare * 100f:0.#} % bzw. {ShippingRules.SeaFreightShare * 100f:0.#} % statt " +
                 $"{Simulation.Goods.GoodsRules.WorldFreightShare * 100f:0} % per Lkw) · macht den Wasser-Gateway befahrbar · Unterhalt {BuildLabels.Money((float)type.UpkeepPerWeek)}/Woche"));
-            tiles.Add(Tile("Klappbrücke", BuildLabels.Money((float)ShippingRules.DrawbridgeCost) + " + Straße", HarborSwatch, HudIconKind.Road,
+            tiles.Add(ThumbTile("Klappbrücke", BuildLabels.Money((float)ShippingRules.DrawbridgeCost) + " + Straße", HarborSwatch, HudIconKind.Road,
+                "tr:drawbridge", ModelThumbnails.Transport("drawbridge"),
                 () => ht.Select(ShippingTool.HarborAction.Drawbridge),
                 () => ht.Active && ht.Current == ShippingTool.HarborAction.Drawbridge,
                 $"Niedrige Straßenbrücke ({ShippingRules.DrawbridgeDeck:0} m über Wasser) mit Klappe über der Fahrrinne: öffnet für Schiffe – Ampel rot, Schranken zu, " +

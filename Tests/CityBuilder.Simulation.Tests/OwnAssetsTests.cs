@@ -104,7 +104,7 @@ namespace CityBuilder.Simulation.Tests
         {
             var w = Town();
             var s = w.Services;
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.Stadium, new Vector2(0, -300)).Error);
+            Assert.True(s.Plan(ServiceCatalog.Stadium, new Vector2(0, -300)) is var nr1 && nr1.IsValid && nr1.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             var plan = s.PlanAligned(ServiceCatalog.Stadium, new Vector2(150, -45));
             Assert.True(plan.IsValid, plan.Error.ToString());
             Assert.NotNull(s.Build(plan));
@@ -157,7 +157,7 @@ namespace CityBuilder.Simulation.Tests
             var w = Town();
             var s = w.Services;
             Assert.False(s.HasTownHall);
-            Assert.Equal(ServiceBuildError.NoRoadAccess, s.Plan(ServiceCatalog.TownHall, new Vector2(0, -300)).Error);
+            Assert.True(s.Plan(ServiceCatalog.TownHall, new Vector2(0, -300)) is var nr2 && nr2.IsValid && nr2.MissingRoad); // Frei setzen: gültig, ohne Zufahrt
             var plan = s.PlanAligned(ServiceCatalog.TownHall, new Vector2(-150, -30));
             Assert.True(plan.IsValid, plan.Error.ToString());
             var hall = s.Build(plan);

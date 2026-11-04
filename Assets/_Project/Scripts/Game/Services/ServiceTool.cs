@@ -128,8 +128,7 @@ namespace CityBuilder.Game.Services
             if (kb.digit4Key.wasPressedThisFrame && !kb.shiftKey.isPressed)
                 tool.ToggleMode(RoadTool.Mode.Service); // UX: erneut 4 = Auswählen
             if (!Active) return;
-            if (kb.commaKey.wasPressedThisFrame) Rotate(-15f);
-            if (kb.periodKey.wasPressedThisFrame) Rotate(15f);
+            { float turn = GameKeyboard.RotateInput(kb, 15f); if (turn != 0f) Rotate(turn); } // , . oder Strg links + Mausrad
         }
 
         void LateUpdate()
@@ -202,6 +201,7 @@ namespace CityBuilder.Game.Services
             string turn = plan.Aligned ? (Rotation != 0f ? $"zur Straße + {Rotation:0}°" : "zur Straße ausgerichtet") : $"{Rotation:0}°"; // UX
             string info = $"{t.DisplayName} · {t.Capacity:0} {t.CapacityUnit} · {range} · {t.Cost:0} € (+{t.UpkeepPerWeek:0} €/Woche) · {turn}";
             if (plan.Displaced.Count > 0) info += $" · reißt {plan.Displaced.Count} Gebäude ab";
+            if (plan.IsValid && plan.MissingRoad) info = NoRoadText + " · " + info; // Frei setzen
             SetLabel(plan.IsValid ? info : plan.ObstacleNote ?? ErrorText(plan.Error), !plan.IsValid, SimConvert.ToWorld(p, plan.Height + 10f)); // Flughafen: Hinweis zur Einflugschneise
             if (clicked && plan.IsValid)
             {
@@ -209,6 +209,11 @@ namespace CityBuilder.Game.Services
                 cachedPlan = null;
             }
         }
+
+        /// <summary>Frei setzen: Hinweis, wenn das Gebäude (noch) keine Straße an der Vorderseite hat.</summary>
+        public static string NoRoadText =>
+            $"Noch keine Straße – wirkt erst mit Stadtstraße vor der Vorderseite (Pfeil, ≤ {ServiceSystem.RoadReach:0} m), " +
+            $"sonst verfällt es nach {ServiceSystem.NoRoadDays} Tagen (drehen: Strg + Mausrad oder , .)";
 
         void UpdateRemove(SimVector2 p, bool clicked)
         {

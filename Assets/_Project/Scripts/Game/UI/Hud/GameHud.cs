@@ -185,6 +185,8 @@ namespace CityBuilder.Game.UI.Hud
             HudMessages.Posted -= OnMessage;
             if (Windows != null) UiPanels.ToolkitActive = false;
             worldLabels?.Dispose();
+            thumbnails?.Dispose();
+            thumbnails = null;
             Ui.TooltipHook = null;
             if (root != null) UiBlocker.UnregisterToolkitRoot(root);
             if (panelSettings != null) Destroy(panelSettings);
@@ -197,6 +199,7 @@ namespace CityBuilder.Game.UI.Hud
             if (!Ready || runner == null || runner.World == null) return;
 
             UpdateBuildBar();
+            thumbnails?.Tick(); // Vorschaubilder der Bauleiste (wenige je Frame)
             foreach (var a in fastRefresh) a();
             foreach (var a in panelFastRefresh) a();
             if (refreshNow || Time.unscaledTime >= nextSlowRefresh)

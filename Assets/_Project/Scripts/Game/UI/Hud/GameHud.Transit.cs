@@ -47,16 +47,18 @@ namespace CityBuilder.Game.UI.Hud
             panelBody.Add(tools);
 
             var tiles = Container("cb-tiles");
-            tiles.Add(Tile("Haltestelle", $"{TransitRules.StopCost:0} €", TransitSwatch, HudIconKind.Bus,
+            tiles.Add(ThumbTile("Haltestelle", $"{TransitRules.StopCost:0} €", TransitSwatch, HudIconKind.Bus,
+                "tr:bus_stop", ModelThumbnails.Transport("bus_stop"),
                 () => tt.Select(TransitTool.TransitAction.Stop),
                 () => tt.Active && tt.Current == TransitTool.TransitAction.Stop,
                 $"Haltestelle am Fahrbahnrand einer Stadtstraße · Seite des Mauszeigers (⇧ beide Seiten) · {TransitRules.StopUpkeepPerWeek:0} €/Woche"));
-            tiles.Add(Tile("Linie zeichnen", "Halte anklicken", TransitSwatch, HudIconKind.Road,
+            tiles.Add(ThumbTile("Linie zeichnen", "Halte anklicken", TransitSwatch, HudIconKind.Road, null, null,
                 () => tt.Select(TransitTool.TransitAction.Line),
                 () => tt.Active && tt.Current == TransitTool.TransitAction.Line,
                 "Haltestellen nacheinander anklicken (freie Straße setzt eine neue) · Klick auf die erste schließt die Rundlinie · Enter fertig"));
             var d = TransitCatalog.BusDepot;
-            tiles.Add(Tile(d.DisplayName, $"{d.VehicleCapacity} Busse", TransitSwatch, HudIconKind.Service,
+            tiles.Add(ThumbTile(d.DisplayName, BuildLabels.Money((float)d.Cost), TransitSwatch, HudIconKind.Bus,
+                "tr:bus_depot", ModelThumbnails.Transport("bus_depot"),
                 () => tt.Select(TransitTool.TransitAction.Depot),
                 () => tt.Active && tt.Current == TransitTool.TransitAction.Depot,
                 $"{d.DisplayName} · {d.Width:0}×{d.Depth:0} m · richtet sich zur Straße aus (Strg frei, , . drehen) · Baukosten {BuildLabels.Money((float)d.Cost)}, " +
