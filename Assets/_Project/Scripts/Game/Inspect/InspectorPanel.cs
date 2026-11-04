@@ -204,6 +204,10 @@ namespace CityBuilder.Game.Inspect
             int ship = Shipping.ShippingView.Active != null ? Shipping.ShippingView.Active.PickShip(ray) : 0;
             if (ship != 0 && (hit.IsNone || hit.Kind == SelectionKind.Building || hit.Kind == SelectionKind.Gateway)) hit = new Selection(SelectionKind.Ship, ship);
             // --- Ende Wasserstraße
+            // --- Flughafen: Flugzeuge (Kugel um den Rumpf) vor Gebäuden/Gelände
+            int plane = Aviation.AirportView.Active != null ? Aviation.AirportView.Active.PickAircraft(ray) : 0;
+            if (plane != 0 && (hit.IsNone || hit.Kind == SelectionKind.Building || hit.Kind == SelectionKind.Gateway)) hit = new Selection(SelectionKind.Aircraft, plane);
+            // --- Ende Flughafen
             if (hit.IsNone && tool.HasCursor)
             {
                 // Rückfall: Geländepunkt unter der Maus
@@ -217,6 +221,7 @@ namespace CityBuilder.Game.Inspect
                 else if (world.Rail?.StationAt(tool.Cursor, 1f) is var rs && rs != null) hit = new Selection(SelectionKind.Station, rs.Id); // Bahn
                 else if (world.Shipping?.HarborAt(tool.Cursor, 1f) is var hb && hb != null) hit = new Selection(SelectionKind.Harbor, hb.Id); // Wasserstraße
                 else if (world.Shipping?.DrawbridgeNear(tool.Cursor, 12f) is var db && db != null) hit = new Selection(SelectionKind.Drawbridge, db.SegmentId); // Wasserstraße
+                else if (world.Aviation?.AirportAt(tool.Cursor, 1f) is var ap && ap != null) hit = new Selection(SelectionKind.Airport, ap.Id); // Flughafen
             }
             if (hit.IsNone) ClearSelection();
             else Select(hit);
@@ -263,6 +268,12 @@ namespace CityBuilder.Game.Inspect
                 case SelectionKind.Drawbridge: // Wasserstraße
                     if (world.Shipping?.DrawbridgeOf(selection.Id) == null) SetSelection(Selection.None);
                     break;
+                case SelectionKind.Aircraft: // Flughafen
+                    if (world.Aviation?.GetAircraft(selection.Id) == null) SetSelection(Selection.None);
+                    break;
+                case SelectionKind.Airport: // Flughafen
+                    if (world.Aviation?.GetAirport(selection.Id) == null) SetSelection(Selection.None);
+                    break;
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -289,7 +300,8 @@ namespace CityBuilder.Game.Inspect
         }
 
         public bool CanFollow => selection.Kind == SelectionKind.Vehicle || selection.Kind == SelectionKind.Citizen || selection.Kind == SelectionKind.Train // Bahn: Zug
-            || selection.Kind == SelectionKind.Ship; // Wasserstraße: Schiff
+            || selection.Kind == SelectionKind.Ship // Wasserstraße: Schiff
+            || selection.Kind == SelectionKind.Aircraft; // Flughafen: Flugzeug
 
         // ------------------------------------------------------------ Hervorhebung & Verfolgen
 
@@ -369,6 +381,17 @@ namespace CityBuilder.Game.Inspect
                     break;
                 }
                 // --- Ende Wasserstraße
+                // --- Flughafen
+                case SelectionKind.Aircraft:
+                    if (Aviation.AirportView.Active != null && Aviation.AirportView.Active.TryGetAircraftPosition(selection.Id, out var apos)) primary.Ring(apos, 30f, width * 0.6f);
+                    break;
+                case SelectionKind.Airport:
+                {
+                    var ap = world.Aviation?.GetAirport(selection.Id);
+                    if (ap != null) primary.Rect(ap.Site.Corners(), ap.Height + 0.3f, ap.Height + 12f, width);
+                    break;
+                }
+                // --- Ende Flughafen
                 case SelectionKind.Vehicle:
                 {
                     var v = FindVehicle(world, selection.Id);
@@ -477,6 +500,15 @@ namespace CityBuilder.Game.Inspect
                     return db != null ? SimConvert.ToWorld(db.Position, db.Height) : (Vector3?)null;
                 }
                 // --- Ende Wasserstraße
+                // --- Flughafen
+                case SelectionKind.Aircraft:
+                    return Aviation.AirportView.Active != null && Aviation.AirportView.Active.TryGetAircraftPosition(selection.Id, out var apos) ? apos : (Vector3?)null;
+                case SelectionKind.Airport:
+                {
+                    var ap = world.Aviation?.GetAirport(selection.Id);
+                    return ap != null ? SimConvert.ToWorld(ap.Layout.Terminal.Center, ap.Height) : (Vector3?)null;
+                }
+                // --- Ende Flughafen
                 default: return null;
             }
         }

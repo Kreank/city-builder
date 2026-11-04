@@ -21,7 +21,7 @@ namespace CityBuilder.Game.UI.Hud
     /// </summary>
     public sealed partial class GameHud
     {
-        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */, Houses /* Bauen (Setzen statt Zonen) */, Focus /* Produktion lenken */, Rail /* Bahn */, Harbor /* Wasserstraße & Hafen */ }
+        enum Category { Roads, Highway, Zones, Utilities, Services, Terrain, Traffic, Bulldoze, Transit /* ÖPNV */, Houses /* Bauen (Setzen statt Zonen) */, Focus /* Produktion lenken */, Rail /* Bahn */, Harbor /* Wasserstraße & Hafen */, Airport /* Flughafen */ }
 
         static readonly Color RoadSwatch = BuildLabels.Hex(0x8D8F96);
         static readonly Color HighwaySwatch = BuildLabels.Hex(0x6E7486);
@@ -89,6 +89,7 @@ namespace CityBuilder.Game.UI.Hud
             CategoryButton(cats, Category.Transit, HudIconKind.Bus, "ÖPNV", "ÖPNV (5): Haltestellen, Buslinien zeichnen, Busdepot · F6 Linienübersicht"); // ÖPNV
             CategoryButton(cats, Category.Rail, HudIconKind.Train, "Bahn", "Bahn (7): Gleise, Weichen, Personen- und Güterbahnhof an der Hauptstrecke · F7 Bahnübersicht"); // Bahn
             CategoryButton(cats, Category.Harbor, HudIconKind.Ship, "Hafen", "Wasserstraße & Hafen (8): Güterhafen am Ufer, Klappbrücke über die Fahrrinne · F8 Hafenübersicht"); // Wasserstraße
+            CategoryButton(cats, Category.Airport, HudIconKind.Plane, "Flughafen", "Flughafen (9): Regionalflugplatz oder Verkehrsflughafen setzen (Einflugschneisen frei halten!), Terminal ausbauen · F12 Flughafenübersicht"); // Flughafen
             CategoryButton(cats, Category.Terrain, HudIconKind.Terrain, "Gelände", "Gelände formen (L) · [ ] Radius");
             CategoryButton(cats, Category.Traffic, HudIconKind.TrafficLight, "Verkehr", "Verkehrsregeln (T), Stau-Ansicht (V), Verkehrsaufkommen");
             var bulldoze = CategoryButton(cats, Category.Bulldoze, HudIconKind.Bulldoze, "Abriss", "Abriss (B): Straßen, Leitungen und Bauwerke");
@@ -124,6 +125,7 @@ namespace CityBuilder.Game.UI.Hud
                 case RoadTool.Mode.House: return HouseCategory(); // Wohnhäuser
                 case RoadTool.Mode.Rail: return RailCategory(); // Bahn
                 case RoadTool.Mode.Harbor: return HarborCategory(); // Wasserstraße
+                case RoadTool.Mode.Airport: return AirportCategory(); // Flughafen
                 case RoadTool.Mode.Bulldoze: return Category.Bulldoze;
                 case RoadTool.Mode.Inspect: return null;
                 default: return tool.SelectedType.Category == RoadCategory.City ? Category.Roads : Category.Highway;
@@ -164,6 +166,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Focus: tool.OpenFocusBrush(); break;   // Produktion lenken
                 case Category.Rail: SelectRailCategory(); break; // Bahn
                 case Category.Harbor: SelectHarborCategory(); break; // Wasserstraße
+                case Category.Airport: SelectAirportCategory(); break; // Flughafen
                 case Category.Traffic: if (mode != RoadTool.Mode.Traffic) tool.SetMode(RoadTool.Mode.Traffic); break;
                 case Category.Bulldoze: if (mode != RoadTool.Mode.Bulldoze) tool.SetMode(RoadTool.Mode.Bulldoze); break;
             }
@@ -252,6 +255,7 @@ namespace CityBuilder.Game.UI.Hud
                 case Category.Focus: BuildFocusPanel(); break;  // Produktion lenken
                 case Category.Rail: BuildRailPanel(); break; // Bahn
                 case Category.Harbor: BuildHarborPanel(); break; // Wasserstraße
+                case Category.Airport: BuildAirportPanel(); break; // Flughafen
             }
             refreshNow = true;
         }
@@ -768,6 +772,7 @@ namespace CityBuilder.Game.UI.Hud
             AddHouseBulldozeTile(tiles); // Wohnhäuser
             AddRailBulldozeTile(tiles); // Bahn
             AddHarborBulldozeTile(tiles); // Wasserstraße
+            AddAirportBulldozeTile(tiles); // Flughafen
             panelBody.Add(tiles);
             panelBody.Add(Info(() => "Gesetzte Gebäude nur per Abriss (25 % zurück) · Zonengebäude alter Stände verschwinden über Entzonen oder wenn ihre Straße wegfällt."));
         }

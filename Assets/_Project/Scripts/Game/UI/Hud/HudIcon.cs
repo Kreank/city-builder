@@ -25,6 +25,8 @@ namespace CityBuilder.Game.UI.Hud
         Flame, Shield,
         /// <summary>Wasserstraße &amp; Hafen: Frachtschiff von der Seite auf Wellen.</summary>
         Ship,
+        /// <summary>Flughafen: Flugzeug von oben.</summary>
+        Plane,
     }
 
     /// <summary>
@@ -132,6 +134,12 @@ namespace CityBuilder.Game.UI.Hud
                     Poly(true, 13, 13, 13, 8, 17, 8, 17, 13);
                     Line(15, 8, 15, 5); Line(6, 13, 6, 10); Line(9, 13, 9, 10); Line(6, 10, 11, 10); Line(11, 10, 11, 13);
                     Line(3, 21, 7, 20); Line(9, 21, 13, 20); Line(15, 21, 19, 20);
+                    break;
+                case HudIconKind.Plane: // Flughafen: Rumpf, gepfeilte Flügel, Leitwerk
+                    Poly(true, 12, 2, 13.5f, 4, 13.5f, 20, 12, 22, 10.5f, 20, 10.5f, 4);
+                    Poly(true, 13.5f, 9, 22, 14, 22, 15.5f, 13.5f, 13);
+                    Poly(true, 10.5f, 9, 2, 14, 2, 15.5f, 10.5f, 13);
+                    Line(13.5f, 19, 17, 21); Line(10.5f, 19, 7, 21);
                     break;
                 case HudIconKind.Car:
                     Poly(true, 5, 17, 6.5f, 10.5f, 8.4f, 9, 15.6f, 9, 17.5f, 10.5f, 19, 17);

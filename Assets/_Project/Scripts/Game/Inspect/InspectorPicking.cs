@@ -9,7 +9,7 @@ using UnityEngine;
 namespace CityBuilder.Game.Inspect
 {
     public enum SelectionKind : byte { None, Building, Vehicle, Facility, Citizen, Service, TransitStop, TransitDepot /* ÖPNV */, Gateway /* Außenanbindung */,
-        Train, Station /* Bahn */, Ship, Harbor, Drawbridge /* Wasserstraße */ }
+        Train, Station /* Bahn */, Ship, Harbor, Drawbridge /* Wasserstraße */, Aircraft, Airport /* Flughafen */ }
 
     /// <summary>Was im Inspektor ausgewählt ist (nur Art + Id – das Objekt wird jedes Frame neu nachgeschlagen).</summary>
     public readonly struct Selection

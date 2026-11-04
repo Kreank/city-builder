@@ -214,6 +214,7 @@ namespace CityBuilder.Game.UI.Hud
             Windows.Add(new TransitWindow()); // ÖPNV: Linienübersicht (F6, offen im ÖPNV-Werkzeug)
             Windows.Add(new RailWindow()); // Bahn: Bahnübersicht (F7, offen im Bahn-Werkzeug 7)
             Windows.Add(new HarborWindow()); // Wasserstraße: Hafenübersicht (F8, offen im Hafen-Werkzeug 8)
+            Windows.Add(new AirportWindow()); // Flughafen: Übersicht (F12, offen im Flughafen-Werkzeug 9)
             var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
             if (budget != null) Windows.Add(new BudgetWindow(budget));
             help = Windows.Add(new HelpWindow());
@@ -471,6 +472,7 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
             topBar.Add(GatewayChip()); // Außenanbindung: „Stadt an die Autobahn anschließen“
             topBar.Add(FairwayChip()); // Wasserstraße: „Fahrrinne gesperrt“ (zu niedrige feste Brücke)
+            topBar.Add(AirportChip()); // Flughafen: außer Betrieb / Einflugschneise gesperrt
 
             // Info-Modus (C)
             // UX: Info = Stadtübersicht ein/aus (wechselt ins Auswählen); Auswahl selbst geht immer per Linksklick

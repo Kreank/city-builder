@@ -58,7 +58,7 @@ namespace CityBuilder.Game.Gateways
             foreach (var g in gw.All)
             {
                 if (!g.HasLocation) continue;
-                var p = g.Position - g.Direction * SignInset;
+                var p = g.Kind == Simulation.Gateways.GatewayKind.Air ? g.Position : g.Position - g.Direction * SignInset; // Flughafen: Schild am Terminal
                 float h = world.Terrain.HeightAt(p);
                 if (g.IsRoad)
                 {

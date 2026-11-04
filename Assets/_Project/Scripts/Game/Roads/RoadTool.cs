@@ -28,7 +28,9 @@ namespace CityBuilder.Game.Roads
             /// <summary>Bahn (Taste 7): Gleise, Personen-/Güterbahnhof – <c>Rail.RailTool</c> übernimmt.</summary>
             Rail,
             /// <summary>Wasserstraße &amp; Hafen (Taste 8): Güterhafen, Klappbrücke – <c>Shipping.ShippingTool</c> übernimmt.</summary>
-            Harbor }
+            Harbor,
+            /// <summary>Flughafen (Taste 9): Flugplatz/Verkehrsflughafen setzen, Terminal ausbauen – <c>Aviation.AirportTool</c> übernimmt.</summary>
+            Airport }
 
         /// <summary>Alles, was Hilfslinien und Beschriftungen zum aktuellen Bauvorgang wissen müssen.</summary>
         public struct GuideState
@@ -229,6 +231,11 @@ namespace CityBuilder.Game.Roads
             Ensure<CityBuilder.Game.Shipping.ShippingTool>().Init(this, previewMaterial);
             if (litBase != null) Ensure<CityBuilder.Game.Shipping.ShippingView>().Init(runner, litBase, previewMaterial);
             // --- Ende Wasserstraße
+
+            // --- Flughafen: Werkzeug (Modus Airport, Taste 9), Flughäfen/Flugzeuge/Einflugschneisen, Flughafenfenster (F12)
+            Ensure<CityBuilder.Game.Aviation.AirportTool>().Init(this, previewMaterial);
+            if (litBase != null) Ensure<CityBuilder.Game.Aviation.AirportView>().Init(runner, litBase, previewMaterial);
+            // --- Ende Flughafen
 
             // --- Stadtkasse: Fenster (Taste M)
             Ensure<CityBuilder.Game.Economy.BudgetPanel>().Init(this);
@@ -530,6 +537,7 @@ namespace CityBuilder.Game.Roads
                 case Mode.House: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Wohnhäuser: HouseTool übernimmt
                 case Mode.Rail: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Bahn: RailTool übernimmt
                 case Mode.Harbor: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Wasserstraße: ShippingTool übernimmt
+                case Mode.Airport: Cursor = raw; CursorAnchor = RoadAnchor.Free(raw, GroundAt(raw)); HidePreview(); break; // Flughafen: AirportTool übernimmt
                 case Mode.Bulldoze: UpdateBulldoze(roads, ray, raw, clicked); break;
                 case Mode.Upgrade: UpdateUpgrade(roads, ray, raw, clicked); break;
                 case Mode.Reverse: UpdateReverse(roads, ray, raw, clicked); break;
