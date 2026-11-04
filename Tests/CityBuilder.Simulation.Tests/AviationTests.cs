@@ -335,5 +335,53 @@ namespace CityBuilder.Simulation.Tests
             Assert.Equal(0f, w.Aviation.AircraftNoiseAt(Vector2.Zero));
             Assert.Null(w.Aviation.Warning);
         }
+
+        // ------------------------------------------------------------ Spielwelt (wie im Spiel: Weltkarte, Gelände, Autobahn, Bahn, Fluss)
+
+        static readonly System.Collections.Generic.Dictionary<AirportBuildError, int> Errors = new System.Collections.Generic.Dictionary<AirportBuildError, int>();
+
+        static AirportPlan FindSite(SimulationWorld w, AirportType type, out int tried)
+        {
+            tried = 0;
+            AirportPlan best = null;
+            for (int ang = 0; ang < 180; ang += 15)
+                for (int x = -900; x <= 900; x += 100)
+                    for (int y = -900; y <= 900; y += 100)
+                    {
+                        float r = ang * MathF.PI / 180f;
+                        for (int side = -1; side <= 1; side += 2)
+                        {
+                            tried++;
+                            var p = w.Aviation.PlanAirport(type, new Vector2(x, y), new Vector2(MathF.Cos(r), MathF.Sin(r)), side);
+                            if (p.IsValid && (best == null || p.TotalCost < best.TotalCost)) best = p;
+                            Errors[p.Error] = Errors.TryGetValue(p.Error, out int c) ? c + 1 : 1;
+                        }
+                    }
+            return best;
+        }
+
+        [Theory]
+        [InlineData(2024, true)]   // Info: Flugplatz passt (Erdarbeiten nötig), Verkehrsflughafen nicht (Autobahn/Bahn/Fluss queren die 2-km-Karte)
+        [InlineData(74, false)]    // Info: Fluss/Küste + Autobahn + Bahn lassen keinen Platz im Suchraster
+        public void GameWorld_Sites_Destinations(int seed, bool expectAirfield)
+        {
+            var settings = new WorldSettings
+            {
+                GenerateWorld = true, WorldSeed = seed, GenerateTerrain = true, PrebuiltConnections = true,
+                RequireGatewayForMoveIn = true, RequireGatewayForTrade = true,
+            };
+            var w = SimulationWorld.CreateDefault(settings);
+            w.Step();
+            output.WriteLine($"Wind aus {AviationRules.WindText(w.Aviation.PrevailingWind)} (Breite {w.Aviation.Latitude:0}°), Ziele: {string.Join(", ", w.Aviation.Destinations.Take(5).Select(d => d.ToString()))}");
+            lock (Errors) Errors.Clear();
+            var field = FindSite(w, AirportCatalog.Airfield, out int n1);
+            var port = FindSite(w, AirportCatalog.Airport, out int n2);
+            output.WriteLine(string.Join(", ", Errors.Select(kv => $"{kv.Key} {kv.Value}")));
+            output.WriteLine(field != null ? $"Flugplatz: {field.Center} {AviationRules.RunwayDesignator(field.Dir)}, Erdarbeiten {field.EarthworkCost:0} €, Schneisen {field.CorridorA}/{field.CorridorB}" : $"Flugplatz: kein Platz ({n1} geprüft)");
+            output.WriteLine(port != null ? $"Flughafen: {port.Center} {AviationRules.RunwayDesignator(port.Dir)}, Erdarbeiten {port.EarthworkCost:0} €, Schneisen {port.CorridorA}/{port.CorridorB}" : $"Flughafen: kein Platz ({n2} geprüft)");
+            if (expectAirfield) Assert.NotNull(field);
+            Assert.True(w.Aviation.Destinations.Count >= 5);
+            Assert.All(w.Aviation.Destinations, d => Assert.True(d.DistanceKm > 0f && d.Hours > 0.5f));
+        }
     }
 }

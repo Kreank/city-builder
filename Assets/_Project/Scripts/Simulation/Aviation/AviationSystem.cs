@@ -225,8 +225,8 @@ namespace CityBuilder.Simulation.Aviation
             foreach (var a in airports)
             {
                 if (a.Id == exceptId) continue;
-                var s = a.Site;
-                if (Services.ServiceGeometry.RectsOverlap(c, f, w, d, s.Center, s.Front, s.Width, s.Depth)) return true;
+                foreach (var s in a.Layout.Areas)
+                    if (Services.ServiceGeometry.RectsOverlap(c, f, w, d, s.Center, s.Front, s.Width, s.Depth)) return true;
             }
             return false;
         }
@@ -235,7 +235,8 @@ namespace CityBuilder.Simulation.Aviation
 
         IEnumerable<StructureBlock> AirportBlocks()
         {
-            foreach (var a in airports) yield return new StructureBlock(AirportBlockKind, a.Id, a.Name, a.Site, a.Height);
+            foreach (var a in airports)
+                foreach (var area in a.Layout.Areas) yield return new StructureBlock(AirportBlockKind, a.Id, a.Name, area, a.Height);
         }
 
         /// <summary>Hinweis für HUD/Fenster (null = alles gut): Flughafen nicht in Betrieb oder Einflugschneise gesperrt.</summary>

@@ -149,10 +149,10 @@ namespace CityBuilder.Simulation.Aviation
         {
             list.Clear();
             var l = new AirportLayout(type, center, dir, side, length, Math.Max(1, level));
-            var site = l.Site;
+            var lay = l;
             void Test(ObstacleKind kind, string name, Vector2 p, float half, float ground, float height)
             {
-                if (site.Contains(p, half)) return; // steht auf dem Gelände: weicht bzw. ist ein Platzfehler
+                if (lay.AreaContains(p, half)) return; // steht auf dem Gelände: weicht bzw. ist ein Platzfehler
                 float allowed = AllowedOver(type, l, p, half, true, out var surface, out float dist);
                 if (float.IsPositiveInfinity(allowed)) return;
                 float top = ground + height - elevation;
@@ -295,7 +295,7 @@ namespace CityBuilder.Simulation.Aviation
             foreach (var a in airports)
             {
                 var l = a.Layout;
-                if (a.Site.Contains(p, half)) return $"Flughafengelände ({a.Name})";
+                if (a.Contains(p, half)) return $"Flughafengelände ({a.Name})";
                 float allowed = AllowedOver(a.Type, l, p, half, false, out var surface, out _);
                 if (float.IsPositiveInfinity(allowed)) continue;
                 float ground = terrain.HeightAt(p);

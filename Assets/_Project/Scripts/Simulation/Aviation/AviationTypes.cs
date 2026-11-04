@@ -493,6 +493,34 @@ namespace CityBuilder.Simulation.Aviation
             }
         }
 
+        /// <summary>Außenkante des Parallelrollwegs (Grenze zwischen Bahn-Bereich und Vorfeld/Terminal-Bereich).</summary>
+        public float TaxiwayEdge => Type.TaxiwayOffset + Type.TaxiwayWidth * 0.5f + 5f;
+
+        /// <summary>Bahn-Bereich: Streifen + Bahn + Parallelrollweg über die ganze Länge (+ 60 m an den Enden).</summary>
+        public Footprint RunwayArea
+        {
+            get
+            {
+                float near = -Type.StripHalfWidth, far = TaxiwayEdge;
+                return new Footprint(At(0f, (near + far) * 0.5f), Normal, Length + 2f * AviationRules.StripEndExtension, far - near);
+            }
+        }
+
+        /// <summary>Vorfeld + Terminal + Tower/Hangar (mittig an der Bahn, bis zur Landseite).</summary>
+        public Footprint TerminalArea
+        {
+            get
+            {
+                float near = TaxiwayEdge, far = SiteFar;
+                return new Footprint(At(0f, (near + far) * 0.5f), Normal, ApronLength, far - near);
+            }
+        }
+
+        /// <summary>Die beiden Flächen des Flughafens (T-förmiges Gelände statt eines großen Rechtecks).</summary>
+        public Footprint[] Areas => new[] { RunwayArea, TerminalArea };
+
+        public bool AreaContains(Vector2 p, float margin = 0f) => RunwayArea.Contains(p, margin) || TerminalArea.Contains(p, margin);
+
         /// <summary>Landseite des Terminals (Vorderseite = Normal, Straße davor).</summary>
         public Footprint Terminal => new Footprint(At(0f, TerminalBack + 16f), Normal, TerminalWidth, 32f);
 
@@ -631,7 +659,7 @@ namespace CityBuilder.Simulation.Aviation
         public bool CounterFlow => ArrivalDirection != DepartureDirection;
         public string Designator => AviationRules.RunwayDesignator(Dir);
         public int Stands => Layout.StandCount;
-        public bool Contains(Vector2 p, float margin = 0f) => Site.Contains(p, margin);
+        public bool Contains(Vector2 p, float margin = 0f) => Layout.AreaContains(p, margin);
         public override string ToString() => Name;
     }
 }

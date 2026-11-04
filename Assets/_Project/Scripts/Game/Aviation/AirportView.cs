@@ -141,9 +141,9 @@ namespace CityBuilder.Game.Aviation
             var white = Mat(new Color(0.95f, 0.95f, 0.95f));
             var yellow = Mat(new Color(0.95f, 0.8f, 0.15f));
 
-            // Grasstreifen (Bauverbot) als flache Platte
-            var site = l.Site;
-            Box(tr, SimConvert.ToWorld(site.Center, y + 0.02f), new Vector3(site.Width, 0.04f, site.Depth), grass, Facing(site.Front));
+            // Grasstreifen (Bauverbot) und Terminal-Bereich als flache Platten
+            foreach (var site in l.Areas)
+                Box(tr, SimConvert.ToWorld(site.Center, y + 0.02f), new Vector3(site.Width, 0.04f, site.Depth), grass, Facing(site.Front));
 
             // Bahn aus 64-m-Kacheln (Enden mit Schwellenmarkierung)
             var along = AlongX(l.Dir);

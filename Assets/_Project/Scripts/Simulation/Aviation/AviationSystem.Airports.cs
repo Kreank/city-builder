@@ -41,68 +41,74 @@ namespace CityBuilder.Simulation.Aviation
         {
             var type = plan.Type;
             var layout = plan.Layout;
-            var site = layout.Site;
+            var areas = layout.Areas;
             float m = AviationRules.EdgeMargin;
-            foreach (var c in site.Corners())
-                if (c.X < world.Min.X + m || c.Y < world.Min.Y + m || c.X > world.Max.X - m || c.Y > world.Max.Y - m)
-                    return AirportBuildError.OutOfWorld;
+            foreach (var area in areas)
+                foreach (var c in area.Corners())
+                    if (c.X < world.Min.X + m || c.Y < world.Min.Y + m || c.X > world.Max.X - m || c.Y > world.Max.Y - m)
+                        return AirportBuildError.OutOfWorld;
 
-            // Gelände: Wasser, Ebenheit, Erdmenge (Raster über die ganze Fläche)
+            // Gelände: Wasser, Ebenheit, Erdmenge (Raster über beide Flächen)
             float step = AviationRules.SiteSampleStep;
-            int nu = Math.Max(2, (int)MathF.Ceiling(site.Width / step)), nv = Math.Max(2, (int)MathF.Ceiling(site.Depth / step));
-            var heights = new float[(nu + 1) * (nv + 1)];
-            double sum = 0;
+            double sum = 0, cellSum = 0;
             float lo = float.MaxValue, hi = float.MinValue;
-            int k = 0;
-            for (int i = 0; i <= nu; i++)
-                for (int j = 0; j <= nv; j++)
-                {
-                    var p = site.Center + site.Side * (site.Width * (i / (float)nu - 0.5f)) + site.Front * (site.Depth * (j / (float)nv - 0.5f));
-                    if (terrain.IsWater(p)) { plan.BlockerName = "Gewässer"; return AirportBuildError.OnWater; }
-                    float h = terrain.HeightAt(p);
-                    heights[k++] = h;
-                    sum += h;
-                    lo = MathF.Min(lo, h); hi = MathF.Max(hi, h);
-                }
-            float target = (float)(sum / k);
+            var heights = new List<(float h, float area)>();
+            foreach (var site in areas)
+            {
+                int nu = Math.Max(2, (int)MathF.Ceiling(site.Width / step)), nv = Math.Max(2, (int)MathF.Ceiling(site.Depth / step));
+                float cellArea = (site.Width / nu) * (site.Depth / nv);
+                for (int i = 0; i <= nu; i++)
+                    for (int j = 0; j <= nv; j++)
+                    {
+                        var p = site.Center + site.Side * (site.Width * (i / (float)nu - 0.5f)) + site.Front * (site.Depth * (j / (float)nv - 0.5f));
+                        if (terrain.IsWater(p)) { plan.BlockerName = "Gewässer"; return AirportBuildError.OnWater; }
+                        float h = terrain.HeightAt(p);
+                        heights.Add((h, cellArea));
+                        sum += h * cellArea;
+                        cellSum += cellArea;
+                        lo = MathF.Min(lo, h); hi = MathF.Max(hi, h);
+                    }
+            }
+            float target = (float)(sum / Math.Max(1.0, cellSum));
             plan.Height = MathF.Max(target, terrain.WaterLevel + 1.5f);
             double volume = 0;
-            for (int i = 0; i < k; i++) volume += MathF.Abs(heights[i] - plan.Height);
-            float cellArea = (site.Width / nu) * (site.Depth / nv);
-            plan.EarthVolume = (float)(volume * cellArea);
+            foreach (var (h, area) in heights) volume += MathF.Abs(h - plan.Height) * area;
+            plan.EarthVolume = (float)volume;
             plan.EarthworkCost = plan.EarthVolume * EconomyRules.TerraformCostPerCubicMeter;
             if (hi - lo > AviationRules.MaxLevelDifference) { plan.BlockerName = $"{hi - lo:0} m Höhenunterschied"; return AirportBuildError.TooHilly; }
 
             // Straßen, Gleise, Bauwerke, Freileitungen
-            foreach (var s in roads.Segments)
-                if (ServiceGeometry.RoadCrossesRect(s, site.Center, site.Front, site.Width, site.Depth, 0f))
-                {
-                    plan.BlockerName = s.IsLocked ? $"{s.Type.DisplayName} (gehört der Welt)" : s.Type.DisplayName;
-                    return s.IsLocked ? AirportBuildError.OverlapsHighway : AirportBuildError.OverlapsRoad;
-                }
-            if (world.Rail != null)
-                foreach (var s in world.Rail.Tracks.Segments)
+            int displaced = 0;
+            foreach (var site in areas)
+            {
+                foreach (var s in roads.Segments)
                     if (ServiceGeometry.RoadCrossesRect(s, site.Center, site.Front, site.Width, site.Depth, 0f))
                     {
-                        plan.BlockerName = s.IsLocked ? "Fernbahn-Hauptstrecke (gehört der Welt)" : "Gleis";
-                        return AirportBuildError.OverlapsTrack;
+                        plan.BlockerName = s.IsLocked ? $"{s.Type.DisplayName} (gehört der Welt)" : s.Type.DisplayName;
+                        return s.IsLocked ? AirportBuildError.OverlapsHighway : AirportBuildError.OverlapsRoad;
                     }
-            foreach (var b in roads.Structures)
-            {
-                var o = b.Footprint;
-                if (!ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, o.Center, o.Front, o.Width, o.Depth)) continue;
-                plan.BlockerName = b.Name;
-                return b.Kind == AirportBlockKind ? AirportBuildError.OverlapsAirport : AirportBuildError.OverlapsStructure;
+                if (world.Rail != null)
+                    foreach (var s in world.Rail.Tracks.Segments)
+                        if (ServiceGeometry.RoadCrossesRect(s, site.Center, site.Front, site.Width, site.Depth, 0f))
+                        {
+                            plan.BlockerName = s.IsLocked ? "Fernbahn-Hauptstrecke (gehört der Welt)" : "Gleis";
+                            return AirportBuildError.OverlapsTrack;
+                        }
+                foreach (var b in roads.Structures)
+                {
+                    var o = b.Footprint;
+                    if (!ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, o.Center, o.Front, o.Width, o.Depth)) continue;
+                    plan.BlockerName = b.Name;
+                    return b.Kind == AirportBlockKind ? AirportBuildError.OverlapsAirport : AirportBuildError.OverlapsStructure;
+                }
+                if (world.Utilities != null)
+                    foreach (var l in world.Utilities.Lines)
+                        foreach (var p in l.Poles)
+                            if (site.Contains(p, l.PoleFootprintHalf)) { plan.BlockerName = l.Type.DisplayName; return AirportBuildError.OverlapsPowerLine; }
+                if (world.City != null)
+                    foreach (var b in world.City.Buildings)
+                        if (!b.IsPlayerPlaced && ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, b.Position, b.Front, b.Width, b.Depth)) displaced++;
             }
-            if (world.Utilities != null)
-                foreach (var l in world.Utilities.Lines)
-                    foreach (var p in l.Poles)
-                        if (site.Contains(p, l.PoleFootprintHalf)) { plan.BlockerName = l.Type.DisplayName; return AirportBuildError.OverlapsPowerLine; }
-
-            int displaced = 0;
-            if (world.City != null)
-                foreach (var b in world.City.Buildings)
-                    if (!b.IsPlayerPlaced && ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, b.Position, b.Front, b.Width, b.Depth)) displaced++;
             plan.Displaced = displaced;
 
             // Hindernisfreiheit der Einflugschneisen (Gebäude auf dem Gelände zählen nicht, sie weichen)
@@ -180,15 +186,16 @@ namespace CityBuilder.Simulation.Aviation
 
         void PrepareSite(Airport a)
         {
-            var site = a.Site;
-            terrain.FlattenArea(site.Center, site.Front, site.Width, site.Depth, a.Height, 24f);
+            var areas = a.Layout.Areas;
+            foreach (var site in areas) terrain.FlattenArea(site.Center, site.Front, site.Width, site.Depth, a.Height, 24f);
             var city = world.City;
             if (city == null) return;
             var remove = new List<Zoning.Building>();
             foreach (var b in city.Buildings)
             {
                 if (b.IsPlayerPlaced) continue;
-                if (ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, b.Position, b.Front, b.Width, b.Depth)) remove.Add(b);
+                foreach (var site in areas)
+                    if (ServiceGeometry.RectsOverlap(site.Center, site.Front, site.Width, site.Depth, b.Position, b.Front, b.Width, b.Depth)) { remove.Add(b); break; }
             }
             foreach (var b in remove) city.RemoveBuilding(b);
         }

@@ -26,7 +26,7 @@ namespace CityBuilder.Game.Aviation
         Material okMaterial, badMaterial, warnMaterial, noiseMaterial, siteMaterial;
         GameObject runwayGhost, terminalGhost;
         MeshRenderer runwayRenderer, terminalRenderer;
-        LineRenderer siteLine;
+        LineRenderer siteLine, siteLine2;
         readonly LineRenderer[] approachLines = new LineRenderer[2];
         readonly LineRenderer[] noiseLines = new LineRenderer[2];
         readonly List<GameObject> markers = new List<GameObject>();
@@ -60,6 +60,7 @@ namespace CityBuilder.Game.Aviation
             runwayGhost = Ghost("Runway Preview", out runwayRenderer);
             terminalGhost = Ghost("Terminal Preview", out terminalRenderer);
             siteLine = NewLine("Airport Site", 3f, siteMaterial, true);
+            siteLine2 = NewLine("Airport Terminal Area", 3f, siteMaterial, true);
             for (int i = 0; i < 2; i++)
             {
                 approachLines[i] = NewLine("Approach Surface " + i, 4f, okMaterial, true);
@@ -151,6 +152,7 @@ namespace CityBuilder.Game.Aviation
             if (runwayGhost != null) runwayGhost.SetActive(false);
             if (terminalGhost != null) terminalGhost.SetActive(false);
             if (siteLine != null) siteLine.enabled = false;
+            if (siteLine2 != null) siteLine2.enabled = false;
             for (int i = 0; i < 2; i++)
             {
                 if (approachLines[i] != null) approachLines[i].enabled = false;
@@ -213,10 +215,14 @@ namespace CityBuilder.Game.Aviation
             terminalGhost.transform.localScale = new Vector3(t.Width, 16f, t.Depth);
             terminalRenderer.sharedMaterial = valid ? okMaterial : badMaterial;
             // Gelände
-            var corners = l.Site.Corners();
+            var corners = l.RunwayArea.Corners();
             siteLine.positionCount = 4;
             for (int i = 0; i < 4; i++) siteLine.SetPosition(i, SimConvert.ToWorld(corners[i], h + 1f));
             siteLine.enabled = true;
+            corners = l.TerminalArea.Corners();
+            siteLine2.positionCount = 4;
+            for (int i = 0; i < 4; i++) siteLine2.SetPosition(i, SimConvert.ToWorld(corners[i], h + 1f));
+            siteLine2.enabled = true;
             // Einflugschneisen (ansteigende Fläche) + Lärmkorridor
             for (int e = 0; e < 2; e++)
             {
