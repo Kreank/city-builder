@@ -27,6 +27,17 @@ namespace CityBuilder.Game.UI.Hud
         /// <summary>Spielstart: Name der Spielerstadt aus der Simulation (<c>World.Realm</c>, im Spielstand; früher Platzhalter).</summary>
         public static string CityName => activeRunner != null && activeRunner.World != null
             ? activeRunner.World.Realm.CityName : CityBuilder.Simulation.World.PlayerRealm.DefaultCityName;
+        /// <summary>Etappe 7 Reich: Zusatz hinter dem Stadtnamen – „ · Land {Name}“ bzw. „ · 2 Städte“ (leer bei einer freien Stadt).</summary>
+        public static string RealmSuffix
+        {
+            get
+            {
+                var r = activeRunner != null && activeRunner.World != null ? activeRunner.World.Realm : null;
+                if (r == null) return "";
+                if (r.IsNation) return " · " + r.NationName;
+                return r.Cities.Count > 1 ? $" · {r.Cities.Count} Städte" : "";
+            }
+        }
         static SimulationRunner activeRunner;
 
         const string ThemeResource = "UI/CityTheme";
@@ -82,6 +93,7 @@ namespace CityBuilder.Game.UI.Hud
         WorldMapUiWindow worldMap;
         GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
         TradeWindow tradeWindow; // Etappe 8 Handel (F11)
+        RealmWindow realmWindow; // Etappe 7 Reich (F12)
         EnvironmentWindow environmentWindow; // Umwelt (Etappe 6): Knopf in der Ansichtsleiste
         VisualElement resourceFlyout;
 
@@ -225,6 +237,7 @@ namespace CityBuilder.Game.UI.Hud
             if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
             // --- Ende G5
             tradeWindow = Windows.Add(new TradeWindow()); // Etappe 8 Handel (F11), nur mit Weltkarte sichtbar
+            realmWindow = Windows.Add(new RealmWindow()); // Etappe 7 Reich (F12): Städte, Lieferungen, Land gründen
             environmentWindow = Windows.Add(new EnvironmentWindow()); // Umwelt (Etappe 6): Luft, Boden, Gegenmaßnahmen
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
@@ -395,7 +408,7 @@ namespace CityBuilder.Game.UI.Hud
             brand.Add(names);
             topBar.Add(brand);
             slowRefresh.Add(() => date.text = DateText() + ClimateText());
-            slowRefresh.Add(() => { string n = CityName; if (cityLabel.text != n) cityLabel.text = n; }); // Spielstart: Stadtname
+            slowRefresh.Add(() => { string n = CityName + RealmSuffix; if (cityLabel.text != n) cityLabel.text = n; }); // Spielstart: Stadtname (+ Etappe 7: Land/Städte)
 
             // Spieltempo (Leertaste/1/2/3 bleiben im SimulationRunner)
             var speed = Container("cb-segment");
@@ -495,6 +508,13 @@ namespace CityBuilder.Game.UI.Hud
             goodsBtn.Add(Icon(HudIconKind.Briefcase));
             topBar.Add(goodsBtn);
             // --- Ende G5
+
+            // --- Etappe 7 Reich (F12): Städte, Lieferungen, Land gründen – nur mit Weltkarte sinnvoll
+            var realmBtn = Btn(null, () => realmWindow?.Toggle(), () => realmWindow != null && realmWindow.IsOpen,
+                "Reich (F12): eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen", null, "cb-icon-btn");
+            realmBtn.Add(Icon(HudIconKind.Flag));
+            topBar.Add(realmBtn);
+            // --- Ende Etappe 7
 
             // --- Etappe 8 Handel (F11) – nur mit den neuen Fenstern und Weltkarte
             var tradeBtn = Btn(null, () => tradeWindow?.Toggle(), () => tradeWindow != null && tradeWindow.IsOpen,

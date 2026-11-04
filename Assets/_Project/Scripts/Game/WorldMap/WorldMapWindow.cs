@@ -98,7 +98,7 @@ namespace CityBuilder.Game.WorldMap
             }
             GUILayout.EndHorizontal();
 
-            if (texture == null || shownMode != mode || shownCountryVersion != p.StartRegionId) Rebuild(p);
+            if (texture == null || shownMode != mode || shownCountryVersion != MapKey(p)) Rebuild(p);
 
             GUILayout.BeginHorizontal();
             // Karte
@@ -132,7 +132,7 @@ namespace CityBuilder.Game.WorldMap
             var p = Planet;
             if (p == null) return null;
             mode = m;
-            if (texture == null || shownMode != mode || shownCountryVersion != p.StartRegionId) Rebuild(p);
+            if (texture == null || shownMode != mode || shownCountryVersion != MapKey(p)) Rebuild(p);
             return texture;
         }
 
@@ -237,11 +237,40 @@ namespace CityBuilder.Game.WorldMap
                 px[(p.Height - 1 - p.YOf(c.CapitalCell)) * p.Width + p.XOf(c.CapitalCell)] = col;
             }
             DrawGatewayRays(p, px); // Außenanbindungen: Richtungen der Anschlüsse ab der Startregion
+            DrawRealmCities(p, px); // Etappe 7 Reich: eigene Städte
             texture.SetPixels32(px);
             texture.Apply(false);
             shownMode = mode;
-            shownCountryVersion = start;
+            shownCountryVersion = MapKey(p); // Etappe 7: auch Besitz/Farben/Städte
         }
+
+        // --- Etappe 7 Reich: Karte neu färben bei Besitz-/Namens-/Farbwechsel, neuen Städten und Stadtwechsel; Marker je eigener Stadt
+        int MapKey(Planet p)
+        {
+            var realm = tool != null && tool.Runner != null ? tool.Runner.World?.Realm : null;
+            unchecked { return p.StartRegionId + 1000 * p.PoliticalVersion + 7919 * (realm != null ? realm.Cities.Count * 31 + realm.ActiveCityId : 0); }
+        }
+
+        void DrawRealmCities(Planet p, Color32[] px)
+        {
+            var realm = tool != null && tool.Runner != null ? tool.Runner.World?.Realm : null;
+            if (realm == null) return;
+            foreach (var c in realm.Cities)
+            {
+                if (c.Cell < 0 || c.Cell >= p.CellCount) continue;
+                var col = c.Id == realm.ActiveCityId ? new Color32(255, 255, 255, 255) : new Color32(255, 216, 74, 255);
+                int x = p.XOf(c.Cell), y = p.YOf(c.Cell);
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx != 0 && dy != 0) continue; // kleines Kreuz
+                        int yy = y + dy; if (yy < 0 || yy >= p.Height) continue;
+                        int xx = ((x + dx) % p.Width + p.Width) % p.Width;
+                        px[(p.Height - 1 - yy) * p.Width + xx] = col;
+                    }
+            }
+        }
+        // --- Ende Etappe 7
 
         // --- Außenanbindungen (Gateways): Strahl je Anschluss ab der Mitte der Startregion (Autobahn rot, Bahn braun, Wasser hellblau)
         void DrawGatewayRays(Planet p, Color32[] px)

@@ -78,6 +78,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("M", "Stadtkasse");
                 ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen, Lenkung: Förderung je Branche)");
                 ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
+                ui.Field("F12", "Reich: eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen (Stadt gründen auf der Weltkarte F4)"); // Etappe 7
                 ui.Field("F1", "diese Hilfe");
             }
             ui.Section("Spiel");

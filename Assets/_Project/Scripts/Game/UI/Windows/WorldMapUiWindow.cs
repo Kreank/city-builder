@@ -13,7 +13,7 @@ namespace CityBuilder.Game.UI.Windows
     /// Name, Hauptstadt, Stärkenprofil (Primär/Sekundär), Bevölkerung, BIP und Überschuss/Defizit je Güterkategorie.
     /// Ohne Auswahl: Spieler-Land. Liest nur.
     /// </summary>
-    public sealed class WorldMapUiWindow : GameWindow
+    public sealed partial class WorldMapUiWindow : GameWindow // partial: Etappe 7 Reich in WorldMapUiWindow.Realm.cs
     {
         const float Scale = 2f;
 
@@ -30,7 +30,7 @@ namespace CityBuilder.Game.UI.Windows
         int selectedCountry = -1;
         int hoverCell = -1;
 
-        public WorldMapUiWindow(WorldMapWindow map) : base(WindowSlot.Center) { this.map = map; }
+        public WorldMapUiWindow(WorldMapWindow map) : base(WindowSlot.Center) { this.map = map; Current = this; } // Etappe 7: Current
 
         public override string FrameClass => "cb-window--wide";
 
@@ -68,10 +68,11 @@ namespace CityBuilder.Game.UI.Windows
             }
             var tex = map.TextureFor(mode);
             ui.Image(tex, p.Width * Scale, p.Height * Scale,
-                uv => { int i = Cell(p, uv); var c = p.CountryOfCell(i); selectedCountry = c != null ? c.Id : -1; },
+                uv => { int i = Cell(p, uv); var c = p.CountryOfCell(i); selectedCountry = c != null ? c.Id : -1; SelectCell(p, i); }, // Etappe 7: Region/Zelle für „Stadt gründen“
                 uv => hoverCell = uv.HasValue ? Cell(p, uv.Value) : -1);
             ui.Note(hoverCell >= 0 ? WorldMapWindow.CellText(p, hoverCell) : "Maus über die Karte: Zelleninfo · Klick auf ein Land: Details · weiß = Startregion, gelber Punkt = deine Stadt · hell = freies Land");
 
+            RealmBody(ui, p); // Etappe 7 Reich: eigene Städte, Stadt gründen, zur Stadt wechseln
             var country = selectedCountry >= 0 && selectedCountry < p.Countries.Count ? p.Countries[selectedCountry] : p.PlayerCountry;
             if (country != null) CountryBody(ui, p, country);
         }
@@ -85,7 +86,8 @@ namespace CityBuilder.Game.UI.Windows
 
         void CountryBody(Ui ui, Planet p, Country c)
         {
-            ui.Section(c.Name + (c.IsCityState ? " (dein Stadtstaat)" : c.IsPlayer ? " (dein Land)" : ""), c.IsCityState ? "noch ohne eigenes Land – Etappe 7: Land gründen" : $"Hauptstadt {c.CapitalName}");
+            bool nation = c.IsCityState && World?.Realm != null && World.Realm.IsNation; // Etappe 7: gegründetes Land
+            ui.Section(c.Name + (c.IsCityState && !nation ? " (dein Stadtstaat)" : c.IsPlayer ? " (dein Land)" : ""), c.IsCityState && !nation ? "noch ohne eigenes Land – Reich (F12): Land gründen" : $"Hauptstadt {c.CapitalName}");
             using (ui.Chips())
             {
                 ui.Chip("★ " + CountryProfile.DisplayName(c.Profile.Primary), Tone.Good);

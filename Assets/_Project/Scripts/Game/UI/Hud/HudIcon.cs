@@ -27,6 +27,8 @@ namespace CityBuilder.Game.UI.Hud
         Ship,
         /// <summary>Umwelt (Etappe 6): Laubbaum (Bäume pflanzen, Umweltfenster), Tropfen über Boden (Grundwasser).</summary>
         Tree, Groundwater,
+        /// <summary>Etappe 7 Reich: Fahne am Mast (Reichsfenster).</summary>
+        Flag,
     }
 
     /// <summary>
@@ -231,6 +233,10 @@ namespace CityBuilder.Game.UI.Hud
                     break;
                 case HudIconKind.Cursor: // Pfeil-Mauszeiger (Auswählen)
                     Poly(true, 6, 3, 6, 19, 10.5f, 15, 13.5f, 21.5f, 16.5f, 20.2f, 13.5f, 13.8f, 19, 13.5f);
+                    break;
+                case HudIconKind.Flag: // Etappe 7 Reich: Mast + wehende Fahne
+                    Line(6, 3, 6, 21);
+                    Poly(true, 6, 4, 19, 4, 16, 8, 19, 12, 6, 12);
                     break;
                 case HudIconKind.Help:
                     Circle(12, 12, 9);
