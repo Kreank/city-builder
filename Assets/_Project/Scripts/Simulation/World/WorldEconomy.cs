@@ -117,6 +117,12 @@ namespace CityBuilder.Simulation.World
 
         internal void CalibrateCapacity(int c, double scale) => CapacityPerCapita[c] *= scale;
 
+        /// <summary>Etappe 7 Reich: Bevölkerung setzen (Spieler-Land = Umland + Summe seiner Städte).</summary>
+        internal void SetPopulation(double population)
+        {
+            if (population > 0 && !double.IsInfinity(population)) Population = population;
+        }
+
         /// <summary>Startpreise nach der Kalibrierung neu aus Bedarf/Kapazität (wie im Konstruktor).</summary>
         internal void ResetStartPrices()
         {

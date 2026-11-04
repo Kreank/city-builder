@@ -172,8 +172,24 @@ namespace CityBuilder.Simulation.Trade
                 int weeks = Math.Min(c.Terms.Weeks - c.WeeksDispatched, 1 + (Day + horizonDays - c.NextDispatchDay) / TradeRules.DaysPerWeek);
                 sum += c.Terms.UnitsPerWeek * Math.Max(1, weeks);
             }
+            if (ExtraExportDue != null) sum += ExtraExportDue(g, horizonDays); // Etappe 7 Reich: interne Lieferungen
             return sum;
         }
+
+        // --- Etappe 7 Reich: interne Lieferungen aus der aktiven Stadt laufen wie Exportverträge über das Grenzlager
+        /// <summary>Zusätzliche Exportmenge (Gut, Horizont in Tagen) – Hook des Reichs; null = keine.</summary>
+        public Func<GoodType, int, double> ExtraExportDue { get; set; }
+        /// <summary>Preis für Firmen, wenn kein Exportvertrag das Gut verlangt (Verrechnungspreis der internen Lieferung); null/0 = keiner.</summary>
+        public Func<GoodType, double> ExtraExportPrice { get; set; }
+
+        /// <summary>Beziehung zweier Länder verändern (Reich: Landesgründung, Gebietsansprüche, Anerkennung).</summary>
+        internal void AdjustRelation(int a, int b, float delta)
+        {
+            if (a < 0 || b < 0 || a >= nations.Count || b >= nations.Count) return;
+            AddRelation(a, b, delta);
+            Version++;
+        }
+        // --- Ende Etappe 7
 
         /// <summary>Vertragspreis, den Firmen für Exportware bekommen: Preis des am frühesten fälligen Exportvertrags (0 = keiner).</summary>
         public double PlayerExportPrice(GoodType g)
@@ -185,7 +201,7 @@ namespace CityBuilder.Simulation.Trade
                 if (!c.IsActive || c.Kind != ContractKind.Supply || c.Seller != player || c.Good != g || c.AllDispatched) continue;
                 if (best == null || c.NextDispatchDay < best.NextDispatchDay) best = c;
             }
-            return best != null ? UnitPrice(best.Terms) : 0.0;
+            return best != null ? UnitPrice(best.Terms) : ExtraExportPrice?.Invoke(g) ?? 0.0; // Etappe 7 Reich
         }
 
         // ------------------------------------------------------------ Stadt anbinden

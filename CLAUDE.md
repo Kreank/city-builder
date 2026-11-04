@@ -12,7 +12,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Vorlieben (Klima, Küste/Fluss, Gelände, Schwerpunkt wie Agrar/Erze/Tourismus …), wobei eine Wahl andere unmöglich machen
   kann (Erze meist in Bergen, selten am Meer). Keine echten Ländernamen. Der Spieler gründet seine Stadt in **freiem,
   unbesiedeltem Land** als **freie Stadt (Stadtstaat)**; mit weiteren Städten wird daraus später ein eigenes Land mit selbst
-  gewähltem Namen (Etappe 7). Umgesetzt: s. „Spielstart & Startregion“.
+  gewähltem Namen (Etappe 7). Umgesetzt: s. „Spielstart & Startregion“ und „Reich (Etappe 7)“.
 - **Handel intern und extern:** zwischen eigenen Städten und zwischen Ländern; Regierungen können gebildet werden.
   **Freunde einladen** (Multiplayer, asynchron): eigene Städte im eigenen Land oder als fremdes Land, Handel untereinander.
 - **Zwei Bauarten:** (1) **Gebiete** markieren, Leute kommen und bebauen selbst – Wohnen (gering/mittel/dicht),
@@ -141,7 +141,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping, Aviation)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping, Aviation, Realm)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -1428,10 +1428,11 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Startregion, Grundzoll 0); die Stadt-Seite läuft wie bisher über das Grenzlager. Am Handel musste nichts geändert werden
   (geprüft: Lieferungen/Bezahlung laufen für `IsPlayer` über `City`, Lagebild/Weltpreis rechnen mit seiner kleinen
   Volkswirtschaft, Beziehungen/Nachbarschaft über `CountryId >= 0`).
-- **`PlayerRealm`** (`world.Realm`, immer gesetzt, Abschnitt „realm“ v1): `CityName` (aus `WorldSettings.CityName`, Standard
-  „Neustadt“, `RenameCity`), `DisplayName` = `NationName` ?? „Freie Stadt {Stadtname}“ (Name des Stadtstaats auf Weltkarte und
-  im Handel), vorbereitet für Etappe 7: `NationName` (null), `FlagColor`, `CityRegions`, `MinCitiesForNation` 3, `CanFoundNation`.
-  Speichert zusätzlich den **Besitz aller Regionen** (Land-Id je Region) und stellt Abweichungen beim Laden wieder her.
+- **`PlayerRealm`** (`world.Realm`, immer gesetzt, Abschnitt „realm“ v1, seit Etappe 7 v2): `CityName` (= Name der **aktiven**
+  Stadt, Start aus `WorldSettings.CityName`, Standard „Neustadt“, `RenameCity`), `DisplayName` = `NationName` ?? „Freie Stadt
+  {Hauptstadt}“ (Name des Stadtstaats auf Weltkarte und im Handel), `NationName`, `FlagColor`, `CityRegions`, `MinCitiesForNation` 3,
+  `CanFoundNation` – **umgesetzt in Etappe 7**, s. „Reich (Etappe 7)“. Speichert zusätzlich den **Besitz aller Regionen** (Land-Id je
+  Region) und stellt Abweichungen beim Laden wieder her.
 - **Startsuche** `Simulation/World/StartFinder` (rein, getestet in `StartFinderTests`) mit Katalog `StartCriteria` (Regeln +
   Erklärtexte als Daten): `RegionFacts` je freier Region (≥ 4 Zellen) aus den echten Planet-Daten – Klimazone
   (`ClimateOf`: polar < −6 °C/Eis, trocken = Wüste oder < 250 mm, subpolar = Tundra/Taiga/< 4 °C, gemäßigt < 14 °C,
@@ -1467,6 +1468,87 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (alle Regionen NPC, Spieler = Land der Startregion), weil Länder-Volkswirtschaften („planet“) und Handel („trade“) nach
   Länder-Ids gespeichert sind – eine neu verteilte Welt würde nicht mehr zu Verträgen, Beziehungen und Lagern passen.
   Fehlt „realm“, heißt die Stadt „Neustadt“ (wie der alte Platzhalter).
+
+## Reich (Etappe 7)
+Vision des Spielers: „Man startet als freie Stadt und kann zu einem Land werden. Später weitere Städte (selbst oder durch NPCs). Handel
+intern und extern.“ Keine echten Ländernamen; der Spieler benennt sein Land.
+- `Simulation/Realm` (Namespace `CityBuilder.Simulation.Realm`): `RealmRules` (alle Zahlen), `RealmCity` + `CityEconomy` (aggregierte
+  Stadt), `RealmDelivery`/`RealmShipment`/`RealmRoute`/`RealmNews` + Commands, `RealmSystem` (+ `.Nation.cs`, Logik, `ISimulationSystem`,
+  läuft **zuletzt** in `CreateDefault`, erreichbar über `world.Realm.System`), `RealmSwitch` (Stadtwechsel), `PlayerRealm.Save.cs`
+  (Abschnitt „realm“ v2, `partial` zu `World/PlayerRealm`). Der Zustand liegt komplett in `PlayerRealm` (`world.Realm`).
+- **Eine Stadt = eine `SimulationWorld`, genau eine läuft detailliert** (die betrachtete, `Realm.ActiveCity`), alle anderen
+  **aggregiert** (`RealmCity.Economy`). **Entscheidung Spielstand/Wechsel:** je anderer Stadt ein **eingebetteter Unter-Spielstand**
+  (`RealmCity.Snapshot` = ihre lokalen Abschnitte als Rohbytes, unkomprimiert im Abschnitt „realm“ → Prüfsummen hängen nicht vom GZip ab)
+  + **reichsweite Abschnitte** `RealmSwitch.GlobalSections` = „world“ (Uhr), „realm“, „planet“ (Länder-Volkswirtschaften), „trade“
+  (Verträge, Beziehungen, Zölle, Grenzlager). Alles andere (Straßen, Bürger, Kasse, Firmen, Gateways, Bahn, Hafen, Flughafen …) ist lokal.
+  Begründung: Der Wechsel nutzt genau den erprobten Weg `SaveGame.Restore` (Welt aus Einstellungen + Seed neu, Abschnitte lesen) – kein
+  System musste „mehrstädtefähig“ werden, Determinismus bleibt (Test: zwei gleiche Läufe mit Wechseln bitgleich, Speichern/Laden eines
+  Reichs mit Unter-Spielständen → bitgleich weiter, auch nach erneutem Wechsel). Ein Spielstand enthält alle Städte.
+- **Wechsel** (`RealmSwitch.Switch(world, cityId)` → neue Welt; Unity ersetzt sie wie beim Laden, `WorldReplaced`): laufenden Tick zu Ende
+  rechnen → Kennzahlen der aktiven Stadt ins Aggregat (`CityEconomy.CaptureFrom`) → lokale Abschnitte als Schnappschuss in ihre `RealmCity`
+  → Ziel aktiv → Container: Weltabschnitt mit Region (`StartRegion`), Geländeseed und Name der Zielstadt + aktuelle Uhr
+  (`SaveGame.WorldSection`/`ReadWorldSettings` – kopiert alle gespeicherten Einstellungen), lokale Abschnitte der Zielstadt (nie
+  detailliert: frisch erzeugte Stadtkarte aus ihrer Region inkl. vorgebauter Autobahn), reichsweite Abschnitte → `Restore`. Danach: Kasse =
+  aggregierte Kasse (Differenz als „Reich: Einnahmen/Ausgaben“), Exportware auf dem Weg ins Grenzlager gilt als angekommen. Fehler → alte
+  Welt bleibt gültig (Reichszustand wird zurückgesetzt). Bewusst **kein Command** (ersetzt die Welt wie ein Laden). Uhr läuft durch:
+  eine zurückgeholte Stadt springt in der Zeit (Bürger/Systeme laufen ohne Nachholschleifen weiter; geprüft: keine Tages-Schleifen im Code).
+  Schnappschuss einer kleinen Teststadt ≈ 1,3 MB, Wechsel im Test < 1 s (zwei Welterzeugungen bei neuer Stadt).
+- **Stadt gründen** (`FoundCityCommand(region, name, zelle)`, Prüfung `CheckFoundCity` mit allen Bedingungen ✓/✗ für die UI): Region frei
+  (oder eigenes Gebiet – dann freie Weltzelle mit ≥ 2 Zellen Abstand), höchstens 8 Städte, **Verbindung** über echte Wege (Nachbarregion
+  einer eigenen Stadt + Mutterstadt an der Autobahn angeschlossen, oder Küste ↔ Küste + Hafen in Betrieb), Mutterstadt (die detaillierte)
+  **≥ 1 500 Einwohner**, **Rathaus** (`HasTownHall`), **250 000 €** aus der Stadtkasse („Reich: Ausgaben“). Wirkung: Region gehört dem
+  Spieler (`Planet.AssignRegion`), neue `RealmCity` (Geländeseed/Seed aus der Startstadt + Id, Kasse 100 000 €, leere Karte),
+  Nachbarländer der Region −2 Beziehung. Gründungen in der eigenen Region = andere Weltzelle, anderer Geländeseed.
+- **Aggregierte Stadt** (`CityEconomy.StepDay`, täglich für alle nicht aktiven Städte): Produktion/Bedarf je Güterkategorie = Einwohner ×
+  je Kopf (gemessen in der Detailsimulation: G5-Märkte des Vortags in Kategorie-Einheiten; neu gegründet: Vorkommen der Region),
+  Lager deckt Bedarf, Fehlmengen vom Weltmarkt (× 1,1), Überschuss über 30 Tage Lager hinaus (× 0,85; Ware für eigene Lieferungen bleibt
+  liegen), Kasse = Steuern je Kopf (Wochenmittel) + 4 % Außenhandelssaldo − Unterhalt; Zufriedenheit läuft zum gemessenen Wert
+  (− Schulden, − Lücken Lebensmittel/Konsum), Wachstum ± 0,4 %/Tag nach Zufriedenheit (neutral 0,55), höchstens bis zum Wohnraum
+  (aggregiert wird nicht gebaut). Die aktive Stadt füllt dieselben Felder täglich aus der Detailsimulation → Reichsfenster zeigt für alle
+  Städte dieselben Kennzahlen. Rückkehr: der Detailzustand ist die Wahrheit (Bevölkerung wie verlassen), nur die Kasse wird verrechnet.
+- **Interne Lieferungen** (`ProposeDeliveryCommand(von, nach, ContractTerms)`, `CancelDeliveryCommand`; **dieselben `ContractTerms` und
+  dieselbe Submit/Execute/Log-Schnittstelle wie Handelsverträge**, Ergebnis `TradeResult`, Partner = eigene Stadt, ohne Zoll und Strafe):
+  wöchentlicher Versand über `RealmRoute` (Lkw über die Autobahn auf derselben Landmasse 1,35 × Großkreis × 0,03 €/t·km; **Bahn** wenn
+  beide Städte einen Güterbahnhof in Betrieb haben × 0,56 und schneller; **Schiff** Küste ↔ Küste, 60 km Vorlauf je Stadt ohne eigenen
+  Hafen; billigster Weg, Lieferzeit wie Etappe 8). Sender detailliert: Hook `TradeSystem.ExtraExportDue/ExtraExportPrice` (Firmen liefern
+  per Lkw ins Grenzlager wie bei Exportverträgen, Verrechnungspreis = Welt × Faktor), Versand aus dem Grenzlager; aggregiert: aus dem
+  Kategorie-Lager. Empfänger detailliert: Grenzlager (`ReceiveImport`, Zoll 0 – Firmen kaufen wie Vertragsware), aggregiert: Lager.
+  Fracht zahlt der Sender, Verrechnung bei Ankunft Empfänger → Sender (Kategorien „Reich: Einnahmen/Ausgaben“, hinten angefügt).
+- **Land gründen** (`FoundNationCommand(name, farbe, hauptstadt)`, Prüfung `CheckNation` mit **Fortschritt**): ≥ 3 Städte, ≥ 2 Rathäuser,
+  ≥ 6 000 Einwohner gesamt, Hauptstadt mit Rathaus, Name frei (kein NPC-Land, nicht „Freie Stadt …“); nur im neuen politischen Modell
+  (alte Stände ohne freies Land: Spieler ist schon ein Land). Wirkung: `NationName`/`FlagColor`/Hauptstadt → Name, Farbe, Hauptstadtzelle
+  des Spieler-Landes (`Country.IsCityState` bleibt als Kennzeichen „vom Spieler gegründet“; Weltkarte färbt über `Planet.PoliticalVersion`
+  um). **NPC-Reaktion:** Beziehung +3 Höflichkeit, −6 bei gemeinsamer Grenze, −4 × Protektionismus; **Anerkennung** bei Neigung ≥ 0
+  (Beziehung + 15 × (1 − Protektionismus) − 10 Nachbar), sonst Neuprüfung alle 30 Tage (Zufall nach Neigung), Anerkennung +2 Beziehung
+  (Test: 10 von 16 Ländern sofort). **Landeskasse:** 10 % der täglichen Steuern jeder Stadt, `TransferFundsCommand` (Zuschuss an eine Stadt).
+  **Länder-Volkswirtschaft des Spielers = Summe seiner Städte** (ab 2 Städten: 5 000 Umland je Stadt-Region + Einwohner aller Städte,
+  `NationEconomy.SetPopulation`). Zölle/Verträge gehören ohnehin dem Spieler-Land (Länder-Id) → gelten landesweit; abgewickelt über das
+  Grenzlager der jeweils detaillierten Stadt (das Grenzlager wandert beim Wechsel mit).
+- **NPC-Expansion** (`Realm.NpcExpansion`, Standard aus, das Spiel schaltet ein – `SimulationRunner.npcExpansion`): wöchentlich je NPC-Land
+  Chance 1,5 % × (0,5 + Risiko) × (1 + Hunger), dann 120 Tage Pause; Ziel = freie Nachbarregion per Softmax über den Nutzen (Boden, Küste,
+  Fluss, Bodenschätze, Wald; Spielergrenze meiden vorsichtige Länder); höchstens 45 % des anfangs freien Landes. Konflikte nur als
+  Beziehung: Anspruch am Spielergebiet −6 („Grenzstreit“, Meldung), andere Nachbarn −2. Kein Krieg. Besitz steht schon im Abschnitt „realm“.
+- **Spielstand** „realm“ **v2** (v1 → eine Stadt, Seeds der frisch erzeugten Welt): aktive Stadt, Hauptstadt, Städte (Aggregat +
+  Schnappschuss), Lieferungen + Ware unterwegs, Landeskasse, Anerkennung, Expansion (Zufall `SimRandom`, Abkühlzeiten), Meldungen,
+  Command-Warteschlange und -Log.
+- **Unity:** `Game/UI/Windows/RealmWindow` (mittig, **Pos1** – F12 gehört dem Flughafen –, Fahnen-Knopf oben `HudIconKind.Flag`): Reiter
+  Städte (Kennzahlen, Status detailliert/aggregiert/neu, Weg, „Zur Stadt wechseln“, Umbenennen, „Neue Stadt gründen …“ → Weltkarte),
+  Lieferungen (Liste, Unterwegs, neue Vereinbarung mit Weg/Wert/Fracht, Beenden), Land (Fortschritt + Bedingungen, Name, Flagge aus 8
+  Grundfarben, Hauptstadt; danach Landeskasse, Zuschüsse, Anerkennung je Land), Meldungen. `WorldMapUiWindow.Realm.cs`: „Deine Städte“
+  (Klick = wechseln), Klick auf eine Region zeigt die Gründungsbedingungen + Namensfeld + „Stadt gründen“. `WorldMapWindow`: Stadtmarker
+  (weiß = aktiv, gold = weitere), Neufärben bei Besitz-/Farb-/Städtewechsel. Obere Leiste: Stadtname + „ · {Land}“ bzw. „ · n Städte“.
+  `Game/Realm/RealmActions` (Commands ausführen, Wechsel mit Meldung). **Optik ungeprüft** (Unity nicht gestartet): Layout des Fensters,
+  Marker-Kreuze auf der Karte, Fahnen-Icon, Dauer/Ruckler beim Wechsel im Editor.
+- **Tests** `RealmTests` (14): Startzustand/API, Gründungsbedingungen (Einwohner, Rathaus, NPC-Land, Erreichbarkeit), Gründen (Besitz,
+  Kosten, Abstand, Weg), Wechsel hin/zurück/wieder hin (Straßen bitgleich, Bevölkerung, Uhr), Determinismus + Speichern/Laden mit
+  Unter-Spielständen, aggregiertes Wachstum/Schrumpfen, aggregierter Tageslauf + Kassenausgleich, Lieferungen aggregiert → Grenzlager und
+  Grenzlager → aggregiert (Hook), Lieferung über Wechsel + Laden, Land gründen (Bedingungen, Wirkungen, Anerkennung, Landesabgabe,
+  Zuschuss, Laden), NPC-Expansion (langsam, Obergrenze, deterministisch, nur angrenzend), Migration realm v1.
+- **Nächste Teilstufe (offen):** Pendler/Zuzug zwischen Nachbarstädten (heute keine), NPC-Städte als eigene Siedlungen (NPC-Länder
+  wachsen heute nur über Regionen, ihre Volkswirtschaft bekommt keine Einwohner dazu), Gebietsstreit mit Folgen (Verhandlung, Abtretung),
+  Grenzlager je Stadt statt eines wandernden Reichs-Grenzlagers, Landesgesetze (einheitliche Steuersätze/Zölle je Stadt), Hauptstadt-Bonus,
+  Medien-Schlagzeilen zu Gründung/Anerkennung/Grenzstreit, Profil (Stärken) des Spieler-Landes über alle Regionen statt der aktiven Region,
+  interne Lieferungen mit sichtbaren Lkw/Zügen zwischen den Karten, Kassenausgleich auch für Lager/Bevölkerung beim Zurückkehren.
 
 ## Handel (Etappe 8)
 - `Simulation/Trade` (Namespace `CityBuilder.Simulation.Trade`): `TradeSystem` (+ `.Ai.cs`), `TradeGoods`, `TradeGeography`,
@@ -1546,7 +1628,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße (Güterbahnhof ✅ Bahn Stufe 2, Hafen ✅ Wasserstraße Stufe 3 – das
   Grenzlager selbst bleibt als Buchungsort), Tourismus als
   Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
-  Städten (Etappe 7), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
+  Städten (✅ Etappe 7: interne Lieferungen, s. „Reich“), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
 ## Eigene Assets (im Git)
 - **Alles Eigene liegt unter `Assets/_Project/`** (z. B. Blender-Modelle in `Assets/_Project/Models/`, Blender-Skripte
@@ -2089,7 +2171,8 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
   Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
   Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0;
-  `aviation` v1 fehlt → kein Flughafen).
+  `aviation` v1 fehlt → kein Flughafen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
+  das Spiel schaltet sie ein).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -2239,12 +2322,14 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
    Gegenmaßnahmen Umweltauflagen 0–3 (Filter, Firmen- und Stadtkosten), Umweltzone, Bäume pflanzen; Ansichten Luft/Boden/
    Grundwasser, Umweltfenster, Smog-Dunst, Gelände-Farben nach Jahreszeit; Spielstand ecology v1/goods v4 (im Editor noch nicht
    visuell abgenommen). Später: Lärm aus Industrie/Verkehrsmenge, Hochwasser, Klimawandel/CO₂, Recycling, Fernwärme/Wärmepumpen
-7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
-   - Vorbereitet (Spielstart): Spieler startet als Stadtstaat „Freie Stadt {Stadtname}“ in freiem Land; `PlayerRealm` hat
-     `CityRegions`, `NationName`/`FlagColor` (null/Gold), `MinCitiesForNation` = 3, `CanFoundNation`; Regionsbesitz im Spielstand.
-   - Offen: **weitere Städte gründen** (freie Nachbarregionen beanspruchen → `Planet.AssignRegion`, Stadt wechseln = LOD),
-     **Land gründen** (ab 3 Städten: Name + Flagge wählen → `NationName`, Stadtstaat wird Land, Handel/Medien zeigen den Namen),
-     Anspruch auf freies Land durch NPC-Länder (Wettlauf), Grenzen/Gebietsstreit.
+7. ✅ Reich: mehrere Städte, Transport dazwischen, interner Handel, Land gründen (s. „Reich (Etappe 7)“): Städte gründen auf der
+   Weltkarte (freie Nachbarregion bzw. freier Platz in der eigenen Region; Einwohner, Rathaus, Anschluss Autobahn/Hafen, Kosten), eine Stadt
+   detailliert + übrige aggregiert (Stadt-Volkswirtschaft mit Wachstum, Produktion/Bedarf je Kategorie, Lager, Kasse), Wechseln mit
+   eingebetteten Unter-Spielständen (deterministisch, ein Spielstand enthält alle Städte), interne Lieferungen (gleiche Vertragsbedingungen/
+   Commands wie der Handel, Lkw/Bahn/Schiff, ohne Zoll), Land gründen (Name, Flagge, Hauptstadt, Weltkarte färbt um, Anerkennung/Beziehung
+   der NPC-Länder, Landeskasse, Länder-Volkswirtschaft = Summe der Städte), NPC-Expansion in freies Land (Utility AI, langsam, gedeckelt,
+   Grenzstreit nur als Beziehung), Reichsfenster (Pos1), Stadtname + Land oben (im Editor noch nicht visuell abgenommen).
+   Nächste Teilstufe: Pendler/Zuzug zwischen Nachbarstädten, NPC-Städte, Gebietsstreit mit Folgen, Grenzlager je Stadt, Landesgesetze.
 8. Handel & Politik: Bot-Nationen, Marktpreise, Verträge, Regierungen/Bündnisse, externer Handel, Tourismus
    - ✅ Stufe 1: Weltmarkt aus den Ländern (Weltpreis speist G5), Handelswege Land/See mit Kosten und Lieferzeit, Angebote/Verträge/
      Lieferungen als Commands (gleich für Spieler und NPC), Grenzlager mit G5-Import/Export, NPC-Länder als Utility AI mit

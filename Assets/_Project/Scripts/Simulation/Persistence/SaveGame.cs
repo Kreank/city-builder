@@ -174,9 +174,33 @@ namespace CityBuilder.Simulation.Persistence
 
         // ------------------------------------------------------------ Weltabschnitt
 
-        static void WriteWorld(SimulationWorld world, SaveWriter w)
+        // --- Etappe 7 Reich: Weltabschnitt einer anderen Stadt zusammensetzen (Stadtwechsel, s. Realm.RealmSwitch)
+        /// <summary>Weltabschnitt aus Einstellungen, Seed und Uhr (wie beim Speichern einer Welt).</summary>
+        public static SaveSection WorldSection(WorldSettings settings, int seed, long tick, int substep) => new SaveSection
         {
-            var s = world.Settings;
+            Id = WorldSectionId, Version = WorldSectionVersion, Data = Bytes(w => WriteWorld(settings, seed, tick, substep, w)),
+        };
+
+        /// <summary>Einstellungen (neues Objekt), Seed und Uhr aus einem Weltabschnitt.</summary>
+        public static WorldSettings ReadWorldSettings(SaveSection section, out int seed, out long tick, out int substep)
+        {
+            if (section == null) throw new SaveLoadException("Der Spielstand enthält keine Weltdaten.");
+            using (var ms = new MemoryStream(section.Data, writable: false))
+            {
+                ReadWorld(new SaveReader(ms), section.Version, out var settings, out seed, out tick, out substep);
+                return settings;
+            }
+        }
+
+        /// <summary>Bytes eines einzelnen Abschnitts.</summary>
+        public static byte[] SectionBytes(ISaveable system) => Bytes(system.Write);
+        // --- Ende Etappe 7
+
+        static void WriteWorld(SimulationWorld world, SaveWriter w) =>
+            WriteWorld(world.Settings, world.Seed, world.Clock.Tick, world.SubstepInTick, w);
+
+        static void WriteWorld(WorldSettings s, int seed, long tick, int substep, SaveWriter w)
+        {
             w.Float(s.SizeMeters);
             w.Float(s.EnvironmentCellSize);
             w.Bool(s.GenerateTerrain);
@@ -197,9 +221,9 @@ namespace CityBuilder.Simulation.Persistence
                 w.Int(s.Planet.TargetRegions);
                 w.Int(s.Planet.TargetCountries);
             }
-            w.Int(world.Seed);
-            w.Long(world.Clock.Tick);
-            w.Int(world.SubstepInTick); // v2
+            w.Int(seed);
+            w.Long(tick);
+            w.Int(substep); // v2
             // v3 Spielstart: politisches Modell (Anteil freies Land) und Stadtname der Einstellungen
             w.Float(s.Planet?.FreeLandShare ?? World.PlanetSettings.DefaultFreeLandShare);
             w.String(s.CityName);
