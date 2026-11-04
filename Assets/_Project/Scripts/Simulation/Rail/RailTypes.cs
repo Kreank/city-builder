@@ -238,6 +238,8 @@ namespace CityBuilder.Simulation.Rail
         /// <summary>Anderes Bauwerk (Dienst, Versorger, Depot, gesetztes Haus, Bahnhof) im Weg.</summary>
         OverlapsStructure,
         InsufficientFunds,
+        /// <summary>Kacheln (hinten angefügt): Bahnhof auf einer nicht gekauften Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Bahnsteigkante eines Bahnhofs an einem Gleis (Mitte des Bahnsteigs auf dem Gleis).</summary>

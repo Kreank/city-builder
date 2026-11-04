@@ -145,6 +145,7 @@ namespace CityBuilder.Simulation.Transit
             var type = plan.Type;
             var corners = ServiceGeometry.Corners(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in corners) if (!InWorld(c)) return TransitBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(roads, plan.Position, plan.Front, type.Width, type.Depth)) return TransitBuildError.TileNotOwned; // Kacheln
             if (terrain.IsWater(plan.Position)) return TransitBuildError.OnWater;
             float lo = terrain.HeightAt(plan.Position), hi = lo;
             foreach (var c in corners)

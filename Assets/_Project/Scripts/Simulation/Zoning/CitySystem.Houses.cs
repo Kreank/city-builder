@@ -25,6 +25,8 @@ namespace CityBuilder.Simulation.Zoning
         NoRoadAccess,
         /// <summary>Zu wenig Geld in der Stadtkasse (Kontostand + Kreditrahmen) oder Baustopp.</summary>
         InsufficientFunds,
+        /// <summary>Kacheln (hinten angefügt): Grundfläche reicht auf eine nicht gekaufte Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Geplantes Wohnhaus (Vorschau) – erst <see cref="CitySystem.BuildHouse"/> baut es.</summary>
@@ -170,6 +172,7 @@ namespace CityBuilder.Simulation.Zoning
             var corners = fp.Corners();
             foreach (var c in corners)
                 if (c.X < worldMin.X || c.Y < worldMin.Y || c.X > worldMax.X || c.Y > worldMax.Y) return HouseBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(network, plan.Position, plan.Front, type.Width, type.Depth)) return HouseBuildError.TileNotOwned; // Kacheln
             if (terrain.IsWater(plan.Position)) return HouseBuildError.OnWater;
             float lo = terrain.HeightAt(plan.Position), hi = lo;
             foreach (var c in corners)

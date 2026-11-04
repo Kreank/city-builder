@@ -5,6 +5,17 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Kantenlänge der (quadratischen) Spielwelt in Metern. Die Welt ist um 0/0 zentriert.</summary>
         public float SizeMeters = 2048f;
 
+        /// <summary>
+        /// Kacheln: Kantenlänge einer kaufbaren Kachel (Standard 2 048 m). Die Karte wird in round(<see cref="SizeMeters"/> /
+        /// TileSize) Kacheln je Seite geteilt (mindestens 1); bei einer Kachel ist alles gekauft (Tests, alte Stände).
+        /// Größere Karten (z. B. 6 144 m = 3 × 3) starten mit der mittleren Kachel, die übrigen kauft der Spieler
+        /// (<see cref="SimulationWorld.Tiles"/>).
+        /// </summary>
+        public float TileSize = 2048f;
+
+        /// <summary>Kacheln: Kartengröße neuer Spiele im Spiel (3 × 3 Kacheln). Tests/Standard bleiben bei <see cref="SizeMeters"/> 2 048 m.</summary>
+        public const float GameSizeMeters = 6144f;
+
         /// <summary>Zellgröße der Umwelt-Raster (Lärm, Abgas ...) in Metern.</summary>
         public float EnvironmentCellSize = 16f;
 

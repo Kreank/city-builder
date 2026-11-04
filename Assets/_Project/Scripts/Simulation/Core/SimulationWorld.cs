@@ -61,6 +61,10 @@ namespace CityBuilder.Simulation.Core
             Climate = new ClimateModel(climate, unchecked(terrainSeed * 31 + settings.WorldSeed), Clock);
             Resources = ResourceMap.Generate(Min, settings.SizeMeters, settings.EnvironmentCellSize, resources, Terrain, terrainSeed);
             // --- Ende Welt
+            // --- Kacheln: Bauland = gekaufte Kacheln (eine Kachel = alles gekauft, keine Prüfung → wie bisher)
+            Tiles = new Tiles.TileSystem(Min, settings.SizeMeters, settings.TileSize);
+            if (Tiles.Restricted) Roads.BuildArea = Tiles;
+            // --- Ende Kacheln
             Roads.Ground = Terrain;
             Terrain.RoadRule = RoadRule;
             Roads.SegmentAdded += Terrain.ConformTo;
@@ -125,6 +129,9 @@ namespace CityBuilder.Simulation.Core
         /// <summary>Ressourcen-Raster der Stadtkarte (Boden, Wald, Erz, Kohle, Öl, Sand, Grundwasser) – immer gesetzt.</summary>
         public ResourceMap Resources { get; }
         // --- Ende Welt
+
+        /// <summary>Kacheln: Besitz je Kachel der Stadtkarte, Kauf, zentrale Bauland-Prüfung – immer gesetzt (2-km-Karte: eine Kachel).</summary>
+        public Tiles.TileSystem Tiles { get; }
 
         /// <summary>Spielstart: Gebiet des Spielers (Stadtname, Stadtstaat → später Land) – immer gesetzt.</summary>
         public PlayerRealm Realm { get; }
@@ -273,11 +280,13 @@ namespace CityBuilder.Simulation.Core
             world.Aviation.Connect();
             // --- Ende Flughafen
 
+            if (world.Tiles.Restricted) world.Rail.Tracks.BuildArea = world.Tiles; // Kacheln: Gleise nur auf gekauftem Land
             if (newGame && world.Settings.PrebuiltConnections)
-            {
-                world.Gateways.Generate();
-                world.Rail.BuildMainline(); // Bahn: Fernbahn-Hauptstrecke auf dem freigehaltenen Korridor (gehört der Welt)
-            }
+                using (world.Tiles.Unrestricted()) // Kacheln: die Welt baut über die ganze Karte
+                {
+                    world.Gateways.Generate();
+                    world.Rail.BuildMainline(); // Bahn: Fernbahn-Hauptstrecke auf dem freigehaltenen Korridor (gehört der Welt)
+                }
 
             // --- Eigene Assets 2 (agent/models2): Energie erweitert (Abfluss aus dem Klima, Biogas-Rohstoff aus den Bauernhöfen)
             // und Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung im Verkehr; Standard aus, das Spiel schaltet ein)
@@ -302,6 +311,24 @@ namespace CityBuilder.Simulation.Core
             // (liest die fertige Stadtkasse/Märkte des Tages; Zustand in world.Realm, Logik in world.Realm.System)
             world.AddSystem(new CityBuilder.Simulation.Realm.RealmSystem(world));
             // --- Ende Etappe 7
+
+            // --- Kacheln: Kauf über die Stadtkasse; auf nicht gekauftem Land wachsen keine Zonen und es wird nicht terraformt
+            // bzw. aufgeforstet (zuletzt verkettet: umschließt alle Sperren der anderen Systeme). Eine Kachel → nichts verkettet.
+            world.Tiles.Budget = world.Economy;
+            if (world.Tiles.Restricted)
+            {
+                var tiles = world.Tiles;
+                var previousBlocker = world.City.LotBlocker;
+                world.City.LotBlocker = p => (previousBlocker != null && previousBlocker(p)) || !tiles.IsBuildable(p);
+                var previousLocks = world.Terrain.LockQuery;
+                world.Terrain.LockQuery = (lo, hi) =>
+                {
+                    var inner = previousLocks?.Invoke(lo, hi);
+                    if (!tiles.Enforced || tiles.RectOwned(lo, hi)) return inner;
+                    return p => !tiles.IsBuildable(p) ? 1f : inner?.Invoke(p) ?? 0f;
+                };
+            }
+            // --- Ende Kacheln
             return world;
         }
 

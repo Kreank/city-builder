@@ -41,6 +41,8 @@ namespace CityBuilder.Simulation.Utilities
         // --- Ende Energie erweitert
         /// <summary>Flughafen: zu hoch für eine Einflugschneise/Übergangsfläche (<see cref="FacilityPlan.ObstacleNote"/>).</summary>
         ObstacleClearance,
+        /// <summary>Kacheln (hinten angefügt): Bauwerk bzw. Leitung reicht auf eine nicht gekaufte Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Geplantes Bauwerk (Vorschau) – erst <see cref="UtilitySystem.BuildFacility"/> baut es.</summary>
@@ -342,6 +344,7 @@ namespace CityBuilder.Simulation.Utilities
             var type = plan.Type;
             var corners = UtilityGeometry.Corners(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in corners) if (!InWorld(c)) return UtilityBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(roads, plan.Position, plan.Front, type.Width, type.Depth)) return UtilityBuildError.TileNotOwned; // Kacheln
 
             float lo = terrain.HeightAt(plan.Position), hi = lo;
             foreach (var c in corners) { float h = terrain.HeightAt(c); lo = MathF.Min(lo, h); hi = MathF.Max(hi, h); }
@@ -490,6 +493,7 @@ namespace CityBuilder.Simulation.Utilities
             plan.Cost = plan.Length * type.CostPerMeter;
             if (!InWorld(a) || !InWorld(b)) plan.Error = UtilityBuildError.OutOfWorld;
             else if (plan.Length < MinLineLength) plan.Error = UtilityBuildError.TooShort;
+            else if (!BuildArea.AllowsLine(roads, a, b)) plan.Error = UtilityBuildError.TileNotOwned; // Kacheln
             else
                 foreach (var l in lines.Values)
                     if (l.Type == type && ((Vector2.Distance(l.A, a) < 1f && Vector2.Distance(l.B, b) < 1f) ||

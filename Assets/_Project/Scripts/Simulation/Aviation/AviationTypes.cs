@@ -392,6 +392,8 @@ namespace CityBuilder.Simulation.Aviation
         /// <summary>Beide Einflugschneisen durch Hindernisse gesperrt – kein Flugbetrieb möglich.</summary>
         ApproachBlocked,
         InsufficientFunds,
+        /// <summary>Kacheln (hinten angefügt): Flughafengelände reicht auf eine nicht gekaufte Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Herkunft eines Hindernisses.</summary>

@@ -95,6 +95,10 @@ namespace CityBuilder.Simulation.Economy
         /// <summary>Ausgabe: Stadtgründung, interne Lieferungen (Einkauf, Fracht), Landesabgabe, Kassenausgleich beim Stadtwechsel.</summary>
         RealmExpenses,
         // --- Ende Etappe 7
+        // --- Kacheln (hinten angefügt): Kauf von Nachbarkacheln der Stadtkarte
+        /// <summary>Ausgabe: Kauf weiterer Kacheln (Bauland) der Stadtkarte.</summary>
+        TilePurchase,
+        // --- Ende Kacheln
     }
 
     /// <summary>Steuerart mit eigenem, einstellbarem Satz.</summary>
@@ -108,7 +112,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.RealmExpenses + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, dann Reich)
+        public const int Count = (int)BudgetCategory.TilePurchase + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, Flughafen, Reich, dann Kacheln)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -170,6 +174,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.TourismIncome: return "Tourismus: Kurtaxe & Eintritt";       // Flughafen (Tourismus)
                 case BudgetCategory.RealmIncome: return "Reich: Einnahmen";          // Etappe 7 Reich
                 case BudgetCategory.RealmExpenses: return "Reich: Ausgaben";         // Etappe 7 Reich
+                case BudgetCategory.TilePurchase: return "Kauf von Kacheln";         // Kacheln
                 default: return c.ToString();
             }
         }

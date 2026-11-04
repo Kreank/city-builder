@@ -223,6 +223,7 @@ namespace CityBuilder.Simulation.Transit
             plan.T = t;
             plan.Position = seg.Evaluate(t);
             if (seg.Type.Category != RoadCategory.City) { plan.Error = TransitBuildError.NotCityRoad; return plan; }
+            if (!BuildArea.Allows(roads, plan.Position)) { plan.Error = TransitBuildError.TileNotOwned; return plan; } // Kacheln
             if (MathF.Abs(seg.ElevationAt(t)) > 3f) { plan.Error = TransitBuildError.Elevated; return plan; }
 
             bool fwd = HasBusLane(seg, true), bwd = HasBusLane(seg, false);

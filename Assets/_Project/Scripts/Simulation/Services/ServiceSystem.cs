@@ -427,6 +427,7 @@ namespace CityBuilder.Simulation.Services
             // --- Ende
             var corners = ServiceGeometry.Corners(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in corners) if (!InWorld(c)) return ServiceBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(roads, plan.Position, plan.Front, type.Width, type.Depth)) return ServiceBuildError.TileNotOwned; // Kacheln
             if (terrain.IsWater(plan.Position)) return ServiceBuildError.OnWater;
             float lo = terrain.HeightAt(plan.Position), hi = lo;
             foreach (var c in corners)

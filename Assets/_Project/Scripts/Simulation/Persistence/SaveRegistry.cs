@@ -25,6 +25,7 @@ namespace CityBuilder.Simulation.Persistence
             }
 
             Add(w.Terrain);                 // Höhen (aktuell + natürlich), bearbeiteter Boden
+            Add(w.Tiles);                   // Kacheln: Besitz je Kachel, Zukäufe
             Add(w.Environment);             // Lärm, Abgas
             Add(w.Resources);               // Ressourcen-Raster + natürlicher Ausgangszustand
             Add(w.Realm);                   // Spielstart: Stadtname, Spieler-Gebiet, Besitz der Regionen

@@ -21,6 +21,8 @@ namespace CityBuilder.Simulation.Environment
         /// <summary>Kreuzt ein Gebäude (wird nicht abgerissen – wie bei Strommasten).</summary>
         OverlapsBuilding,
         InsufficientFunds,
+        /// <summary>Kacheln (hinten angefügt): Wand reicht auf eine nicht gekaufte Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Ein gerades Stück Lärmschutzwand (Linienbauwerk, Modell <c>Models/Infrastructure/NoiseBarrier.fbx</c> als 16-m-Kacheln).</summary>
@@ -192,6 +194,7 @@ namespace CityBuilder.Simulation.Environment
             if (len < MinLength) return NoiseBarrierError.TooShort;
             if (len > MaxLength) return NoiseBarrierError.TooLong;
             if (!InWorld(a) || !InWorld(b)) return NoiseBarrierError.OutOfWorld;
+            if (!BuildArea.AllowsLine(roads, a, b)) return NoiseBarrierError.TileNotOwned; // Kacheln
             int samples = Math.Max(2, (int)MathF.Ceiling(len / 2f));
             var pts = new Vector2[samples + 1];
             for (int i = 0; i <= samples; i++) pts[i] = Vector2.Lerp(a, b, i / (float)samples);

@@ -28,6 +28,8 @@ namespace CityBuilder.Simulation.Services
         AlreadyBuilt,
         /// <summary>Flughafen: zu hoch für eine Einflugschneise/Übergangsfläche (<see cref="ServicePlan.ObstacleNote"/>).</summary>
         ObstacleClearance,
+        /// <summary>Kacheln (hinten angefügt): Grundfläche reicht auf eine nicht gekaufte Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Ein gebautes Dienstgebäude (frei platziert und gedreht wie die Versorger).</summary>

@@ -87,9 +87,10 @@ namespace CityBuilder.Simulation.LandValue
         {
             if (world.Roads.Version != builtRoadVersion) RebuildRoadRasters();
             if (cursor == 0) RebuildBuildingRasters();
-            int n = known.Length;
+            var cells = ActiveCells(); // Kacheln: null = alle Zellen (eine Kachel, wie bisher)
+            int n = cells?.Length ?? known.Length;
             int batch = (n + SlicesPerCycle - 1) / SlicesPerCycle;
-            for (int k = 0; k < batch && cursor < n; k++, cursor++) UpdateCell(cursor, smooth: true);
+            for (int k = 0; k < batch && cursor < n; k++, cursor++) UpdateCell(cells != null ? cells[cursor] : cursor, smooth: true);
             if (cursor >= n) { cursor = 0; Cycles++; }
         }
 
@@ -98,10 +99,33 @@ namespace CityBuilder.Simulation.LandValue
         {
             RebuildRoadRasters();
             RebuildBuildingRasters();
-            for (int i = 0; i < known.Length; i++) UpdateCell(i, smooth: false);
+            var cells = ActiveCells();
+            if (cells == null) for (int i = 0; i < known.Length; i++) UpdateCell(i, smooth: false);
+            else foreach (int i in cells) UpdateCell(i, smooth: false);
             cursor = 0;
             Cycles++;
         }
+
+        // --- Kacheln (Leistung): auf der großen Karte nur Zellen gekaufter Kacheln rechnen (die Runde wird entsprechend kürzer);
+        // nicht gekauftes Land behält seinen Bodenwert (0 = noch nie berechnet). Liste nach Index sortiert, neu bei jedem Kauf.
+        int[] activeCells;
+        int activeVersion = -1;
+
+        int[] ActiveCells()
+        {
+            var tiles = world.Tiles;
+            if (tiles == null || !tiles.Restricted) return null;
+            if (activeCells != null && activeVersion == tiles.Version) return activeCells;
+            var list = new List<int>();
+            for (int y = 0; y < Layer.Height; y++)
+            for (int x = 0; x < Layer.Width; x++)
+                if (tiles.OwnedAt(Layer.CellCenter(x, y))) list.Add(y * Layer.Width + x);
+            activeCells = list.ToArray();
+            activeVersion = tiles.Version;
+            if (cursor > activeCells.Length) cursor = 0;
+            return activeCells;
+        }
+        // --- Ende Kacheln
 
         void UpdateCell(int index, bool smooth)
         {

@@ -318,8 +318,16 @@ namespace CityBuilder.Simulation.Rail
             if (Tracks.SegmentCount == 0) return;
             float step = noise.CellSize * 0.5f;
             float activity = HasMainline ? 0.75f : 0.3f;
+            var tiles = world.Tiles; // Kacheln (Leistung): nur Gleise, deren Lärm gekauftes Land erreicht
+            bool limit = tiles != null && tiles.Restricted;
             foreach (var s in Tracks.Segments)
             {
+                if (limit)
+                {
+                    Bezier.Bounds(s.Start.Position, s.Control, s.End.Position, out var bmin, out var bmax);
+                    var reach = new Vector2(s.Type.NoiseRadius);
+                    if (!tiles.RectTouchesOwned(bmin - reach, bmax + reach)) continue;
+                }
                 int samples = Math.Max(2, (int)MathF.Ceiling(s.Length / step) + 1);
                 for (int i = 0; i < samples; i++)
                 {
