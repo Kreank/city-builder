@@ -141,7 +141,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping, Aviation)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -349,7 +349,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Gedächtnis** (`MemoryList`, max. 6, gleiche Art + Bezug wird aufgefrischt, schwächste ersetzt; tägliches Abklingen
   je Art, Ängstliche vergessen Schlechtes langsamer): Stau (Autofahrt > 2,2 × freie Fahrzeit oder abgebrochen),
   Strom-/Wasserausfall, Lärm, Abgas, Unsicherheit, schöner Park, Bummel, kein Laden, Lebensereignisse u. a.; seit „Sicherheit“ auch
-  Brand (`Fire`) und Einbruch (`Burglary`).
+  Brand (`Fire`) und Einbruch (`Burglary`); seit „Flughafen“ Fluglärm (`AircraftNoise`).
 - **Lebensereignisse** (Vorlagen in `Content/LifeEvents.cs`: Tageschance, Alter, Zug-Einfluss, Erinnerungen, Meldungen):
   Partnersuche (Singles werden täglich gepaart, kleinerer Haushalt zieht um), Hochzeit, Geburt (Paar mit Frau 20–44,
   ≤ 4 Kinder, Platz zählt), Auszug erwachsener Kinder (18–35, eigene Wohnung per `HomeScore`), Trennung (häufiger bei
@@ -1591,9 +1591,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   an Kreuzungen, ≤ 5 m vor Zufahrten, ≤ 12 m an Haltestellen, ≤ 2,5 m an Laternen, nicht auf Brücken/in Tunneln, nur wenn der
   Gehweg breit genug ist) und in Parks (innerer Ring, Kiosk nur im großen Park), LOD 450 m. `Environment/NoiseBarrierView`:
   Lärmschutzwände als 16-m-Kacheln. BusStop: wie bisher über `OwnModelCatalog.Transport` („bus_stop“).
-  Noch ohne Verwendung: Airport/*, Coast/Beach/BeachChair/LifeguardTower/Lighthouse/Breakwater/Pier/FishingBoat/Tugboat, Transport/TaxiDepot/MetroEntrance,
+  Noch ohne Verwendung: Coast/Beach/BeachChair/LifeguardTower/Lighthouse/Breakwater/Pier/FishingBoat/Tugboat, Transport/TaxiDepot/MetroEntrance,
   Rail/Tram (vorgemerkt), Vehicles/Taxi, (Coast/CargoShip/Ferry/Sailboat/Quay/HarborCrane/ContainerCrane/HarborWarehouse/Buoy_* und
-  Infrastructure/Drawbridge: s. „Wasserstraße & Hafen“, Ids ship_*, harbor_*, buoy_*, drawbridge),
+  Infrastructure/Drawbridge: s. „Wasserstraße & Hafen“, Ids ship_*, harbor_*, buoy_*, drawbridge; Airport/*: s. „Flughafen (Stufe 4)“, Ids air_*),
   Terrain/Cliff_Corner/Cliff_Waterfall/Hill/Pond/River_* (Begründung im Bericht). Energy/*, Vehicles/*, Terrain/Cliff_Straight+Rocks:
   s. „Energie erweitert & Dienstfahrzeuge“. Transport/TrainStation + Rail/Locomotive/PassengerCoach/ContainerWagon/TankWagon/
   LevelCrossing/Track_Straight: s. „Bahn (Stufe 2)“ (Ids train_station, rail_*; `Track_Straight` zugeordnet, Gleise zeichnet bisher das Mesh).
@@ -1661,7 +1661,7 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   → Water-Gateways mit Breite, Tiefe, schiffbar ab 40 m/2,5 m (Meer immer), Name „Fluss stromab-/stromaufwärts Richtung …“ bzw.
   „Seeweg · Küste“. Befahrbar (`Operational`), sobald ein Hafen in Betrieb ist, dessen Fahrrinne frei zu diesem Gateway führt
   (`Gateway.ShippingNote` nennt sonst den Grund: „Hafen fehlt · Durchgangsschiffe fahren“, „Fahrrinne gesperrt (Brücke zu niedrig)“).
-  **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
+  **Luft**: ein Gateway, zunächst ohne Lage („Flughafen folgt“); seit Stufe 4 mit Lage am Terminal und befahrbar, sobald ein Flughafen in Betrieb ist (s. „Flughafen (Stufe 4)“).
 - **Zuzug** (Hook `CitizenSystem.MoveInGateway`, nur mit `RequireGatewayForMoveIn`): `MoveInEntry(home, Netzteil)` = Einfahrt eines
   befahrbaren Straßen-Gateways im Netzteil (mehrere: wer gemessen an der Wichtigkeit am wenigsten Zuzügler brachte); gibt es gar
   keine Gateways, zählt jeder befahrbare Außenanschluss (Testwelten). Sonst null → kein Zuzug (`BlockedMoveInsToday`). Zuzug startet
@@ -1693,7 +1693,7 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   abreißbar, Unterhalt, Zuzug erst nach Anschluss + Zuzügler-Auto auf der Einfahrt, Durchgangsverkehr ohne Anschluss/ohne Wende,
   Bahnkorridor frei, Wasser-Gateways, Import über den Gateway Richtung Partnerland + Vertrag, kein Umland, Speichern/Laden ohne
   Neubau + bitgleich, Erzeugung deterministisch; volle Erde Seeds 2024/74/333/592).
-- Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), (~~Stufe 3 Wasserstraße/Hafen~~ ✅ s. „Wasserstraße & Hafen (Stufe 3)“), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
+- Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), (~~Stufe 3 Wasserstraße/Hafen~~ ✅ s. „Wasserstraße & Hafen (Stufe 3)“), (~~Stufe 4 Flughafen~~ ✅ s. „Flughafen (Stufe 4)“); weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
   Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
   andere echte Städte als Ziel.
 
@@ -1969,6 +1969,103 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   Hafenbahn), Kollisionen/Begegnungsverbot zwischen Rinnen, Liegeplätze nach Schiffslänge, Hafengröße/Ausbau, Schlagzeilen (neuer Hafen,
   Klappbrücke stört), Lärm der Häfen, Bodenwert am Wasser, Kreuzfahrt/Tourismus.
 
+## Flughafen (Stufe 4)
+- `Simulation/Aviation` (Namespace `CityBuilder.Simulation.Aviation`): `AviationTypes.cs` (`AviationRules` = alle Zahlen, `AirportType`/
+  `AirportCatalog`, `AircraftType`/`AircraftCatalog`, `AirportLayout` = Geometrie, `Airport`, `Aircraft`, `Rotation` = Umlauf, `Destination`,
+  `Obstacle`, `AirportPlan`), `AviationSystem` (`world.Aviation`, `ISimulationSystem` + `ISubstepSystem` + `IUpkeepSource` „Flughafen“, partial:
+  `.Airports` Planen/Bauen/Ausbau/Abriss/Betriebsrichtung, `.Obstacles` Hindernisfreiheit + Bauhöhen, `.Flights` Flugplan + Flugzeuge,
+  `.Passengers` Nachfrage/Ziele/Besucher/Zuzug/Luftfracht/Luft-Gateway, `.Noise` Fluglärm, `.Save`). Erzeugt in `CreateDefault` **nach dem Hafen**
+  (verkettet dessen Hooks). Läuft immer (auch ohne Gateways); ohne Flughafen ändert sich nichts (alle Hooks liefern dann exakt den alten Wert).
+- **Bauarten** (`AirportCatalog`): **Regionalflugplatz** Bahn 1 200 × 30 m, Streifen ±40 m, Sichtanflug (Anflugfläche 4 %, 2,5 km, innen ±40 m),
+  10 Bewegungen/h, Terminal 1–2 Module (3/5 Positionen, 160/320 Fluggäste/h), 650 000 € / 6 500 €/Woche; **Verkehrsflughafen** Bahn 2 800 m echt –
+  `RunwayLengthFor(Kartengröße)` = min(echt, 90 % der Karte auf 100 m, ≥ 1 700 m) → **1 800 m auf der 2-km-Standardkarte** –, 45 m breit, Streifen
+  ±75 m, Präzisionsanflug (2 %, 3 km, innen ±150 m), 28 Bewegungen/h, Terminal 2–4 Module (4/6/8 Positionen, 600/1 200/2 000 Fluggäste/h),
+  Luftfracht 60 Ladungen/Tag, 2,4 Mio. € / 18 000 €/Woche, Ausbau je Stufe 900 000 € (+6 000 €/Woche).
+- **Anlage** (`AirportLayout`, Bahn-Koordinaten u entlang A → B, v zur Terminal-Seite): Bahn, Streifen, Parallelrollweg (v = 75/120 m) mit fünf
+  Abrollbahnen, Vorfeld mit Abstellpositionen (52/45 m Abstand), Terminal-Module 64 × 32 m (Landseite = von der Bahn weg, **Straße davor** ≤ 12 m →
+  in Betrieb), Tower, Hangar, Windsack. Gelände **T-förmig** (`Areas`): Bahn-Bereich (Streifen bis Rollweg, Bahnlänge + 2 × 60 m) + Terminal-Bereich
+  (Vorfeld + Terminal, mittig) – ein einziges Rechteck über die ganze Länge fand in den Spielwelten keinen Platz.
+- **Platzregeln** (`PlanAirport(type, Mitte, Richtung, Seite)` → `AirportPlan`): in der Karte (10 m Rand), kein Wasser, Höhenunterschied ≤ 30 m –
+  das Gelände wird auf die mittlere Höhe **eingeebnet** (`FlattenArea`, Erdmenge × 0,5 €/m³ wird mitgebucht, „Bau Flughafen“), keine Straße/Gleis
+  (Autobahn/Hauptstrecke der Welt: eigener Fehler), kein Bauwerk/gesetztes Gebäude, keine Freileitung (Masten); Zonengebäude weichen. Beide
+  Einflugschneisen gesperrt → ungültig (`ApproachBlocked`). Bauwerks-Sperre (Art „airport“, beide Flächen) für Straßen und Gleise, verkettete
+  Sperren für Grundstücke/Terraforming/Versorger/Dienste.
+- **Hindernisfreiheit** (vereinfachte ICAO-Hindernisbegrenzungsflächen, `AllowedAt`): je Bahnende **Anflugfläche** (Beginn 60 m hinter dem Ende,
+  Aufweitung 15 % je Seite, Neigung 4 %/2 %), seitlich **Übergangsfläche** 1 : 7 ab dem Streifenrand, **innere Horizontalfläche** 45 m (Radius 2/4 km).
+  Hindernisse = Gebäude (Höhe geschätzt nach Zone/Größe/Stufe, `ObstacleHeights`), Dienste (TV-Turm 180 m, Radio 90 m, Kirche 45 m …), Versorger
+  (Windrad 140 m, AKW 150 m, Kohle 110 m, Wasserturm 32 m …), Strommasten (Hochspannung 45 m), **Gelände** (Anhöhen in der Anflugfläche, je 300 m der
+  höchste Punkt). In der **Kernzone** (erste 1 200 m) sperrt ein Hindernis dieses Bahnende → Landung und Start nur über das freie Ende
+  (**Gegenrichtungsbetrieb**, Kapazität × 0,55); weiter draußen × 0,85 je Hindernis (max. 3 je Seite), Übergangs-/Horizontalfläche × 0,97 (≥ 0,85);
+  geprüft stündlich bei Änderung (Gebäude, Bauwerke, Gelände). **Neue Hochbauten** in Anflug-/Übergangsfläche sind ungültig mit Hinweis
+  („Einflugschneise Flughafen …: hier höchstens 3 m hoch – Wohnblock ~39 m“): Hooks `CitySystem.PlacementCheck` (gesetzte Gebäude),
+  `ServiceSystem.ObstacleCheck`/`UtilitySystem.ObstacleCheck` (neuer Fehler `ObstacleClearance` + `ObstacleNote`, hinten angefügt). Die innere
+  Horizontalfläche sperrt keine Neubauten (sonst wären auf der 2-km-Karte alle Windräder/Türme verboten), sie senkt nur die Kapazität. Zonen (Altbestand)
+  wachsen weiter und werden dann zum Hindernis. `HeightLimitAt(p)` für Vorschau/Fenster.
+- **Wind** (seit dem Merge von agent/environment): Wind des Tages = `world.Climate.WindOn(day)` (Umwelt, Etappe 6), Hauptwindrichtung = stärkegewichtetes
+  Jahresmittel (`PrevailingFromClimate`); vorher eigene Annahme nach Breite (`PrevailingWindFrom`/`WindOfDay`, bleibt Rückfall). Betriebsrichtung
+  täglich gegen den Wind (`ChooseDirections`), mit gesperrtem Ende erzwungen. Werkzeug richtet die Bahn anfangs nach der Hauptwindrichtung aus.
+- **Luft-Gateway**: in Betrieb → `Operational`, `HasLocation` am Terminal (Landseite), Name „Luftweg · Flughafen …“, Ziel „weltweit · n Ziele“,
+  Kapazität = Bewegungen/h; sonst `Gateway.AviationNote` („Straße vor dem Terminal fehlt“, „gesperrt (Hindernisse …)“). **Ziele** = bis 14 Hauptstädte
+  (Gewicht √Bevölkerung / (1 + km/2 500)), Großkreis-Entfernung ab der Startregion, Flugdauer 0,5 h + km × 1,05 / 800 km/h; ohne Welt 4 fiktive Ziele.
+- **Flugplan** (stündlich, `ScheduleHour`): Nachfrage je Richtung und Tag = Einwohner × 0,004 + Büro-Jobs × 0,012 + übrige Jobs × 0,0015 + Touristen
+  (60 × Tourismus-Stärke des eigenen Landes `Profile.Raw[Tourism]` × (1 + Attraktivität/60) × Stadtgröße) – Anteil je Flughafen – + Umland (24/260),
+  verteilt mit Morgen-/Abendspitze; Grundversorgung 0,34/0,5 Landungen je Tagesstunde; Übertrag als Bruchteil (deterministisch). Begrenzt durch
+  Bahn (Hälfte der Bewegungen) und Terminal. **Umlauf** (`Rotation`): Landung → Bodenzeit (Kleinflugzeug 20, Turboprop 25, Jet 45, Fracht 60 Spielminuten)
+  → Start; Muster nach Bauart (Flugplatz: Kleinflugzeug/Turboprop, Flughafen: 65 % Jet, 25 % Turboprop, 10 % klein); Frachtflug um 6/13/20 Uhr, wenn
+  ≥ 8 Ladungen warten. **Nachtflugverbot** (Spieler-Schalter, 22–6 Uhr): keine Bewegungen, 70 % der Nachtnachfrage weicht auf den Tag aus, späte Abflüge
+  parken bis 6 Uhr; ohne Verbot Nachtflüge mit 20 % Nachfrage.
+- **Sichtbare Flugzeuge** (Verkehrszeit, `StepAircraft` im Verkehrsschritt): höchstens 3 Landungen je Stunde und Flughafen sichtbar (Rest statistisch, wie
+  der Anteil echter Autos – in Verkehrszeit ist eine Spielstunde 450 s, eine Bahn schafft physisch keine 28 Bewegungen darin). Anflug auf dem 3°-Gleitpfad
+  vom Kartenrand + 700 m (erscheint pünktlich zur Landezeit), Aufsetzen 300 m hinter der Schwelle, Ausrollen bis zur passenden Abrollbahn, Rollen über
+  den Parallelrollweg zur Position, Abfertigung, Push-back, Rollen zum Haltepunkt, **Startfreigabe** nur bei freier Bahn (kein Ausrollen/Start, nächste
+  Landung > 70 s, wer zuerst wartet, startet zuerst; > 900 s → läuft statistisch zu Ende), Startlauf bis zur Abhebegeschwindigkeit, Steigflug aus der
+  Karte. Wege sind aus Lage/Richtung/Position abgeleitet (`TryPose` für Darstellung und Inspektor).
+- **Wirkungen**: ankommende Fluggäste → **Besucher** (Touristen-Anteil) bleiben 2–4 Tage, kaufen täglich für 55 € in den Läden (`GoodsSystem.VisitorPurchase`:
+  Ware aus dem Regal, Umsatz bei der Firma) und zahlen 30 € Eintritt (× Attraktivität/20, ≤ 1) + 3 € Kurtaxe („Tourismus: Kurtaxe & Eintritt“); Nachfrage
+  Läden × (1 + ≤ 0,3 nach Besuchern je Einwohner), Büros × (1 + ≤ 0,25 nach **Geschäftsreisenden** je Büro-Job) über den verketteten
+  `CitySystem.DemandModifier`. **Zuzug** per Flugzeug selten (0,12 Haushalte je Passagierlandung, Hook `MoveInGateway` verkettet, Zählung über
+  `GatewaySystem.AirGatewayOfNode`). **Luftfracht**: Güter ab 300 € Grundpreis (Elektronik) über einen Verkehrsflughafen im Netzteil (Hooks
+  `PreferredGateway`/`FreightShareFor` verkettet vor Hafen/Bahn), Fernfracht **6 %** des Warenwerts (teurer als Schiff 2,5 %/Bahn 4,5 %, aber schnell),
+  ≤ 60 Ladungen/Tag, Umschlag beim nächsten Fracht- bzw. Jetflug (Beiladung 4).
+- **Fluglärm** (`.Noise`, eigenes Raster `NoiseLayer`, gespeichert): stündlich aus den gewichteten Bewegungen der letzten Stunde (Jet 1, Turboprop 0,55,
+  Kleinflugzeug 0,25, Fracht 1,15; Nachtflüge × 2,5), Pegel 0,35 + 0,1 je Bewegung (≤ 1,1) über der Bahn und entlang beider Schneisen (3,2 km, Radius
+  140 → 420 m, leiser mit der Entfernung); als Maximum ins Stadt-Lärmraster (`NoiseSystem`, eine markierte Zeile) → Bodenwert/Zufriedenheit wie jeder Lärm.
+  Neue Erinnerung **`MemoryKind.AircraftNoise` „Fluglärm“** (5 Gedanken), wenn der Lärm am Wohnort überwiegend vom Flughafen kommt (Hook
+  `CitizenSystem.AircraftNoiseAt`), zählt beim Umzug wie Lärm. Übersicht: betroffene Einwohner (≥ 30 % Fluglärm, 18 Uhr), Beschwerden (Erinnerung ≥ 0,2).
+- **Kasse** (hinten angefügt, nach Umwelt): `AirportConstruction` „Bau Flughafen“ (inkl. Einebnen), `AirportFees` „Flughafen: Lande- & Passagierentgelte“
+  (Landung 35/420/1 400/1 800 €, 9 € je abfliegendem Fluggast, 25 € je Frachtladung; alle 5 Ticks gebucht), `TourismIncome` „Tourismus: Kurtaxe & Eintritt“;
+  Unterhalt als `IUpkeepSource` „Flughafen“; Abriss 25 %.
+- **Spielstand** „aviation“ v1 (automatisch hinten in der `SaveRegistry`, `IAfterLoad`): Flughäfen (Lage, Richtung, Seite, Bahnlänge, Höhe, Stufe,
+  Betriebsrichtung, Wind, Planungs-Überträge, Statistik, Lärmzähler, Zustand der Schneisen + Kapazitätsfaktor + Signatur), Umläufe, Flugzeuge
+  vollständig, Nachtflugverbot, Besucher, Tagesnachfrage, Überträge, Fluglärm-Raster. Abgeleitet: Zufahrt, Hindernisliste (Anzeige), Ziele, Gateway.
+  Fehlt der Abschnitt → kein Flughafen. Test: Speichern mitten im Tick mit Flugzeugen unterwegs → 6 000 Verkehrsschritte bitgleich.
+- **Unity** (`Game/Aviation`, Begleiter am RoadTool): `AirportTool` (**Taste 9** – 9 war frei; Modus `RoadTool.Mode.Airport`): Regionalflugplatz/
+  Verkehrsflughafen (Mauszeiger = Bahnmitte, `,`/`.` drehen 5°, ⇧ 1°, Enter Terminal-Seite), Terminal ausbauen, Abriss. Vorschau: Bahn, beide Flächen,
+  Terminal, **Einflugschneisen als ansteigende Trapeze** (grün frei, gelb eingeschränkt, rot gesperrt), **Lärmkorridor** (breiter werdendes Band),
+  Hindernisse als Säulen, Hinweis mit Kosten/Erdarbeiten/Wind/Schneisen/Straße. `AirportView`: Bahn aus 64-m-Kacheln (`Airport/Runway`,
+  `Runway_End`), Rollwege (`Taxiway`), Vorfeld + Positionsmarken, Terminal-Module (`Terminal`), Tower (`ControlTower`), Hangar (Tor zum Vorfeld),
+  Windsack (dreht nach dem Tageswind), Flugzeuge (`Airliner`, `Airliner_Red` = Fracht, `SmallPlane`, Turboprop = Airliner × 0,72) mit Neigung im
+  Anflug/Steigflug, Gepäckschlepper (`BaggageTrain`) an parkenden Flugzeugen, Overlay Schneisen + Hindernisse; sonst Platzhalter. Modell-Ids `air_*` in
+  `OwnModelDescriptions.TransportFiles`. Bauleiste: Kategorie **„Flughafen“** (`GameHud.Airport.cs`, neues Icon `HudIconKind.Plane`, Werkzeugzeile
+  Nach Wind/Terminal-Seite/Nachtflugverbot/Einflugschneisen, Abriss-Kachel), HUD-Warnchip „Flughafen“. `AirportWindow` (rechts, **F12** bzw. im Werkzeug;
+  Reiter Betrieb · Flugplan · Ziele · Wirkung). Inspektor: `SelectionKind.Aircraft` (Folgen) und `Airport` (Ausbau-Knopf). Hilfe (F1): „9 · F12“ und Start.
+  Dienst-/Versorger-Werkzeug zeigen den Hindernis-Hinweis. **Optik ungeprüft** (Unity nicht gestartet): Ausrichtung/Größe der Airport-Modelle (Bahn-Kacheln
+  entlang lokal X, `Runway_End` an Ende A um 180° gedreht, Windsack-Richtung, Hangar-Tor), Flugzeughöhe/-neigung, Gepäckschlepper, Platzhalter, Overlay.
+- **Tests** `AviationTests` (13): Bahnlänge nach Kartengröße, Bahnkennung, Wind nach Breite, Großkreis; Platz eben gültig + Einebnen + Buchung + kein
+  Geld; Fehler Straße/Rand/Hügel + Erdarbeiten; TV-Turm in der Kernzone sperrt eine Schneise, zwei sperren alles; neue Hochbauten (TV-Turm, Windrad,
+  Wohnblock) ungültig, niedriges Haus weit draußen erlaubt, nachträgliche Anhöhe → Gegenrichtungsbetrieb + Kapazität < 60 %; Luft-Gateway befahrbar mit
+  Lage; ein Spieltag Flugbetrieb (alle Zustände von Anflug bis Start, Landungen/Fluggäste/Gebühren/Besucher); Nachtflugverbot (0 Nachtbewegungen, nachts
+  still); Lärm in der Schneise ≫ seitlich und im Stadt-Lärm; Speichern/Laden bitgleich; ohne Flughafen nichts; Spielwelten 2024/74 (Info, s. u.).
+- **Grenze 2-km-Karte (ehrlich):** In den echten Spielwelten (Seeds 2024/74, Autobahn + Bahnkorridor + Fluss queren die Karte) findet das Suchraster für den
+  **Verkehrsflughafen keinen Platz** (1 920 m Bahn-Bereich kreuzt fast immer Autobahn oder Hauptstrecke), den **Regionalflugplatz** nur in Seed 2024
+  (mit 340 000 € Erdarbeiten, eine Schneise durch Gelände gesperrt). Auf flachen Testkarten passen beide. Außerdem liegen die Einflugschneisen bei
+  Ost-West-Lage großteils außerhalb der Karte (dort gibt es keine Hindernisse) – diagonal oder nahe einem Rand wirkt die Hindernisfreiheit voll.
+- **Nächste Teilstufe (offen):** größere Karten bzw. Verlegen der Welt-Autobahn/-Bahn (oder Tunnel unter der Bahn) für einen echten Verkehrsflughafen,
+  zweite (parallele) Bahn, Hotels/Übernachtungsbetriebe und Tourismus als Dienstleistungshandel (Etappe 8), Pendler per Flugzeug, echte Fluggäste als
+  Bürger (Weg zum Terminal, Bus-/Bahnanschluss am Terminal, Parkhaus), Lieferzeit der Luftfracht in Verträgen (schnell statt billig), Flughafen-Jobs,
+  Lärmschutz-Programm (Schallschutzfenster), Lärmkontingente/Bonus für leise Muster, Fluglärm-Overlay (eigene Ansicht), Bodenwert-Bonus Flughafennähe
+  (Gewerbe), Schlagzeilen (neuer Flughafen, Fluglärm-Proteste), Go-around/Warteschleifen, Hubschrauber, Zonen-Wachstum in der Schneise begrenzen.
+
 ## Speichern & Laden
 - **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
   `partial class XyzSystem` in `XyzSystem.Save.cs` (konfliktarm), Anmeldung in `Persistence/SaveRegistry.Collect`
@@ -1991,7 +2088,8 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge;
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
   Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
-  Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0).
+  Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0;
+  `aviation` v1 fehlt → kein Flughafen).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -2091,8 +2189,13 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
        Durchgangsschiffe (Binnenschiff, Fahrgastschiff, Segelyacht), Güterhafen (Binnen-/Seehafen, Liegeplätze, Reede, Umschlag,
        Wasser-Gateway befahrbar), Seehandel und Import/Export per Schiff billiger, Kasse, Spielstand, Werkzeug 8/F8/Inspektor/Warnchip
        (im Editor noch nicht visuell abgenommen). Nächste Teilstufe s. dort
-     - Stufe 4 Flughafen
-   - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien ✅, Fernbahn ✅ (Stufe 2), Tram, U-Bahn, S-Bahn, Flughafen
+     - ✅ Stufe 4 Flughafen (s. „Flughafen (Stufe 4)“): Regionalflugplatz/Verkehrsflughafen als Anlage (Bahn nach Kartengröße, Rollwege, Vorfeld,
+       Terminal mit Ausbaustufen, Tower, Hangar), Einebnen mit Kosten, Hindernisfreiheit (Anflug-/Übergangsflächen: bestehende Hindernisse sperren
+       ein Bahnende bzw. senken die Kapazität, neue Hochbauten ungültig), Wind aus dem Klima, Luft-Gateway mit Lage und Zielen weltweit, Flugplan nach
+       Nachfrage/Kapazität, sichtbare Flugzeuge (Anflug → Rollen → Parken → Start), Nachtflugverbot, Fluglärm (Raster, Erinnerung, Beschwerden),
+       Besucher/Tourismus-Grundstufe, Geschäftsreisen → Büro-Nachfrage, seltener Zuzug, Luftfracht, Kasse, Spielstand, Werkzeug 9/F12/Inspektor
+       (im Editor noch nicht visuell abgenommen). Grenze: Verkehrsflughafen findet auf der 2-km-Spielkarte kaum Platz. Nächste Teilstufe s. dort
+   - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien ✅, Fernbahn ✅ (Stufe 2), Tram, U-Bahn, S-Bahn, Flughafen ✅ (Stufe 4)
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
        Später: Tram, U-/S-Bahn, Taxi, Fernbahn, Flughafen
@@ -2121,8 +2224,8 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
    - ✅ Eigene Assets eingebaut: Freizeitanlagen + Wahrzeichen (Rathaus einmalig, Bodenwert/Stolz/Attraktivität), Lärmschutzwand
      (dämpft Lärm), Bauernhöfe je Jahreszeit, Brückenpfeiler/Tunnelportale/Schilderbrücken/Baustellen/Hochspannungsmast, Büsche/
      Felsen, Straßen-/Parkausstattung; Beschreibungsdatei `Name.json` + Bericht `_Unused.txt` (im Editor noch nicht visuell
-     abgenommen). Wartet auf Funktion: Flughafen, Strand/Leuchtturm/Mole/Fähranleger/Fischerei, Taxi, U-Bahn
-     (Bahn ✅ Stufe 2; Hafen, Schiffe, Tonnen, Klappbrücke ✅ Stufe 3)
+     abgenommen). Wartet auf Funktion: Strand/Leuchtturm/Mole/Fähranleger/Fischerei, Taxi, U-Bahn
+     (Bahn ✅ Stufe 2; Hafen, Schiffe, Tonnen, Klappbrücke ✅ Stufe 3; Flughafen ✅ Stufe 4)
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
