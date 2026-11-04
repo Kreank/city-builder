@@ -222,6 +222,7 @@ namespace CityBuilder.Simulation.Shipping
             var ea = RoadBuilder.ResolveAnchor(roads, b, 8f);
             a = sa.Position; b = ea.Position;
             plan.Start = a; plan.End = b;
+            if (!BuildArea.AllowsLine(roads, a, b, type.HalfWidth)) { plan.Error = RoadBuildError.TileNotOwned; return plan; } // Kacheln
             float len = Vector2.Distance(a, b);
             if (len < 2f * ShippingRules.DrawbridgeMinApproach + ShippingRules.DrawbridgeMinSpan) { plan.Error = RoadBuildError.TooShort; return plan; }
             var u = (b - a) / len;

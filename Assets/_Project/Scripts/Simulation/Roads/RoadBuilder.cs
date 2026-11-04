@@ -72,6 +72,10 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Klappbrücke muss die Fahrrinne genau einmal queren (Stadtstraße, nicht zu schräg).</summary>
         DrawbridgeNoFairway,
         // --- Ende Wasserstraße
+        // --- Kacheln (hinten angefügt)
+        /// <summary>Straße/Gleis reicht auf eine nicht gekaufte Kachel (<see cref="RoadNetwork.BuildArea"/>).</summary>
+        TileNotOwned,
+        // --- Ende Kacheln
     }
 
     public sealed class RoadPlan
@@ -239,6 +243,9 @@ namespace CityBuilder.Simulation.Roads
         {
             var type = plan.Type;
             if (plan.Length < RoadNetwork.MinSegmentLength) return RoadBuildError.TooShort;
+            // --- Kacheln: nur auf gekauftem Land (Fahrbahn inkl. Gehweg)
+            if (!BuildArea.AllowsCurve(network, plan.Start, plan.Control, plan.End, type.HalfWidth)) return RoadBuildError.TileNotOwned;
+            // --- Ende Kacheln
             var ground = network.Ground;
             float e0 = plan.StartHeight - ground.HeightAt(plan.Start), e1 = plan.EndHeight - ground.HeightAt(plan.End);
             if (e0 < MinHeight - 0.01f || e1 < MinHeight - 0.01f || e0 > MaxHeight || e1 > MaxHeight) return RoadBuildError.InvalidHeight;

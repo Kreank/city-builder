@@ -23,9 +23,17 @@ namespace CityBuilder.Simulation.Environment
             bool shielded = barriers != null && barriers.Count > 0;
 
             float step = noise.CellSize * 0.5f;
+            var tiles = world.Tiles; // Kacheln (Leistung): Lärm nur dort stempeln, wo er gekauftes Land erreicht
+            bool limit = tiles != null && tiles.Restricted;
             foreach (var segment in world.Roads.Segments)
             {
                 var type = segment.Type;
+                if (limit)
+                {
+                    Bezier.Bounds(segment.Start.Position, segment.Control, segment.End.Position, out var bmin, out var bmax);
+                    var reach = new Vector2(type.NoiseRadius);
+                    if (!tiles.RectTouchesOwned(bmin - reach, bmax + reach)) continue;
+                }
                 int samples = Math.Max(2, (int)MathF.Ceiling(segment.Length / step) + 1);
                 for (int i = 0; i < samples; i++)
                 {

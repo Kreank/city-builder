@@ -85,10 +85,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Produktion wählt weiter die Simulation**, der Spieler kann sie aber **lenken** (z. B. „mehr Öl fördern, wo Öl liegt“):
   Schwerpunkte/Förderung statt selbst gebauter Produktionsketten. Umgesetzt: s. „Produktion lenken“ (unter G5).
 
-## Entscheidung: Kartengröße (2026-11-04, Spieler – noch nicht umgesetzt)
+## Entscheidung: Kartengröße (2026-11-04, Spieler – umgesetzt, s. „Kartengröße & Kacheln“)
 - Die 2-km-Stadtkarte ist zu klein (Verkehrsflughafen findet in echten Spielwelten keinen Platz, Metropolen eng).
   Gewählt: **größere Karte aus 2-km-Kacheln** (z. B. 6 × 6 km), Start auf der mittleren Kachel, **Nachbarkacheln mit Geld
-  kaufen** (wie Cities: Skylines); volle Rechenlast nur, wo gebaut ist. Nächster großer Umbau (Gelände, Raster, Speichern).
+  kaufen** (wie Cities: Skylines); volle Rechenlast nur, wo gebaut ist.
 
 ## Architektur-Regeln
 - **Simulation ≠ Darstellung.** `Assets/_Project/Scripts/Simulation` ist reines C# (`noEngineReferences: true`),
@@ -146,7 +146,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping, Aviation, Realm)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping, Aviation, Realm, Tiles)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -2173,7 +2173,7 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   Wohnblock) ungültig, niedriges Haus weit draußen erlaubt, nachträgliche Anhöhe → Gegenrichtungsbetrieb + Kapazität < 60 %; Luft-Gateway befahrbar mit
   Lage; ein Spieltag Flugbetrieb (alle Zustände von Anflug bis Start, Landungen/Fluggäste/Gebühren/Besucher); Nachtflugverbot (0 Nachtbewegungen, nachts
   still); Lärm in der Schneise ≫ seitlich und im Stadt-Lärm; Speichern/Laden bitgleich; ohne Flughafen nichts; Spielwelten 2024/74 (Info, s. u.).
-- **Grenze 2-km-Karte (ehrlich):** In den echten Spielwelten (Seeds 2024/74, Autobahn + Bahnkorridor + Fluss queren die Karte) findet das Suchraster für den
+- **Grenze 2-km-Karte (ehrlich; seit „Kartengröße & Kacheln“ starten neue Spiele auf 6 km mit 2 800-m-Bahn über zwei Kacheln):** In den echten Spielwelten (Seeds 2024/74, Autobahn + Bahnkorridor + Fluss queren die Karte) findet das Suchraster für den
   **Verkehrsflughafen keinen Platz** (1 920 m Bahn-Bereich kreuzt fast immer Autobahn oder Hauptstrecke), den **Regionalflugplatz** nur in Seed 2024
   (mit 340 000 € Erdarbeiten, eine Schneise durch Gelände gesperrt). Auf flachen Testkarten passen beide. Außerdem liegen die Einflugschneisen bei
   Ost-West-Lage großteils außerhalb der Karte (dort gibt es keine Hindernisse) – diagonal oder nahe einem Rand wirkt die Hindernisfreiheit voll.
@@ -2182,6 +2182,62 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   Bürger (Weg zum Terminal, Bus-/Bahnanschluss am Terminal, Parkhaus), Lieferzeit der Luftfracht in Verträgen (schnell statt billig), Flughafen-Jobs,
   Lärmschutz-Programm (Schallschutzfenster), Lärmkontingente/Bonus für leise Muster, Fluglärm-Overlay (eigene Ansicht), Bodenwert-Bonus Flughafennähe
   (Gewerbe), Schlagzeilen (neuer Flughafen, Fluglärm-Proteste), Go-around/Warteschleifen, Hubschrauber, Zonen-Wachstum in der Schneise begrenzen.
+
+## Kartengröße & Kacheln (agent/tiles, 2026-11-04)
+- **Modell:** Die Stadtkarte besteht aus N × N Kacheln, N = round(`WorldSettings.SizeMeters` / `TileSize`) ≥ 1 (`TileRules.TilesPerSide`;
+  `TileSize` Standard 2 048 m, tatsächlich Karte / N). **Standard bleibt 2 048 m = eine Kachel** (Tests, alte Stände: alles gekauft, keine
+  Prüfung, kein Hook verkettet → bitgleich). Das Spiel startet neue Spiele mit `WorldSettings.GameSizeMeters` **6 144 m = 3 × 3**
+  (`SimulationRunner.mapSize`/`tileSize`, eigenes Feld, weil die Szene noch `worldSize` 2048 gespeichert hat; Platzhalterwelt des Erststarts
+  bleibt 2 km). Alle Raster/Systeme nahmen die Größe schon aus den Einstellungen (Gelände 4 m, Umweltraster 16 m, NavGrid, Kriminalitäts-
+  raster, Gateways/Autobahn/Bahnkorridor, Terrain-Erzeugung relativ zur Halbbreite) – geprüft per Grep auf 2048/1024/halfSize; einzige feste
+  Annahmen waren die Kamera-Grenze (`CameraController.worldHalfSize`) und die Szenengröße.
+- **Simulation** `Simulation/Tiles/TileSystem` (+ `.Save.cs`, `world.Tiles`, immer gesetzt, im Konstruktor der Welt): Besitz je Kachel,
+  Start = die Kachel(n) um die Kartenmitte (ungerade N: Mitte, gerade N: mittlere 2 × 2). `StateOf` Owned/Purchasable (4er-Nachbar einer
+  gekauften)/Locked, `NameOf` „B2“ (Spalte A… West→Ost, Zeile 1 = Norden), `DirectionOf`, `TileBounds/TileCenter`, `OwnedAt`, `RectOwned`,
+  `RectTouchesOwned`, `Describe(world, x, y)` → `TileInfo` (Höhe, Wasser-/Steil-/Waldanteil, Vorkommen ≥ 8 %, Autobahn/Fernbahn). **Kauf**
+  `PlanPurchase` → `TilePurchasePlan` (`OutOfMap`, `AlreadyOwned`, `NotAdjacent`, `InsufficientFunds`) → `Purchase` bucht über die Stadtkasse
+  (`BudgetCategory.TilePurchase` „Kauf von Kacheln“, hinten angefügt). Preis `TileRules.Price` = 150 000 € + 90 000 € je bisherigem Zukauf
+  (150k, 240k, 330k … 8. Kachel 780k; Platzhalter fürs Balancing). Event `Purchased`, `Version`.
+- **Zentrale Bauland-Prüfung (Entscheidung):** `IBuildArea` (`Roads/BuildArea.cs`) als **`RoadNetwork.BuildArea`** – jedes System kennt
+  ohnehin ein `RoadNetwork`, also eine Stelle statt neuer Hooks je System; gesetzt für Straßen- **und** Gleisnetz nur bei N > 1. Helfer
+  `BuildArea.Allows/AllowsCurve/AllowsLine/AllowsRect/AllowsCircle` (Prüfpunkte ≤ 16 m, auch L-förmiges Bauland), Text `BuildArea.NotOwnedText`.
+  Geprüft in: `RoadBuilder.Validate` (alle Straßen-/Gleispläne inkl. Kurve, Doppelbau, Kreisverkehr, Vorlagen, Klappbrücken-Stücke; Fahrbahn +
+  halbe Breite), gesetzte Gebäude (`CheckHouse`, damit auch Reihen), Dienste, Versorger (Bauwerke **und** Leitungen inkl. „Entlang Straßen“),
+  Busdepot und Haltestelle, Lärmschutzwand, Bahnhof, Hafen, Klappbrücke, Flughafen (beide Flächen); je Fehler-Enum ein neuer Wert
+  **`TileNotOwned`** (hinten angefügt), Texte in den Werkzeugen. **Terraforming und Bäume** über die verkettete `TerrainMap.LockQuery`
+  (nicht gekauft = gesperrt), **Zonen-Wachstum** über den verketteten `CitySystem.LotBlocker` (beide zuletzt in `CreateDefault`).
+  Verschieben (Y) läuft über dieselben Plan-Funktionen. **Welt-Infrastruktur** (Autobahn, Fernbahn beim Kartenstart, auch neue Reichsstädte)
+  baut mit `Tiles.Unrestricted()` über die ganze Karte; Fahrrinnen/Durchgangsschiffe/Gateways am Rand laufen ohnehin über die ganze Karte.
+- **Leistung (Entscheidung „nur wo gebaut ist“):** Bodenwert rechnet nur Zellen gekaufter Kacheln (`LandValueSystem.ActiveCells`, Liste neu je
+  Kauf; Runde wird entsprechend kürzer, nicht gekauftes Land bleibt „unbekannt“ −1), Straßen- und Gleislärm stempelt nur Segmente, deren
+  Lärmradius gekauftes Land erreicht. Bewusst **ganz** gerechnet: Luft/Ökologie (Wind trägt Abgas über Kachelgrenzen; ≈ 0,7 ms je Durchlauf
+  bei 384 × 384 Zellen), Verkehr (Durchgangsverkehr auf der längeren Autobahn ≈ 3× so viele Fahrzeuge), NavGrid/Gelände beim Erzeugen.
+  **Info-Test** `TileTests.Info_Performance_BigMap_vs_2km` (Release, Welt 2024, leere Stadt, zweiter Spieltag): 2 km: Welt erzeugen 0,5 s,
+  62 Fahrzeuge, Verkehrsschritte 537 ms/Tag, Kalender-Systeme 31 ms/Tag · 6 km: 1,1 s, 209 Fahrzeuge, 1 391 ms/Tag (≈ 0,03 ms je
+  Verkehrsschritt), Kalender 57 ms/Tag (Ökologie 31, Lärm 19, Bodenwert 2). Vor der Beschränkung: Lärm ≈ 134 ms/Tag, Bodenwert bis 33 ms je
+  Durchlauf (erster Tag inkl. Gelände-Cache aller Zellen).
+- **Flughafen:** `RunwayLengthFor(6 144)` = 2 800 m (echte Länge) – der Verkehrsflughafen braucht meist zwei Kacheln (Test: Mitte + Osten gültig).
+- **Spielstand:** Weltabschnitt **v5** (+ Kachelgröße; v1–v4 → 2 048 m), neuer Abschnitt **`tiles` v1** (N, Besitz je Kachel, Zukäufe, Summe;
+  fehlt → Startzustand; N passt nicht → Fehler). Lokal je Stadt (nicht in `RealmSwitch.GlobalSections`) → jede Reichsstadt hat eigene Kacheln.
+- **Unity:** `Game/Tiles/TileView` (Begleiter am RoadTool): Außenrand des gekauften Landes weiß, kaufbare Kacheln goldgelb, gesperrte grau (nur
+  im Kauf-Fenster) als geländefolgende `LineRenderer` (Breite wächst mit der Kamerahöhe); im Kauf-Fenster kräftig mit Beschriftung „C2 · kaufbar
+  240 000 €“; in den Bauwerkzeugen am Mauszeiger „Kachel nicht gekauft · Kacheln (Knopf oben)“. `GroundView`: nicht gekauftes Land entsättigt/
+  dunkler (Vertex-Farben, nach Kauf neu eingefärbt), Kacheln-Aufbau mit 30-ms-Budget je Bild (576 Geländekacheln auf 6 km, nächste zur Kamera
+  zuerst). `UI/Windows/TilesWindow` (rechts, **Knopf oben** mit neuem Icon `HudIconKind.Tiles` – keine freie Taste): Übersichtskarte (Klick wählt),
+  Kachel-Info, „Kaufen für …“, „Ansehen“ (Kamera), Liste der kaufbaren Kacheln. Kamera-Grenze = halbe Kartengröße, Zoom bis 1,1 × halbe Karte
+  (≤ 3 600 m). Hilfe (F1) Abschnitt Start ergänzt. Game-Code mit einer Kopie der Unity-csproj (Unity-DLLs) außerhalb von Unity kompiliert.
+- **Tests** `TileTests` (10) + `RealmTests.Switch_BigMap_TilesPerCity`: 2 km = eine Kachel; 3 × 3 Start/Nachbarschaft/Preis/Kasse/kein Geld;
+  alle Werkzeuge melden `TileNotOwned` (Straße, Gleis, Haus, Dienst, Windrad, Rohr, Depot, Wand, Flughafen 2 800 m), Terraforming/Bäume gesperrt,
+  nach Kauf erlaubt; Zonen wachsen nicht auf fremdem Land; vorgebaute Autobahn/Fernbahn bis an den Rand, Zubringer auf der Startkachel; Bodenwert
+  nur auf gekauftem Land; Speichern mitten im Tick mit Kauf → bitgleich, gleiche Käufe danach bitgleich; Migration Welt v4 ohne `tiles`;
+  Abschnitt lokal; Reichswechsel behält Kacheln je Stadt.
+- **Optisch ungeprüft** (Unity nicht gestartet): Linien/Materials der Kachelgrenzen (Sprites/Default), Entsättigung des fremden Landes, Fenster +
+  Übersichtskarte (Ausrichtung Norden oben), Beschriftungen, Bildrate auf 6 km (2,4 Mio. Geländevertices, 9× Bäume/Büsche/Felsen, weiter
+  Zoom), Ladezeit des Geländes in Stücken.
+- **Offen:** entfernte/nicht gekaufte Kacheln mit gröberem Geländemesh (LOD), Bäume/Details außerhalb nur grob, Kauf per Klick in der Welt
+  (heute im Fenster), Kachelpreis nach Lage/Bodenwert/Vorkommen statt nur nach Anzahl, Luft/Ökologie auf gekauftes Land + Rand beschränken,
+  Durchgangsverkehr auf langen Autobahnen statistisch statt als Fahrzeuge, 4 × 4 / 5 × 5-Karten (alles parametrisch, Leistung ungeprüft),
+  Zonen malen auf fremdem Land schon im Werkzeug verhindern (heute wächst dort nur nichts), Hinweis im Terraforming-Werkzeug.
 
 ## Speichern & Laden
 - **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
@@ -2206,7 +2262,7 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
   Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
   Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0;
-  `aviation` v1 fehlt → kein Flughafen; `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
+  `aviation` v1 fehlt → kein Flughafen; Weltabschnitt v5 = Kachelgröße, v4 → 2 048 m; `tiles` v1 fehlt → Startzustand (2 km: alles gekauft); `realm` v2 = Etappe 7 Reich, v1 → eine Stadt, keine Lieferungen/Landeskasse, NPC-Expansion aus –
   das Spiel schaltet sie ein).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
@@ -2337,6 +2393,7 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
    - ✅ Zeitmodell: Kalender 6 min/Tick + 180 Verkehrsschritte (Zeitdehnung 8), Fußwege/Platzhalter in Verkehrszeit,
      Fahrgäste gehen erst zur Haltestelle, Tempo 1/2/3 = 6/3/1,5 min je Spieltag mit Rechenzeit-Budget, Speichern mitten im Tick
      (im Editor noch nicht visuell abgenommen). Später: Abfahrten innerhalb des Ticks verteilen, CarShare neu abstimmen, Rad-Darstellung
+   - ✅ Kartengröße & Kacheln (s. dort): 6 × 6 km aus 3 × 3 Kacheln, Start auf der Mitte, Nachbarkacheln kaufen (steigender Preis), zentrale Bauland-Prüfung, Bodenwert/Lärm nur auf gekauftem Land, Spielstand tiles v1/Welt v5, Kachelgrenzen + Kauf-Fenster (im Editor noch nicht visuell abgenommen)
    - ✅ Speichern & Laden: versioniertes Binärformat mit Abschnitten/Migrationen, alle Systeme `ISaveable`, Determinismus
      nach dem Laden, Spielmenü (Esc) mit Autosave/Schnellspeichern. Später: Cloud/Multiplayer-Stände, Vorschaubild, Replays aus Commands
    - ✅ Eigene Assets eingebaut: Freizeitanlagen + Wahrzeichen (Rathaus einmalig, Bodenwert/Stolz/Attraktivität), Lärmschutzwand

@@ -47,6 +47,10 @@ namespace CityBuilder.Simulation.Aviation
                 foreach (var c in area.Corners())
                     if (c.X < world.Min.X + m || c.Y < world.Min.Y + m || c.X > world.Max.X - m || c.Y > world.Max.Y - m)
                         return AirportBuildError.OutOfWorld;
+            // --- Kacheln: beide Flächen auf gekauftem Land (die Bahn eines Verkehrsflughafens braucht meist zwei Kacheln)
+            foreach (var area in areas)
+                if (!BuildArea.AllowsRect(world.Roads, area.Center, area.Front, area.Width, area.Depth)) return AirportBuildError.TileNotOwned;
+            // --- Ende Kacheln
 
             // Gelände: Wasser, Ebenheit, Erdmenge (Raster über beide Flächen)
             float step = AviationRules.SiteSampleStep;
@@ -265,6 +269,7 @@ namespace CityBuilder.Simulation.Aviation
                 case AirportBuildError.OverlapsAirport: return $"{plan.BlockerName} im Weg";
                 case AirportBuildError.ApproachBlocked: return $"Beide Einflugschneisen gesperrt ({plan.BlockerName}) – kein Flugbetrieb möglich";
                 case AirportBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
+                case AirportBuildError.TileNotOwned: return BuildArea.NotOwnedText + " – ein Verkehrsflughafen braucht meist zwei Kacheln"; // Kacheln
                 default: return plan.Error.ToString();
             }
         }

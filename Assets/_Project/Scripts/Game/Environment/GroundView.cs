@@ -81,6 +81,7 @@ namespace CityBuilder.Game.Environment
         {
             if (terrain != null) terrain.Changed -= HandleTerrainChanged;
             if (roads != null) { roads.SegmentAdded -= MarkHoles; roads.SegmentRemoved -= MarkHoles; }
+            if (tiles != null) { tiles.Purchased -= HandleTilePurchased; tiles = null; } // Kacheln
             if (chunkFilters != null)
                 foreach (var f in chunkFilters)
                     if (f != null)
@@ -141,7 +142,34 @@ namespace CityBuilder.Game.Environment
             roads.SegmentRemoved += MarkHoles;
             terrain.Changed += HandleTerrainChanged;
             foreach (var s in roads.Segments) MarkHoles(s);
+            // --- Kacheln: nach einem Kauf die Kacheln dieser Kachel neu einfärben
+            tiles = runner.World.Tiles;
+            if (tiles != null) tiles.Purchased += HandleTilePurchased;
+            // --- Ende Kacheln
         }
+
+        // --- Kacheln
+        CityBuilder.Simulation.Tiles.TileSystem tiles;
+        readonly List<int> pendingChunks = new List<int>();
+
+        float ChunkDistance(int index, Vector3 camPos)
+        {
+            int cx = index % chunksPerSide, cy = index / chunksPerSide;
+            var c = terrain.PointAt(Mathf.Min(cells, cx * ChunkCells + ChunkCells / 2), Mathf.Min(cells, cy * ChunkCells + ChunkCells / 2));
+            float dx = c.X - camPos.x, dz = c.Y - camPos.z;
+            return dx * dx + dz * dz;
+        }
+
+        void HandleTilePurchased(int tx, int ty)
+        {
+            if (tiles == null) return;
+            tiles.TileBounds(tx, ty, out var min, out var max);
+            CellRange(min, max, out int x0, out int y0, out int x1, out int y1);
+            for (int cy = y0 / ChunkCells; cy <= y1 / ChunkCells; cy++)
+            for (int cx = x0 / ChunkCells; cx <= x1 / ChunkCells; cx++)
+                recolorQueue.Enqueue(cy * chunksPerSide + cx);
+        }
+        // --- Ende Kacheln
 
         void OnDestroy()
         {
@@ -171,8 +199,26 @@ namespace CityBuilder.Game.Environment
             if (holes == null) return;
             if (dirtyHoleAreas.Count > 0) RecomputeHoles();
             UpdateSeasonTint(); // Umwelt (Etappe 6)
-            foreach (int i in dirtyChunks) BuildChunk(i);
-            dirtyChunks.Clear();
+            // Kacheln: auf der 6-km-Karte sind es 576 Kacheln – höchstens ~30 ms je Bild bauen (nächste zur Kamera zuerst),
+            // damit der Start/das Laden nicht sekundenlang einfriert
+            if (dirtyChunks.Count > 0)
+            {
+                pendingChunks.Clear();
+                pendingChunks.AddRange(dirtyChunks);
+                var cam = Camera.main;
+                if (pendingChunks.Count > 16 && cam != null)
+                {
+                    var cp = cam.transform.position;
+                    pendingChunks.Sort((a, b) => ChunkDistance(a, cp).CompareTo(ChunkDistance(b, cp)));
+                }
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                foreach (int i in pendingChunks)
+                {
+                    BuildChunk(i);
+                    dirtyChunks.Remove(i);
+                    if (watch.ElapsedMilliseconds > 30) break;
+                }
+            }
 
             if (Underground != appliedUnderground)
             {
@@ -404,6 +450,14 @@ namespace CityBuilder.Game.Environment
                 float cover = Mathf.Clamp01(tintSnow * (1f + Mathf.InverseLerp(40f, 90f, h)) - rock * 0.7f) * (0.8f + 0.2f * patches);
                 c = Color.Lerp(c, Snow, cover);
             }
+            // --- Kacheln: nicht gekauftes Land etwas entsättigt und dunkler (gekauftes Land sticht hervor)
+            if (tiles != null && tiles.Restricted && !tiles.OwnedAt(p))
+            {
+                float g = c.r * 0.3f + c.g * 0.59f + c.b * 0.11f;
+                c = Color.Lerp(c, new Color(g, g, g), 0.35f) * 0.82f;
+                c.a = 1f;
+            }
+            // --- Ende Kacheln
             return c;
         }
     }

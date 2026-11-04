@@ -45,6 +45,11 @@ namespace CityBuilder.Simulation.Roads
         public Func<RoadPlan, RoadBuildError> ExternalCheck { get; set; }
         // --- Ende Bahn
 
+        // --- Kacheln (Hook): Bauland = gekaufte Kacheln. Zentrale Prüfung für alles, was der Spieler baut (Straßen, Gleise,
+        // Gebäude, Dienste, Versorger, Leitungen, Häfen, Flughafen …; Helfer in BuildArea). null = überall (Tests, 2-km-Karte).
+        public IBuildArea BuildArea { get; set; }
+        // --- Ende Kacheln
+
         // --- Bauwerks-Sperre (Hook): Bauwerke, die Straßen nicht überbauen dürfen (Dienste, Versorger, später Depots …).
         // RoadBuilder.Plan… prüft dagegen (RoadBuildError.OverlapsStructure). Zonen-Gebäude melden sich hier nicht an.
         readonly List<Func<IEnumerable<StructureBlock>>> structureSources = new List<Func<IEnumerable<StructureBlock>>>();

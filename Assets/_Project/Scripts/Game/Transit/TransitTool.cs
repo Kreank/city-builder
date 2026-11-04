@@ -310,6 +310,7 @@ namespace CityBuilder.Game.Transit
             switch (e)
             {
                 case TransitBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case TransitBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case TransitBuildError.OnWater: return "Nicht im Wasser bauen";
                 case TransitBuildError.TooSteep: return $"Zu steil (max. {TransitRules.DepotMaxSlope:0} m Höhenunterschied)";
                 case TransitBuildError.OverlapsRoad: return "Steht auf einer Straße";

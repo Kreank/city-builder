@@ -29,7 +29,7 @@ namespace CityBuilder.Simulation.Persistence
         /// v1/v2-Stände laden mit freiem Land 0 (altes politische Modell).
         /// v4: Gateway-Schalter (vorgebaute Anbindung, Zuzug/Handel nur über Anschlüsse); v1–v3 laden mit Schaltern aus.
         /// </summary>
-        const int WorldSectionVersion = 4;
+        const int WorldSectionVersion = 5; // v5 Kacheln: Kachelgröße
 
         // ------------------------------------------------------------ Speichern
 
@@ -231,6 +231,8 @@ namespace CityBuilder.Simulation.Persistence
             w.Bool(s.PrebuiltConnections);
             w.Bool(s.RequireGatewayForMoveIn);
             w.Bool(s.RequireGatewayForTrade);
+            // v5 Kacheln: Kantenlänge einer Kachel (Besitz steht im Abschnitt „tiles“)
+            w.Float(s.TileSize);
         }
 
         static void ReadWorld(SaveReader r, int version, out WorldSettings s, out int seed, out long tick, out int substep)
@@ -274,6 +276,12 @@ namespace CityBuilder.Simulation.Persistence
                 s.PrebuiltConnections = r.Bool();
                 s.RequireGatewayForMoveIn = r.Bool();
                 s.RequireGatewayForTrade = r.Bool();
+            }
+            // Kacheln (v5): v1–v4 = Standard-Kachelgröße – alte 2-km-Stände sind genau eine Kachel (alles gekauft)
+            if (version >= 5)
+            {
+                s.TileSize = r.Float();
+                if (!(s.TileSize >= 64f && s.TileSize <= 65536f)) throw new SaveFormatException("Welteinstellungen ungültig (Kachelgröße).");
             }
             if (!(s.SizeMeters >= 64f && s.SizeMeters <= 65536f) || !(s.EnvironmentCellSize >= 1f) || !(s.TerrainCellSize >= 0.5f) || tick < 0)
                 throw new SaveFormatException("Welteinstellungen ungültig.");

@@ -116,6 +116,8 @@ namespace CityBuilder.Simulation.Transit
         TooCloseToStop,
         /// <summary>Diese Straßenseite hat keine Fahrspur (Einbahnstraße).</summary>
         NoLaneOnSide,
+        /// <summary>Kacheln (hinten angefügt): Depot bzw. Haltestelle auf einer nicht gekauften Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Straßenseite einer Haltestelle: beide Seiten (Haltestellenpaar) oder nur eine Fahrtrichtung.</summary>

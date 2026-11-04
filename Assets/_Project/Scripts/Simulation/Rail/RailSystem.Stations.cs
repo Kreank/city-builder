@@ -74,6 +74,7 @@ namespace CityBuilder.Simulation.Rail
             var fp = new Footprint(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in fp.Corners())
                 if (!world.Contains(c)) return StationBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(world.Roads, plan.Position, plan.Front, type.Width, type.Depth)) return StationBuildError.TileNotOwned; // Kacheln
             float lo = float.MaxValue, hi = float.MinValue;
             for (int i = 0; i <= 4; i++)
                 for (int j = 0; j <= 4; j++)

@@ -99,6 +99,7 @@ namespace CityBuilder.Simulation.Shipping
             var fp = new Footprint(plan.Position, plan.Front, type.Width, type.Depth);
             foreach (var c in fp.Corners())
                 if (!world.Contains(c)) return HarborBuildError.OutOfWorld;
+            if (!BuildArea.AllowsRect(world.Roads, plan.Position, plan.Front, type.Width, type.Depth)) return HarborBuildError.TileNotOwned; // Kacheln
             // Landseite (vorderes Viertel) muss Land sein, aufgeschüttet wird höchstens der Rest
             float lo = float.MaxValue, hi = float.MinValue;
             int water = 0, total = 0;
@@ -289,6 +290,7 @@ namespace CityBuilder.Simulation.Shipping
                 case HarborBuildError.OverlapsStructure: return plan.BlockedBy != null ? $"Überschneidet {plan.BlockedBy.Name}" : "Überschneidet ein Bauwerk";
                 case HarborBuildError.InsufficientFunds: return "Zu wenig Geld in der Stadtkasse (M)";
                 case HarborBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case HarborBuildError.TileNotOwned: return BuildArea.NotOwnedText; // Kacheln
                 default: return plan.Error.ToString();
             }
         }

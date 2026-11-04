@@ -216,6 +216,8 @@ namespace CityBuilder.Simulation.Shipping
         OverlapsTrack,
         OverlapsStructure,
         InsufficientFunds,
+        /// <summary>Kacheln (hinten angefügt): Hafengelände auf einer nicht gekauften Kachel.</summary>
+        TileNotOwned,
     }
 
     /// <summary>Gebauter Hafen: Kai an tiefem Wasser (Rückseite), Kräne, Lager, Straßenfront.</summary>

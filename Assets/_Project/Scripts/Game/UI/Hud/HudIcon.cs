@@ -31,6 +31,8 @@ namespace CityBuilder.Game.UI.Hud
         Plane,
         /// <summary>Etappe 7 Reich: Fahne am Mast (Reichsfenster).</summary>
         Flag,
+        /// <summary>Kacheln: 3 × 3-Raster mit gekaufter Mitte (Kachel-Fenster).</summary>
+        Tiles,
     }
 
     /// <summary>
@@ -245,6 +247,12 @@ namespace CityBuilder.Game.UI.Hud
                 case HudIconKind.Flag: // Etappe 7 Reich: Mast + wehende Fahne
                     Line(6, 3, 6, 21);
                     Poly(true, 6, 4, 19, 4, 16, 8, 19, 12, 6, 12);
+                    break;
+                case HudIconKind.Tiles: // Kacheln: Raster 3 × 3, Mitte doppelt umrandet (gekauft)
+                    Poly(true, 3, 3, 21, 3, 21, 21, 3, 21);
+                    Line(9, 3, 9, 21); Line(15, 3, 15, 21);
+                    Line(3, 9, 21, 9); Line(3, 15, 21, 15);
+                    Poly(true, 10.5f, 10.5f, 13.5f, 10.5f, 13.5f, 13.5f, 10.5f, 13.5f);
                     break;
                 case HudIconKind.Help:
                     Circle(12, 12, 9);

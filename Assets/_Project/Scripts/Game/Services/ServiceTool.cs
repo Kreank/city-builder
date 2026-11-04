@@ -291,6 +291,7 @@ namespace CityBuilder.Game.Services
                 case NoiseBarrierError.TooShort: return $"Zu kurz (mind. {NoiseBarrierSystem.MinLength:0} m)";
                 case NoiseBarrierError.TooLong: return $"Zu lang (höchstens {NoiseBarrierSystem.MaxLength:0} m je Stück – Zwischenpunkt setzen)";
                 case NoiseBarrierError.OutOfWorld: return "Außerhalb der Karte";
+                case NoiseBarrierError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case NoiseBarrierError.OnWater: return "Nicht im Wasser bauen";
                 case NoiseBarrierError.OnRoad: return "Liegt auf Fahrbahn/Gehweg – neben die Straße setzen";
                 case NoiseBarrierError.OverlapsStructure: return "Kreuzt ein Bauwerk";
@@ -376,6 +377,7 @@ namespace CityBuilder.Game.Services
             switch (e)
             {
                 case ServiceBuildError.OutOfWorld: return "Außerhalb der Karte";
+                case ServiceBuildError.TileNotOwned: return CityBuilder.Simulation.Roads.BuildArea.NotOwnedText; // Kacheln
                 case ServiceBuildError.OnWater: return "Nicht im Wasser bauen";
                 case ServiceBuildError.TooSteep: return $"Zu steil (max. {ServiceSystem.MaxSlope:0} m Höhenunterschied)";
                 case ServiceBuildError.OverlapsRoad: return "Steht auf einer Straße";
