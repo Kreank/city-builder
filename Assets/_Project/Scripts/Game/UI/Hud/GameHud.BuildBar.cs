@@ -629,6 +629,13 @@ namespace CityBuilder.Game.UI.Hud
                 "Lärmschutzwand entlang von Straßen ziehen (rastet neben dem Gehweg ein, Strg = frei) · dämpft den Straßenlärm dahinter · " +
                 "Klick = Punkt, RMB/Esc = fertig"));
             // --- Ende Eigene Assets
+            // --- Umwelt (Etappe 6): Bäume pflanzen (Pinsel)
+            tiles.Add(Tile("Bäume pflanzen", $"{CityBuilder.Simulation.Environment.EcologyRules.CostPerTree:0} €/Baum", ServiceSwatch, HudIconKind.Tree,
+                () => serviceTool.Select(ServiceTool.ServiceAction.PlantTrees),
+                () => serviceTool.Active && serviceTool.Current == ServiceTool.ServiceAction.PlantTrees,
+                "Aufforsten auf freier Fläche: Setzlinge wachsen in ~2 Monaten zum Wald, filtern Abgas, Boden erholt sich schneller · " +
+                "LMB halten = pflanzen, [ ] = Pinselgröße"));
+            // --- Ende Umwelt
             panelBody.Add(tiles);
 
             var info = Container("cb-info-row");

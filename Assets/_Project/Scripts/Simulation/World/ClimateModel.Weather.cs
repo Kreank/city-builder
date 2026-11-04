@@ -99,8 +99,8 @@ namespace CityBuilder.Simulation.World
         float snowCover;
 
         /// <summary>
-        /// Schneedecke 0..1: Grad-Tag-Modell über die letzten 40 Tage (Niederschlag unter 0,5 °C bleibt liegen, über 0 °C
-        /// schmilzt 1,5 mm je K und Tag); 15 mm Wasserwert = geschlossene Decke. Nur in kalten Regionen/Wintern nennenswert.
+        /// Schneedecke 0..1: Grad-Tag-Modell über die letzten 40 Tage (Niederschlag unter −0,5 °C bleibt liegen, darüber
+        /// schmelzen 3 mm je K und Tag, Regen hilft mit); 20 mm Wasserwert = geschlossene Decke. Nur in kalten Regionen/Wintern nennenswert.
         /// </summary>
         public float SnowCoverOn(int day)
         {
@@ -109,11 +109,11 @@ namespace CityBuilder.Simulation.World
             for (int d = day - 40; d <= day; d++)
             {
                 float t = TemperatureOn(d);
-                if (t < 0.5f) snow += PrecipitationOn(d);
-                else snow = MathF.Max(0f, snow - 1.5f * t - 0.5f * PrecipitationOn(d));
+                if (t < -0.5f) snow += PrecipitationOn(d);
+                else snow = MathF.Max(0f, snow - 3f * (t + 0.5f) - 0.5f * PrecipitationOn(d));
             }
             snowDay = day;
-            snowCover = Math.Clamp(snow / 15f, 0f, 1f);
+            snowCover = Math.Clamp(snow / 20f, 0f, 1f);
             return snowCover;
         }
 

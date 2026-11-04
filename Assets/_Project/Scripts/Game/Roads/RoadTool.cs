@@ -207,6 +207,10 @@ namespace CityBuilder.Game.Roads
             // --- Sicherheit: Flammen/Rauch, Ruinen/Gerüste, Blaulicht; Meldungen zu Bränden und Kriminalität
             if (litBase != null) Ensure<CityBuilder.Game.Services.SafetyView>().Init(runner, litBase, previewMaterial);
             Ensure<CityBuilder.Game.Services.SafetyAlerts>().Init(runner);
+            // --- Umwelt (Etappe 6): Smog-/Fischsterben-Meldungen, dezenter Smog-Dunst
+            Ensure<CityBuilder.Game.Environment.EnvironmentAlerts>().Init(runner);
+            Ensure<CityBuilder.Game.Environment.SmogHazeView>().Init(runner, cam);
+            // --- Ende Umwelt
             // --- Ende Sicherheit
 
             // --- Wohnhäuser setzen (Anno-Stil): Werkzeug (Modus House, Taste 6) mit Anforderungs-Vorschau

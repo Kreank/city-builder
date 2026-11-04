@@ -538,11 +538,14 @@ namespace CityBuilder.Simulation.Environment
             {
                 if (f.Kind != ServiceKinds.Park) continue;
                 float r = MathF.Max(f.Type.Width, f.Type.Depth) * 0.5f + 16f;
-                for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
+                int x0 = Math.Max(0, (int)MathF.Floor((f.Position.X - r - air.Origin.X) / air.CellSize));
+                int x1 = Math.Min(width - 1, (int)MathF.Floor((f.Position.X + r - air.Origin.X) / air.CellSize));
+                int y0 = Math.Max(0, (int)MathF.Floor((f.Position.Y - r - air.Origin.Y) / air.CellSize));
+                int y1 = Math.Min(height - 1, (int)MathF.Floor((f.Position.Y + r - air.Origin.Y) / air.CellSize));
+                for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
                 {
                     var c = air.CellCenter(x, y);
-                    if (MathF.Abs(c.X - f.Position.X) > r || MathF.Abs(c.Y - f.Position.Y) > r) continue;
                     if (!f.Contains(c, 16f)) continue;
                     vegetation[y * width + x] += EcologyRules.ParkDecay;
                 }

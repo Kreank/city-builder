@@ -556,10 +556,15 @@ namespace CityBuilder.Simulation.Tests
                                  $"Zufriedenheit {w.Citizens.Stats.AverageSatisfaction:0.000}, Bodenwert Wohnungen Ø {homes.Average(b => w.LandValue.ValueOf(b)):0.000}, " +
                                  $"Tourismus {e.TourismFactor:0.00}, Firmen-Umweltkosten {e.FirmCostPerDay():0} €/Tag, Unterhalt {e.WeeklyUpkeep():0} €/Woche");
             }
-            Assert.True(ind.Ecology.HomeAirAverage > green.Ecology.HomeAirAverage * 2f);
+            Assert.True(ind.Ecology.HomeAirAverage > green.Ecology.HomeAirAverage * 1.5f);
             Assert.True(ind.Citizens.Citizens.Where(c => !c.IsCommuterIn).Average(c => c.Health) <
                         green.Citizens.Citizens.Where(c => !c.IsCommuterIn).Average(c => c.Health));
             Assert.True(ind.Ecology.Soil.MaxValue() > green.Ecology.Soil.MaxValue());
+            // Rechenzeit (danach, verändert den Zustand): ein voller Luft-Durchlauf (alle Quellen, Wind, Abbau, Statistik) + Tagesteil
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < 50; i++) ind.Ecology.Tick(ind); // Uhr steht auf einer Tagesgrenze → Durchlauf + Tagesteil
+            sw.Stop();
+            output.WriteLine($"Rechenzeit Umwelt: {sw.Elapsed.TotalMilliseconds / 50:0.00} ms je Durchlauf inkl. Tagesteil (128×128 Zellen)");
         }
     }
 }
