@@ -256,7 +256,7 @@ namespace CityBuilder.Simulation.Citizens
             foreach (var m in h.MemberList)
             {
                 var mem = m.Memories;
-                noise += mem.Strength(MemoryKind.Noise);
+                noise += mem.Strength(MemoryKind.Noise) + mem.Strength(MemoryKind.AircraftNoise); // Flughafen: Fluglärm
                 smog += mem.Strength(MemoryKind.Smog);
                 outage += mem.Strength(MemoryKind.PowerOutage) + mem.Strength(MemoryKind.WaterOutage);
                 unsafeMem += mem.Strength(MemoryKind.FeelsUnsafe);

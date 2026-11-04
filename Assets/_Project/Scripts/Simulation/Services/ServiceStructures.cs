@@ -26,6 +26,8 @@ namespace CityBuilder.Simulation.Services
         InsufficientFunds,
         /// <summary>Einmaliges Bauwerk (Rathaus) steht schon in der Stadt.</summary>
         AlreadyBuilt,
+        /// <summary>Flughafen: zu hoch für eine Einflugschneise/Übergangsfläche (<see cref="ServicePlan.ObstacleNote"/>).</summary>
+        ObstacleClearance,
     }
 
     /// <summary>Ein gebautes Dienstgebäude (frei platziert und gedreht wie die Versorger).</summary>
@@ -100,6 +102,8 @@ namespace CityBuilder.Simulation.Services
         public int MovingId;
         /// <summary>Gebäude, die abgerissen würden.</summary>
         public readonly List<Building> Displaced = new List<Building>();
+        /// <summary>Flughafen: Hinweis zur Hindernisfreiheit (bei <see cref="ServiceBuildError.ObstacleClearance"/>).</summary>
+        public string ObstacleNote;
         public bool IsValid => Error == ServiceBuildError.None;
         /// <summary>Mitte der Vorderkante (Anschlusspunkt, Vorschau-Pfeil).</summary>
         public Vector2 FrontMid => Position + Front * (Type.Depth * 0.5f);

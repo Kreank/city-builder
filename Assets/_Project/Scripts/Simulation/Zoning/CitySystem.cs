@@ -88,6 +88,8 @@ namespace CityBuilder.Simulation.Zoning
 
         // --- G3 Strom & Wasser (Hook): Punkte, auf denen nichts wachsen darf (Versorger-Bauwerke). Gesetzt vom UtilitySystem.
         public Func<Vector2, bool> LotBlocker { get; set; }
+        // --- Flughafen (Hook): Grund, warum ein gesetztes Gebäude hier nicht stehen darf (zu hoch für die Einflugschneise), null = ok
+        public Func<HousePlan, string> PlacementCheck { get; set; }
 
         // --- Stadtkasse (Hook): Faktor je Zonenart auf die Nachfrage (Steuersätze). null = 1. Gesetzt von SimulationWorld.
         public Func<ZoneType, float> DemandModifier { get; set; }

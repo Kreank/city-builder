@@ -187,7 +187,8 @@ namespace CityBuilder.Simulation.Gateways
             foreach (var g in gateways)
                 if (g.EntryNodeId == nodeId || g.ExitNodeId == nodeId) return g;
             return RailGatewayOfNode?.Invoke(nodeId) // --- Bahn: Ankunftsknoten der Bahnhöfe gehören zum Rail-Gateway
-                ?? WaterGatewayOfNode?.Invoke(nodeId); // --- Wasserstraße: Zufahrt des Hafens gehört zum Wasser-Gateway
+                ?? WaterGatewayOfNode?.Invoke(nodeId) // --- Wasserstraße: Zufahrt des Hafens gehört zum Wasser-Gateway
+                ?? AirGatewayOfNode?.Invoke(nodeId);  // --- Flughafen: Zufahrt des Terminals gehört zum Luft-Gateway
         }
 
         // --- Bahn (Hooks, gesetzt vom RailSystem): Zuzug per Bahn (Netzteil → Ankunftsknoten eines Personenbahnhofs) und
@@ -199,6 +200,9 @@ namespace CityBuilder.Simulation.Gateways
         internal Func<int, Gateway> WaterGatewayOfNode;
         internal Func<int, string> HarborRouteText;
         // --- Ende Wasserstraße
+        // --- Flughafen (Hook, gesetzt vom AviationSystem): Terminal-Zufahrt → Luft-Gateway (Zählung Zuzug/Luftfracht)
+        internal Func<int, Gateway> AirGatewayOfNode;
+        // --- Ende Flughafen
 
         /// <summary>Befahrbare Straßen-Gateways (Autobahn-Enden).</summary>
         public IEnumerable<Gateway> RoadGateways()

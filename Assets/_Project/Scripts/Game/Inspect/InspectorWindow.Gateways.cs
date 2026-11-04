@@ -65,7 +65,7 @@ namespace CityBuilder.Game.Inspect
             if (!g.IsOperational)
                 ui.Note(g.Kind == GatewayKind.Rail ? "Die Trasse ist freigehalten – Bahnhöfe und Züge kommen in einer späteren Stufe."
                     : g.Kind == GatewayKind.Water ? "Wasserstraße vorbereitet – Hafen und Schiffe kommen später; Seehandel fährt bis dahin per Lkw über die Autobahn."
-                    : "Flughafen und Flugverkehr kommen später.");
+                    : "Luftweg: einen Flughafen bauen (Bauleiste „Flughafen“, 9) und eine Straße vor das Terminal legen – Einflugschneisen frei halten."); // Flughafen
             if (g.IsRoad) ui.Note("Gehört der Welt: nicht abreißbar, kein Unterhalt. Anschluss über den Zubringer an der Anschlussstelle.");
             return true;
         }

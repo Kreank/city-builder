@@ -93,7 +93,7 @@ namespace CityBuilder.Game.UI.Hud
         WorldMapUiWindow worldMap;
         GoodsWindow goodsWindow; // G5 Wirtschaft (F5)
         TradeWindow tradeWindow; // Etappe 8 Handel (F11)
-        RealmWindow realmWindow; // Etappe 7 Reich (F12)
+        RealmWindow realmWindow; // Etappe 7 Reich (Pos1)
         EnvironmentWindow environmentWindow; // Umwelt (Etappe 6): Knopf in der Ansichtsleiste
         VisualElement resourceFlyout;
 
@@ -227,6 +227,7 @@ namespace CityBuilder.Game.UI.Hud
             Windows.Add(new TransitWindow()); // ÖPNV: Linienübersicht (F6, offen im ÖPNV-Werkzeug)
             Windows.Add(new RailWindow()); // Bahn: Bahnübersicht (F7, offen im Bahn-Werkzeug 7)
             Windows.Add(new HarborWindow()); // Wasserstraße: Hafenübersicht (F8, offen im Hafen-Werkzeug 8)
+            Windows.Add(new AirportWindow()); // Flughafen: Übersicht (F12, offen im Flughafen-Werkzeug 9)
             var budget = tool.GetComponent<CityBuilder.Game.Economy.BudgetPanel>();
             if (budget != null) Windows.Add(new BudgetWindow(budget));
             help = Windows.Add(new HelpWindow());
@@ -237,7 +238,7 @@ namespace CityBuilder.Game.UI.Hud
             if (goodsComp != null) goodsWindow = Windows.Add(new GoodsWindow(goodsComp));
             // --- Ende G5
             tradeWindow = Windows.Add(new TradeWindow()); // Etappe 8 Handel (F11), nur mit Weltkarte sichtbar
-            realmWindow = Windows.Add(new RealmWindow()); // Etappe 7 Reich (F12): Städte, Lieferungen, Land gründen
+            realmWindow = Windows.Add(new RealmWindow()); // Etappe 7 Reich (Pos1): Städte, Lieferungen, Land gründen
             environmentWindow = Windows.Add(new EnvironmentWindow()); // Umwelt (Etappe 6): Luft, Boden, Gegenmaßnahmen
             worldLabels = new WorldLabelLayer(root, tool.Camera);
             UiPanels.ToolkitActive = true;
@@ -486,6 +487,7 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(SupplyChip(UtilityKind.Sewage, HudIconKind.Pipe, UtilityOverlayView.Overlay.Sewage)); // G3 erweitert
             topBar.Add(GatewayChip()); // Außenanbindung: „Stadt an die Autobahn anschließen“
             topBar.Add(FairwayChip()); // Wasserstraße: „Fahrrinne gesperrt“ (zu niedrige feste Brücke)
+            topBar.Add(AirportChip()); // Flughafen: außer Betrieb / Einflugschneise gesperrt
 
             // Info-Modus (C)
             // UX: Info = Stadtübersicht ein/aus (wechselt ins Auswählen); Auswahl selbst geht immer per Linksklick
@@ -509,9 +511,9 @@ namespace CityBuilder.Game.UI.Hud
             topBar.Add(goodsBtn);
             // --- Ende G5
 
-            // --- Etappe 7 Reich (F12): Städte, Lieferungen, Land gründen – nur mit Weltkarte sinnvoll
+            // --- Etappe 7 Reich (Pos1): Städte, Lieferungen, Land gründen – nur mit Weltkarte sinnvoll
             var realmBtn = Btn(null, () => realmWindow?.Toggle(), () => realmWindow != null && realmWindow.IsOpen,
-                "Reich (F12): eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen", null, "cb-icon-btn");
+                "Reich (Pos1): eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen", null, "cb-icon-btn");
             realmBtn.Add(Icon(HudIconKind.Flag));
             topBar.Add(realmBtn);
             // --- Ende Etappe 7

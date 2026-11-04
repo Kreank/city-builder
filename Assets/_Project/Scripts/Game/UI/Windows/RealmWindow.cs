@@ -10,7 +10,7 @@ using UnityEngine;
 namespace CityBuilder.Game.UI.Windows
 {
     /// <summary>
-    /// Etappe 7 Reich (mittiges Fenster, <b>F12</b>, Fahnen-Knopf oben, „Reich“ in der Weltkarte): Reiter <b>Städte</b> (Kennzahlen
+    /// Etappe 7 Reich (mittiges Fenster, <b>Pos1</b> (Home; F12 gehört dem Flughafen), Fahnen-Knopf oben, „Reich“ in der Weltkarte): Reiter <b>Städte</b> (Kennzahlen
     /// aller Städte – detailliert bzw. aggregiert –, „Zur Stadt wechseln“, Umbenennen, „Stadt gründen“ → Weltkarte), <b>Lieferungen</b>
     /// (interne Liefervereinbarungen mit Weg/Fracht, neue Vereinbarung, Beenden), <b>Land</b> (Landesgründung mit Fortschritt und
     /// Bedingungen, Name/Flagge/Hauptstadt; danach Landeskasse, Zuschüsse, Anerkennung) und <b>Meldungen</b>.
@@ -56,7 +56,7 @@ namespace CityBuilder.Game.UI.Windows
         public override void Poll()
         {
             var kb = GameKeyboard.Current;
-            if (kb != null && kb.f12Key.wasPressedThisFrame) open = !open;
+            if (kb != null && kb.homeKey.wasPressedThisFrame) open = !open;
         }
 
         public override void DrawHead(Ui ui)
@@ -65,7 +65,7 @@ namespace CityBuilder.Game.UI.Windows
             string sub = realm.IsNation
                 ? $"Land · Hauptstadt {realm.CapitalCity?.Name} · {realm.Cities.Count} Städte · {realm.TotalPopulation:N0} Einwohner"
                 : $"Stadtstaat · {realm.Cities.Count} {(realm.Cities.Count == 1 ? "Stadt" : "Städte")} · {realm.TotalPopulation:N0} Einwohner";
-            Head(ui, "Reich (F12)", realm.IsNation ? Tone.Good : Tone.Info, realm.DisplayName, sub, chipDot: ColorOf(realm.FlagColor));
+            Head(ui, "Reich (Pos1)", realm.IsNation ? Tone.Good : Tone.Info, realm.DisplayName, sub, chipDot: ColorOf(realm.FlagColor));
             ui.Tabs(TabNames, tab, i => { tab = i; ContentVersion++; });
         }
 

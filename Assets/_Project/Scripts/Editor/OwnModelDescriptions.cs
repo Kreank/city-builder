@@ -104,12 +104,24 @@ namespace CityBuilder.Editor
             { "buoy_red", new[] { "Coast/Buoy_Red" } },
             { "buoy_green", new[] { "Coast/Buoy_Green" } },
             { "drawbridge", new[] { "Infrastructure/Drawbridge" } },
+            // --- Flughafen (Stufe 4): Flugzeuge, Bahn-/Rollweg-Kacheln, Gebäude, Windsack, Gepäckschlepper
+            { "air_airliner", new[] { "Airport/Airliner" } },
+            { "air_airliner_red", new[] { "Airport/Airliner_Red" } },
+            { "air_small", new[] { "Airport/SmallPlane" } },
+            { "air_baggage", new[] { "Airport/BaggageTrain" } },
+            { "air_runway", new[] { "Airport/Runway" } },
+            { "air_runway_end", new[] { "Airport/Runway_End" } },
+            { "air_taxiway", new[] { "Airport/Taxiway" } },
+            { "air_terminal", new[] { "Airport/Terminal" } },
+            { "air_tower", new[] { "Airport/ControlTower" } },
+            { "air_hangar", new[] { "Airport/Hangar" } },
+            { "air_windsock", new[] { "Airport/Windsock" } },
         };
 
         /// <summary>Ordner/Datei ohne Funktion im Spiel → worauf sie wartet (für den Bericht).</summary>
         static readonly (string prefix, string waitsFor)[] Waiting =
         {
-            ("Airport/", "Flughafen (Roadmap: ÖPNV & Fernverkehr)"),
+            // --- Flughafen (Stufe 4): alle Airport/*-Modelle sind zugeordnet (TransportFiles, Ids air_*)
             // --- Wasserstraße & Hafen: Schiffe/Hafenbauten/Tonnen sind zugeordnet (TransportFiles); offen bleiben Strand, Fähre als Linie, Fischerei
             ("Coast/Beach", "Strand/Badestelle (Freizeit am Ufer, Roadmap: Tourismus)"),
             ("Coast/LifeguardTower", "Strand/Badestelle (Freizeit am Ufer, Roadmap: Tourismus)"),

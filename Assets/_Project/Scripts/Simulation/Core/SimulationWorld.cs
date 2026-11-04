@@ -266,6 +266,13 @@ namespace CityBuilder.Simulation.Core
             world.Shipping.Connect();
             // --- Ende Wasserstraße
 
+            // --- Flughafen (Stufe 4): Flughäfen, Hindernisfreiheit, Flugbetrieb, Fluglärm, Tourismus, Luftfracht, Luft-Gateway
+            // (nach dem Hafen: verkettet Handel/Sperren/Zuzug; ohne Flughafen ändert sich nichts)
+            world.Aviation = new Aviation.AviationSystem(world);
+            world.AddSystem(world.Aviation);
+            world.Aviation.Connect();
+            // --- Ende Flughafen
+
             if (newGame && world.Settings.PrebuiltConnections)
             {
                 world.Gateways.Generate();
@@ -343,6 +350,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Wasserstraße &amp; Hafen (Stufe 3): Fahrrinnen, Klappbrücken, Häfen, Schiffe. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Shipping.ShippingSystem Shipping { get; private set; }
+
+        /// <summary>Flughafen (Stufe 4): Flughäfen, Flugzeuge, Fluglärm, Tourismus, Luftfracht. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Aviation.AviationSystem Aviation { get; private set; }
 
         /// <summary>Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceVehicleSystem ServiceVehicles { get; private set; }

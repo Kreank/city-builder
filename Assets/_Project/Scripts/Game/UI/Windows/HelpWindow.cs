@@ -42,7 +42,9 @@ namespace CityBuilder.Game.UI.Windows
                     "Personenbahnhof an ihren Gleisen (Bauleiste „Bahn“, 7) mit Straße davor holt Fernzüge, Pendler und Zuzügler per Bahn, " +
                     "ein Güterbahnhof macht Import/Export billiger. Auf dem Fluss fahren schon Schiffe: Brücken über die Fahrrinne müssen " +
                     "hoch genug sein (automatische Trassierung macht das) – oder eine Klappbrücke bauen, die für Schiffe öffnet. Ein Güterhafen " +
-                    "am Ufer (Bauleiste „Hafen“, 8) bringt Seehandel und billige Fracht per Schiff.");
+                    "am Ufer (Bauleiste „Hafen“, 8) bringt Seehandel und billige Fracht per Schiff. Ein Flughafen (Bauleiste „Flughafen“, 9) " +
+                    "macht den Luftweg befahrbar: Touristen, Geschäftsreisende und Luftfracht – aber Fluglärm entlang der Einflugschneisen, und dort " +
+                    "dürfen keine hohen Gebäude, Türme oder Windräder stehen.");
             ui.Section("Bauen");
             using (ui.Fields())
             {
@@ -63,6 +65,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("6", "Bauen (Anno-Stil): Wohnen, Gewerbe, Industrie setzen · LMB halten und ziehen = Reihe entlang der Straße · , . drehen · Stufen nach Einrichtungen in Reichweite"); // Setzen statt Zonen
                 ui.Field("7 · F7", "Bahn (Gleise, Weichen, Personen-/Güterbahnhof; Bild↑/↓ Bauhöhe) · Bahnübersicht"); // Bahn
                 ui.Field("8 · F8", "Hafen (Güterhafen am Ufer, Klappbrücke quer über die Fahrrinne) · Hafenübersicht · Fahrrinne beim Brückenbau sichtbar"); // Wasserstraße
+                ui.Field("9 · F12", "Flughafen (Regionalflugplatz/Verkehrsflughafen; , . drehen, Enter Terminal-Seite, Einflugschneisen frei halten) · Flughafenübersicht (Flugplan, Ziele, Fluglärm, Nachtflugverbot)"); // Flughafen
             }
             ui.Section("Ansehen");
             using (ui.Fields())
@@ -78,7 +81,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("M", "Stadtkasse");
                 ui.Field("F5", "Wirtschaft (Güter, Preise, Handel, Firmen, Lenkung: Förderung je Branche)");
                 ui.Field("F11", "Handel & Politik (Länder, Weltpreise, Angebote, Verträge, Zölle)"); // Etappe 8
-                ui.Field("F12", "Reich: eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen (Stadt gründen auf der Weltkarte F4)"); // Etappe 7
+                ui.Field("Pos1", "Reich: eigene Städte, zur Stadt wechseln, interne Lieferungen, Land gründen (Stadt gründen auf der Weltkarte F4)"); // Etappe 7
                 ui.Field("F1", "diese Hilfe");
             }
             ui.Section("Spiel");

@@ -60,7 +60,7 @@ namespace CityBuilder.Game.UI.Windows
                 ui.ActionButton(foundingMode ? "Gründen: Region anklicken …" : "Neue Stadt gründen", () => { foundingMode = !foundingMode; mode = WorldMapWindow.Mode.Countries; },
                     ActionStyle.Secondary, foundingMode, true, "Freie Nachbarregion (hell) oder freien Platz in der eigenen Region anklicken");
                 if (RealmWindow.Current != null)
-                    ui.ActionButton("Reich (F12)", () => { Close(); RealmWindow.Current.Open(); });
+                    ui.ActionButton("Reich (Pos1)", () => { Close(); RealmWindow.Current.Open(); });
             }
 
             // --- Ausgewählte Region
