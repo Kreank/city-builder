@@ -16,10 +16,10 @@ namespace CityBuilder.Game.Services
     /// (<see cref="ServiceSystem"/>) prüft und baut.
     /// <para>Taste 4 statt eines Buchstabens: frei war nur Y, das das Input System nach US-Lage liest (auf QWERTZ = Taste „Z“).</para>
     /// </summary>
-    public sealed class ServiceTool : MonoBehaviour
+    public sealed partial class ServiceTool : MonoBehaviour // Umwelt (Etappe 6): Bäume pflanzen in ServiceTool.Trees.cs
     {
         /// <summary>Eigene Assets: <see cref="NoiseBarrier"/> = Lärmschutzwand als Kette ziehen (Linienbauwerk).</summary>
-        public enum ServiceAction { Place, Remove, NoiseBarrier }
+        public enum ServiceAction { Place, Remove, NoiseBarrier, PlantTrees } // PlantTrees: Umwelt (Etappe 6)
 
         const int Buckets = 6;
         const float PieceLength = 6f;
@@ -145,6 +145,7 @@ namespace CityBuilder.Game.Services
             bool clicked = mouse != null && mouse.leftButton.wasPressedThisFrame;
             if (Current == ServiceAction.Place) UpdatePlace(tool.Cursor, clicked);
             else if (Current == ServiceAction.NoiseBarrier) UpdateBarrier(tool.Cursor, clicked); // Eigene Assets
+            else if (Current == ServiceAction.PlantTrees) UpdateTrees(tool.Cursor); // Umwelt (Etappe 6)
             else UpdateRemove(tool.Cursor, clicked);
             DrawReach();
         }

@@ -238,7 +238,8 @@ namespace CityBuilder.Simulation.Aviation
         /// </summary>
         void ChooseDirections(Airport a, int day)
         {
-            var wind = AviationRules.WindOfDay(PrevailingWind, world.Settings.TerrainSeed + a.Id * 17, day);
+            // Wind des Tages aus dem Klima (Umwelt, Etappe 6: Richtung nach Breite + Wetterlagen); ohne Klima eigene Annahme
+            var wind = world.Climate != null ? -world.Climate.WindOn(day).Toward : AviationRules.WindOfDay(PrevailingWind, world.Settings.TerrainSeed + a.Id * 17, day);
             a.WindToday = wind;
             int dw = Vector2.Dot(a.Dir, wind) >= 0f ? 1 : -1;
             bool ArrOk(int d) => (d > 0 ? a.CorridorA : a.CorridorB) != CorridorState.Closed;

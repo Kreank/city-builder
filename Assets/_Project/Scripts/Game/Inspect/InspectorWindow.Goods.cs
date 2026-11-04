@@ -61,8 +61,11 @@ namespace CityBuilder.Game.Inspect
                 ui.Columns("Transport", "−" + Money(f.Yesterday.Transport), "−" + Money(f.Today.Transport));
                 if (f.Yesterday.Subsidy > 0 || f.Today.Subsidy > 0) // Produktion lenken
                     ui.Columns("Förderung", "+" + Money(f.Yesterday.Subsidy), "(abends)");
+                if (f.Yesterday.Environment > 0 || f.Today.Environment > 0) // Umwelt (Etappe 6)
+                    ui.Columns("Umweltauflagen", "−" + Money(f.Yesterday.Environment), "(abends)");
                 ui.Columns("Gewinn", Signed(yesterday), Signed(today), yesterday >= 0 ? Tone.Good : Tone.Bad, today >= 0 ? Tone.Good : Tone.Warn);
             }
+            EcologyFirm(ui, world, f); // Umwelt (Etappe 6): Ausstoß, Auflagen-Kosten
 
             if (r.Inputs.Length > 0)
             {

@@ -33,22 +33,24 @@ namespace CityBuilder.Simulation.Goods
         public double Purchases;
         /// <summary>Wirtschaftsförderung der Stadt (Produktion lenken), zählt zum Gewinn.</summary>
         public double Subsidy;
+        /// <summary>Umwelt (Etappe 6): Mehrkosten der Umweltauflagen (Filter) und der Umweltzone, mindern den Gewinn.</summary>
+        public double Environment;
         public float Produced;
         public float Sold;
         public float Exported;
         public float Imported;
 
-        public double Profit => Revenue + Subsidy - InputCost - Wages - Transport;
+        public double Profit => Revenue + Subsidy - InputCost - Wages - Transport - Environment;
 
         internal void Clear()
         {
-            Revenue = InputCost = Wages = Transport = Purchases = Subsidy = 0;
+            Revenue = InputCost = Wages = Transport = Purchases = Subsidy = Environment = 0;
             Produced = Sold = Exported = Imported = 0f;
         }
 
         internal void CopyFrom(FirmLedger o)
         {
-            Revenue = o.Revenue; InputCost = o.InputCost; Wages = o.Wages; Transport = o.Transport; Purchases = o.Purchases; Subsidy = o.Subsidy;
+            Revenue = o.Revenue; InputCost = o.InputCost; Wages = o.Wages; Transport = o.Transport; Purchases = o.Purchases; Subsidy = o.Subsidy; Environment = o.Environment;
             Produced = o.Produced; Sold = o.Sold; Exported = o.Exported; Imported = o.Imported;
         }
     }

@@ -161,6 +161,11 @@ namespace CityBuilder.Simulation.Core
             // --- G4 Dienste (nach der Versorgung: hängt sich an deren Grundstücks-/Bau-Sperren an, stempelt Lärm nach dem NoiseSystem)
             world.Services = new ServiceSystem(world.Roads, world.Terrain, world.City, world.Utilities, world.Environment, world.Min, world.Max);
             world.AddSystem(world.Services);
+            // --- Umwelt (Etappe 6): Luft/Boden/Grundwasser direkt nach Versorgung und Diensten (dieselbe Stelle, an der bisher deren
+            // Abgas gerechnet wurde – ohne volles Modell bitgleich); Hooks werden am Ende verbunden (Ecology.Connect)
+            world.Ecology = new EcologySystem(world);
+            world.AddSystem(world.Ecology);
+            // --- Ende Umwelt
             // Bedürfnismodell ↔ Dienste: Abdeckung, Müll, Parks als Freizeitziel, Schülerzahlen
             CitizenServiceBinding.Connect(world.Citizens, world.Services);
             // Medien (G4 erweitert): Schlagzeilen aus echten Stadtdaten; Bürger ↔ Wasserqualität/Atom/Medien
@@ -288,6 +293,10 @@ namespace CityBuilder.Simulation.Core
             world.Safety = new Safety.SafetySystem(world);
             world.AddSystem(world.Safety);
             // --- Ende Sicherheit
+
+            // --- Umwelt (Etappe 6): Wirkungen über die Hooks der anderen Systeme (Ernte, Brunnen, Gesundheit, Bodenwert, Kosten)
+            world.Ecology.Connect();
+            // --- Ende Umwelt
             return world;
         }
 
@@ -345,6 +354,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Sicherheit: Brände und Kriminalität (Standard aus, das Spiel schaltet ein). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Safety.SafetySystem Safety { get; private set; }
+
+        /// <summary>Umwelt (Etappe 6): Luft (Quellen, Wind, Abbau), Boden, Grundwasser, Bäume, Umweltauflagen. Standard aus (alte Luftrechnung), das Spiel schaltet ein.</summary>
+        public EcologySystem Ecology { get; private set; }
 
         // --- Speichern & Laden
         /// <summary>Seed von <see cref="CreateDefault"/> (Systeme leiten ihre Zufallsgeneratoren davon ab).</summary>

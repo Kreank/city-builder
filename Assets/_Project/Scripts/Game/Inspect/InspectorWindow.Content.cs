@@ -202,6 +202,7 @@ namespace CityBuilder.Game.Inspect
                 float air = env.AirPollution.Sample(b.Position);
                 ui.Meter("Abgas", $"{air:0.00} (Rasterwert, ohne Einheit)", Mathf.Clamp01(air), air >= 0.5f ? Tone.Warn : air >= 0.2f ? Tone.Accent : Tone.Good);
             }
+            EcologySurroundings(ui, world, b); // Umwelt (Etappe 6)
 
             // G4: Abdeckung je Dienstart (0..1, sinkt mit Fahrzeit und Überlastung)
             ui.Section("Dienste in Reichweite");
@@ -669,6 +670,7 @@ namespace CityBuilder.Game.Inspect
                         left > 0 ? Tone.Warn : Tone.None);
                 }
                 // --- Ende
+                EcologyFacility(ui, world, f); // Umwelt (Etappe 6): Auslastung/Filter, Brunnen
                 ui.Field("Zustand", "— (Verschleiß/Wartung später)", Tone.Muted);
             }
             DepositsSection(ui, world, f.Position, "am Standort");

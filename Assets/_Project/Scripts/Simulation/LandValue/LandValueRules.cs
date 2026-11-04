@@ -34,6 +34,8 @@ namespace CityBuilder.Simulation.LandValue
         public float Noise, Air, Garbage;
         /// <summary>Sicherheit: frische Brände in der Nähe + Kriminalität 0..1 (0 = ruhig).</summary>
         public float Safety;
+        /// <summary>Umwelt (Etappe 6): Bodenbelastung/Altlasten 0..1.</summary>
+        public float Contamination;
         /// <summary>Zelle liegt im Wasser → Bodenwert 0.</summary>
         public bool IsWater;
     }
@@ -48,6 +50,8 @@ namespace CityBuilder.Simulation.LandValue
         public float Noise, Air, Garbage;
         /// <summary>Sicherheit: Abzug für Brände/Kriminalität (≤ 0).</summary>
         public float Safety;
+        /// <summary>Umwelt (Etappe 6): Abzug für Altlasten (≤ 0).</summary>
+        public float Contamination;
         /// <summary>Summe, auf 0..1 begrenzt (Zielwert, ungeglättet).</summary>
         public float Target;
         /// <summary>Aktueller (träge geglätteter) Bodenwert der Zelle; −1 = noch nicht berechnet.</summary>
@@ -74,6 +78,7 @@ namespace CityBuilder.Simulation.LandValue
             Add("Abgas", Air);
             Add("Müll", Garbage);
             Add("Brände/Kriminalität", Safety); // Sicherheit
+            Add("Altlasten (Boden)", Contamination); // Umwelt
             return list;
         }
     }
@@ -201,6 +206,8 @@ namespace CityBuilder.Simulation.LandValue
             if (f.Landmark > 0f) sum += f.Landmark; // Eigene Assets (ohne Wahrzeichen bitgleich wie vorher)
             f.Safety = -SafetyPenalty * C(i.Safety);  // Sicherheit (ohne Brände/Kriminalität bitgleich wie vorher)
             if (f.Safety < 0f) sum += f.Safety;
+            f.Contamination = -Environment.EcologyRules.ContaminationPenalty * C(i.Contamination); // Umwelt (ohne Altlasten bitgleich)
+            if (f.Contamination < 0f) sum += f.Contamination;
             f.Target = C(sum);
             return f;
         }

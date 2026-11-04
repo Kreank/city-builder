@@ -76,6 +76,11 @@ namespace CityBuilder.Simulation.Economy
         HarborFees,
         // --- Ende Wasserstraße & Hafen
 
+        // --- Umwelt (Etappe 6, hinten angefügt)
+        /// <summary>Ausgabe: Umweltschutz – Bäume pflanzen (Aufforstung).</summary>
+        Environment,
+        // --- Ende Umwelt
+
         // --- Flughafen (Stufe 4, hinten angefügt; Einnahme/Ausgabe s. Budget.IsIncome)
         /// <summary>Ausgabe: Bau und Ausbau von Flughäfen (inkl. Einebnen des Geländes).</summary>
         AirportConstruction,
@@ -97,7 +102,7 @@ namespace CityBuilder.Simulation.Economy
 
     public static class Budget
     {
-        public const int Count = (int)BudgetCategory.TourismIncome + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, dann Flughafen)
+        public const int Count = (int)BudgetCategory.TourismIncome + 1; // letzte Kategorie (Wohnhäuser, Produktion lenken, Bahn, Hafen, Umwelt, dann Flughafen)
         public const int TaxKinds = (int)TaxKind.Industry + 1;
 
         public static bool IsIncome(BudgetCategory c) =>
@@ -152,6 +157,7 @@ namespace CityBuilder.Simulation.Economy
                 case BudgetCategory.RailFares: return "Bahn: Entgelte & Fahrgeld";   // Bahn
                 case BudgetCategory.HarborConstruction: return "Bau Hafen & Klappbrücken"; // Wasserstraße & Hafen
                 case BudgetCategory.HarborFees: return "Hafen: Hafengeld & Umschlag";      // Wasserstraße & Hafen
+                case BudgetCategory.Environment: return "Umweltschutz (Bäume)";      // Umwelt
                 case BudgetCategory.AirportConstruction: return "Bau Flughafen";                   // Flughafen
                 case BudgetCategory.AirportFees: return "Flughafen: Lande- & Passagierentgelte"; // Flughafen
                 case BudgetCategory.TourismIncome: return "Tourismus: Kurtaxe & Eintritt";       // Flughafen (Tourismus)

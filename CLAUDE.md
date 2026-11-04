@@ -251,7 +251,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Gelände-Farben** ohne Texturen: `GroundView` setzt Vertex-Farben (Gras/Wiese per Rauschen, Sand am Ufer, nasser
   Sand unter Wasser, Fels ab ~30° Steigung, Erde/Kies auf bearbeitetem Boden); Shader
   `Resources/Shaders/GroundVertexColor.shader` (eigener URP-Shader, da URP/Lit keine Vertex-Farben zeigt; Fallback
-  auf das alte Material, wenn er fehlt).
+  auf das alte Material, wenn er fehlt). **Seit Umwelt (Etappe 6) nach Klima/Jahreszeit:** trockenes gelbes Gras
+  (`ClimateModel.GrassDrynessOn`: Dürre, Sommerhitze, trockenes Grundklima) und Schneedecke (`SnowCoverOn`, Grad-Tag-Modell, in
+  Höhenlagen dichter, nicht auf Fels/Wasser); einmal je Spieltag, bei merklicher Änderung werden alle Kacheln nach und nach (3 je
+  Bild) neu eingefärbt (nur Vertex-Farben). Optisch ungeprüft.
 
 ## Zonen & Gebäude (G1)
 - `ZoneGrid`: 8-m-Zellen, 4 Reihen tief je Seite ebenerdiger Stadtstraßen, neu berechnet bei Netzänderung.
@@ -428,7 +431,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, **Nachfrage W/L/B/I** mit Tooltip „warum“ (Setzen statt Zonen, `GameHud.Demand.cs`), Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Brandgefahr, Kriminalität, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
+  (Stau, Lärm, Luftqualität, Bodenbelastung, Grundwasser, Umwelt-Fenster, Bodenwert, Rohstoffe, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Brandgefahr, Kriminalität, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
@@ -589,8 +592,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `IsSatisfied(b)` (versorgt oder Art noch nicht verlangt), `NetworkOf(b, kind)`.
 - **Folge**: > 2 Spieltage ohne Strom oder Wasser → Gebäude wird verlassen (abgerissen, `BuildingAbandoned`). Erst wenn
   es mind. einen Versorger dieser Art gibt (Startphase folgenlos, Dauer zählt erst ab dann). `AbandonmentEnabled` schaltet ab.
-- Kraftwerke stempeln Lärm (nach dem `NoiseSystem`) und addieren Abgas; das `UtilitySystem` lässt Abgas vorerst auch
-  abklingen/sich verteilen (bisher einzige Quelle → später in ein eigenes Umweltsystem verschieben).
+- Kraftwerke stempeln Lärm (nach dem `NoiseSystem`). **Abgas rechnet seit Etappe 6 das `EcologySystem`** (s. „Umwelt (Etappe 6)“;
+  ohne volles Modell exakt die alte Rechnung, die Merker `pollutionActive` bleiben im Spielstand von Versorgung/Diensten).
 - Darstellung (`Game/Utilities`, Begleiter des `RoadTool`, Modus `RoadTool.Mode.Utility`): `UtilityTool` (J; Bauleiste
   „Versorgung“, , . drehen, Leitungen in Kette, RMB beendet; Rohre erzwingen die Unterirdisch-Ansicht), `UtilityView`
   (Platzhalter aus Grundkörpern, Masten an den Simulations-Standorten mit Fundament und Seilen, Anschlussseil zum
@@ -649,6 +652,86 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
 - Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
   Fischsterben/Tourismus, Grundwasser-Verschmutzung. (Wasser/Strom auf `ConnectionRules`: erledigt, s. G3.)
+
+## Umwelt (Etappe 6, agent/environment)
+- **Simulation** `Simulation/Environment/EcologySystem` (+ `.Ground.cs` Boden/Grundwasser/Bäume, `.Effects.cs` Hooks, `.Save.cs`;
+  Zahlen in `EcologyRules`; `world.Ecology`, direkt nach Versorgung und Diensten, `TickInterval` 1: Verkehr zählen je Tick, Luft alle
+  5 Ticks, Boden täglich). Wetter in `World/ClimateModel.Weather.cs` (Klima jetzt `partial`, zustandslos): `WindOn(day)` → `WindState`
+  (Richtung, in die die Luft zieht; Herkunft in Grad; Stärke 0..1 ≈ 0–12 m/s, Ø 0,46; Hauptwind nach Breite – Passat aus Ost, 30–60°
+  Westwind, polar Ost – Wetterlagen drehen ±100° über ~3 Tage), `InversionOn` (Winterhalbjahr, < 3 °C, windstill, trocken),
+  `DroughtOn` (Regen 20 Tage vs. Jahreszeit-Mittel × Wärme), `HeatStressOn` (Tageshöchstwert ≈ Mittel + 6 K, ab 30 °C),
+  `SnowCoverOn` (Grad-Tag-Modell 40 Tage), `GrassDrynessOn`.
+- **Standard aus** (`Enabled`): dann rechnet es die Luft **exakt wie früher** UtilitySystem/ServiceSystem (nur Kraftwerke und
+  Verbrennung, gleiche Reihenfolge und Werte; Test `Legacy_CoalPlantOnly_SameAsBefore`, alle 479 alten Tests unverändert grün).
+  `SimulationRunner.environmentModel` schaltet ein (auch nach dem Laden). Alle Hooks liefern ohne Modell die alten Werte.
+- **Luft** (weiter `world.Environment.AirPollution`, gleiche Einheit; Smog ab `SmogThreshold` 0,3) je Durchlauf (30 min):
+  **Verkehr** = echte Fahrzeuge je 16-m-Zelle, jeden Tick gezählt und gemittelt (Pkw 1, Lkw 3,5, Bus 2,2, Tram 0; unter 2 m/s × 1,6;
+  0,06 je Fahrzeug-Mittel), **Schiffe** (Wasserstraße & Hafen: Frachter 0,25 × Länge, Passagier 0,15 × Länge, am Kai × 0,4),
+  **Kraftwerke** = Katalogwert × Auslastung (`PlantLoad`: geliefert/Erzeugung des Netzes × Verfügbarkeit, Bereitschaft 15 %) × Filter,
+  **Industrie** = `AirPerJob(Rezept)` × Jobs × Produktivität (Eingänge fehlen/Lager voll × 0,3) × Filter, Radius 64 m + halbe Größe
+  (Stahlwerk 0,001 je Job ≈ Kohlekraftwerk bei 60 Jobs; Raffinerie, Zement, Glas, Zechen …; Büro/Laden 0), **Heizen** = bewohnte
+  Wohnungen × 0,0007 × Heizbedarf des Klimas × Bauart (EFH 1,3, MFH 1, Block 0,8, Mischgebiet 0,9; Stufe 2/3 × 0,9/0,8) + Beschäftigte
+  × 0,00015, **Müllverbrennung** = Katalogwert × (0,3 + 0,7 Auslastung) × Filter. Danach **Wind** (Upwind-Verschiebung bis 0,6 Zellen je
+  Durchlauf × Stärke, über den Rand verlässt die Luft die Karte), Diffusion 0,1, Abbau (0,05 + 0,05 × Wind + 0,05 × Regen/6 mm) ×
+  Inversion (Abbau × 0,4, Diffusion × 0,5, Wind × 0,3) + **Wald** 0,06 × Waldraster + **Parks** 0,04 auf der Fläche (+16 m).
+  Statistik: Ausstoß je Quelle (`EmissionOf`, `EmissionYesterday`, `ShareYesterday`), Luft an Wohnungen (`HomeAirAverage/Max`,
+  `SmogBuildings`), `SmogAlert` (≥ 5 Wohngebäude und ≥ 10 % im Smog, Hysterese) + Event `SmogAlertChanged`.
+- **Boden & Grundwasser** (eigene Raster `Soil`, `Groundwater`, täglich): Ablagerung 0,003 × Tagesmittel Luft; Industrie nach Rezept
+  (`GroundPerJob`: Raffinerie, Ölförderung, Stahl, Zechen/Erz – saure Grubenwässer –, Färberei, Elektronik, Dünger) × Filter;
+  **Müllhalde** Boden 0,006 und Sickerwasser 0,008/Tag (Radius + 60 m) × (0,3 + 0,7 Füllstand); Verbrennung Asche; Abwasser-Auslass
+  Uferboden. Auswaschung Boden → Grundwasser 0,1 %/Tag, Grundwasser breitet sich 3 %/Tag aus; Erholung Boden 0,4 %/Tag (mit Wald ×1,5),
+  Grundwasser 0,3 %/Tag. **Chronische Belastung** `Exposure` = Tagesmittel der Luft, geglättet (≈ 10 Tage).
+- **Wirkungen** (`Connect`, Hooks): Fruchtbarkeit = Vorkommen × (1 − 0,75 × Boden) × (1 − 0,3 × Luft) über `GoodsSystem.DepositAt`
+  (Standortwahl und Güte der Höfe; Mindestgüte 0,25 → belastete Äcker können ausfallen); **Ernte** × (1 − 0,5 × Hitze) × (1 − 0,45 ×
+  Dürre) über `GoodsSystem.HarvestFactor`; **Brunnen** = 1 − Grundwasser (schlechteste Zelle 3×3) über `WaterQualitySystem.WellQuality`
+  → Trinkwasser/Gesundheit; **Gesundheit** (`CitizenSystem.ChronicAirExposure`): Zielwert − 0,4 × Belastung × Empfindlichkeit (unter 6 J.
+  1,6, Kinder 1,25, ab 60 1,4, ab 75 1,8), Krankheitschance × (1 + 2 × …), Erinnerung „Smog“ ab 0,25; Ruhe/Zufriedenheit wie bisher über
+  die Luft an der Wohnung; **Bodenwert** Faktor „Altlasten (Boden)“ −0,12 × Belastung (`LandValueSystem.ContaminationAt`);
+  **Tourismus** `TourismFactor` (vorgemerkt); **Schlagzeilen** neue Themen `Smog`, `FishKill` (Wasserverschmutzung ≥ 0,6),
+  `EnvironmentRules` (Auflagen verschärft; hinten angefügt).
+- **Gegenmaßnahmen mit Kosten:** **Umweltauflagen** `SetRegulation(0–3)` – Emission von Kraftwerken, Industrie, Verbrennung × 1 / 0,65 /
+  0,4 / 0,22; Firmen zahlen je Job und Tag 0 / 5 / 12 / 22 € × Gewicht des Rezepts (Stahlwerk 1, Büro 0) → neue Ledger-Zeile
+  `FirmLedger.Environment` (mindert Gewinn und Gewerbesteuer, Hook `GoodsSystem.EnvironmentCostFor`), städtische Kraftwerke/Verbrennung
+  + 20 / 45 / 80 % Unterhalt (`IUpkeepSource` „Umweltschutz“). **Umweltzone** `SetLowEmissionZone(an, Mitte, Radius 200–1200 m)`:
+  Lkw × 0,4, Pkw × 0,85 in der Zone; Firmen in der Zone 1,5 €/Job/Tag, Stadt 400 €/Woche. **Bäume pflanzen** `PlanTrees(Mitte, Radius
+  ≤ 80 m)` → `TreePlan` (freie Zellen: nicht Wasser, Sperre `TerrainMap.LockQuery` = Straßen, Gebäude, Bauwerke, Gleise; noch nicht
+  dicht bewaldet; 6 Bäume je Feld × 30 €) → `PlantTrees` bucht „Umweltschutz (Bäume)“ (`BudgetCategory.Environment`, hinten angefügt),
+  Setzlinge 0,05 im Waldraster wachsen 0,012/Tag bis 0,8 (≈ 2 Monate) – die Landschaftsbäume (`ScenicPropsView`) zeigen sie, Forstbetriebe
+  können sie ernten; Straße/Gebäude darüber beendet die Aufforstung dort. Pflege 1 €/Feld/Woche. Lärmschutzwand gab es schon.
+- **Darstellung:** Ansicht „Luftqualität“ (P, gestreckt × 2,5, Legende mit Wind/Inversion), neue Ansichten **Bodenbelastung** und
+  **Grundwasser** (`EnvironmentOverlayView.Overlay.Soil/Groundwater`, Knöpfe in der Ansichtsleiste, keine neuen Tasten), **Umweltfenster**
+  (`UI/Windows/EnvironmentWindow`, rechts, Baum-Knopf links: Luft an Wohnungen, Wetter, Quellen gestern als Balken, Boden/Wasser,
+  Ernte-Stress, Tourismus, Auflagen-Stepper mit Kosten, Umweltzone einrichten/aufheben/Radius, Pflanz-Pinsel). **Bäume-Pinsel** im
+  Dienste-Werkzeug (`ServiceTool.ServiceAction.PlantTrees`, `ServiceTool.Trees.cs`, Kachel „Bäume pflanzen“, LMB halten = 4×/s, `[`/`]`
+  Radius, Ring + Hinweis). `EnvironmentAlerts` (Smog-Alarm/-Ende, Fischsterben → `HudMessages`), `SmogHazeView` (dezenter bräunlicher
+  Dunst über `RenderSettings.fog` ab Luft 0,15 um den Blickpunkt, stellt die alten Nebelwerte wieder her), Gelände-Farben nach Jahreszeit
+  (s. „Gelände“), Inspektor (`InspectorWindow.Ecology.cs`: Umfeld chronische Luft/Boden/Grundwasser/Umweltzone, Firma Ausstoß und
+  Umweltkosten + Ledger-Zeile, Kraftwerk Auslastung/Filter, Brunnenwasser), Icons `Tree`, `Groundwater`, Hilfe (F1).
+- **Spielstand** `ecology` v1 (Schalter, Auflagen, Umweltzone, Verkehrs-/Schiffszählung des laufenden Durchlaufs, Tagessumme der Luft,
+  Raster Boden/Grundwasser/Aufforstung/Belastung, Zähler, Statistik); `goods` v4 (Umweltkosten, v3 → 0). `SaveLoadTests.BuildCity` hat
+  Umwelt an, Auflagen 1 und eine Aufforstung.
+- **Tests** `EcologyTests` (20): aus = Verkehr/Heizen ohne Abgas, alte Rechnung bitgleich, Wind verschiebt die Fahne ins Lee (11 von 11
+  windigen Tagen), Wald (Abgas gesamt 56 %) und Park (12 % weniger an der Quelle) bauen ab, Klima (Wind Ø 0,46, Ostanteil 0,67, 4
+  Inversionstage/Jahr gemäßigt; Schnee kalt Januar 1,0 / Juli 0, gemäßigt Januar 0,3; Gras trocken arid 0,95 vs. 0,04), Filter (Industrie
+  397 → 159, Kraftwerk 86 → 34 je Tag; Stahlwerk 1 045 €/Tag Umweltkosten, Stadt +2 835 €/Woche), Umweltzone, Bäume (28 Felder 5 040 €,
+  Waldraster 0,05 → 0,41 nach 30 → 0,80 nach 80 Tagen, Straße beendet), Boden → Fruchtbarkeit 0,40 → 0,22 und Ernte 21 → 0, Hitze/Dürre
+  (gemäßigt schlechtester Tag × 0,80, heiß/trocken × 0,47), Deponie → Grundwasser am Brunnen 0,02/Brunnen 96 % nach 40 Tagen, direkt 0,5 →
+  50 %, Smog (Luft 0,29) → Gesundheit −0,20 Erwachsene, −0,25 Kinder, −0,37 Ältere, Zufriedenheit sinkt, Altlasten → Bodenwert,
+  Schlagzeilen Smog-Alarm/Fischsterben, Schiffe stoßen aus, Speichern mitten im Durchlauf bitgleich, Migration ohne Abschnitt,
+  Determinismus. **Info Industrie- vs. grüne Stadt** (≈ 1 340 Einwohner, 14 Tage Januar): Luft an Wohnungen 0,103 vs. 0,048, Quellen
+  Industrie/Kraftwerk 44/42 % vs. Heizen/Verkehr 57/43 %, Gesundheit 0,911 vs. 0,957, Boden max 0,024 vs. 0,001, Tourismus 0,88 vs. 0,96;
+  Rechenzeit ≈ 0,6 ms je Luft-Durchlauf inkl. Tagesteil (128 × 128 Zellen).
+- **Entscheidungen:** (1) Standard aus statt still neuer Werte – alte Tests/Welten bleiben bitgleich, das Spiel schaltet ein (wie
+  Sicherheit). (2) Luft bleibt im Raster `AirPollution` (alle Leser – Bürger, Bodenwert, Inspektor – wirken weiter ohne Änderung).
+  (3) Verkehr über echte Fahrzeugpositionen je Tick statt Segmentlisten (gleicher Effekt, ein Durchlauf; Platzhalterfahrten stoßen nicht
+  aus). (4) Chronische Belastung als Raster statt Feld am Bürger (kein Umbau des Bürger-Spielstands). (5) Wald = vorhandenes Waldraster
+  (Bäume pflanzen schreibt dort, die Landschaft zeigt es automatisch). (6) Kraftwerke stoßen nach Auslastung aus (kleine Stadt mit
+  großem Kohlekraftwerk raucht nicht mehr voll – realistischer, im alten Modus unverändert).
+- **Optisch ungeprüft** (Unity nicht gestartet): Ansichten/Legenden, Umweltfenster, Pflanz-Ring, Smog-Dunst (Nebel in URP), Schnee-/
+  Trockenfarben, Icons.
+- **Offen:** Lärm nach echter Verkehrsmenge/Industrie, Ozon im Sommer, Hochwasser/Starkregen, Klimawandel/CO₂ als Weltwert, Fernwärme/
+  Wärmepumpen (Heizen ohne Abgas), Landstrom im Hafen, Tourismus als Nachfrage, Umweltzone frei malen (heute Kreis), Bodensanierung als
+  Maßnahme, Grundwasser fließt nach Gelände (heute nur Ausbreitung), Bäume im Winter kahl, Firmen meiden strenge Auflagen bei der Standortwahl.
 
 ## Medien (G4 erweitert)
 - Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
@@ -1320,7 +1403,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
-- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
+- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), ~~Klima auf Gelände-Farben (trocken → gelbes Gras, Schnee)~~ ✅
+  (s. „Umwelt (Etappe 6)“), Bewuchs (Bäume im Winter kahl),
   Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
   Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
 
@@ -1906,7 +1990,8 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
   `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände;
   `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge;
   `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
-  Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu).
+  Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
+  Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -2042,8 +2127,15 @@ Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; 
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
    im Editor noch nicht visuell abgenommen). ✅ Startregion nach Vorlieben wählen (Spielstart, freies Land, Stadtstaat).
-   Später: Klima auf Gelände-Optik, Handel (8)
-6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
+   Später: ~~Klima auf Gelände-Optik~~ ✅ (Etappe 6), Handel (8)
+6. ✅ Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte (s. „Umwelt (Etappe 6)“): eigenes `EcologySystem` –
+   Luft aus Verkehr (echte Fahrzeuge, Lkw stärker), Kraftwerken nach Auslastung, Industrie nach Rezept, Heizen nach Klima/Bauart,
+   Müllverbrennung, Schiffen; Wind je Tag, Inversion, Regen, Abbau durch Wald/Parks; Boden & Grundwasser (Industrie, Deponie,
+   Auslass, Ablagerung) → Fruchtbarkeit/Ernte, Brunnen; Hitze/Dürre → Ernte; chronische Belastung → Gesundheit (Kinder/Ältere
+   stärker), Altlasten → Bodenwert, Tourismus-Faktor vorgemerkt; Smog-Alarm/Fischsterben/Auflagen als Schlagzeilen + HUD;
+   Gegenmaßnahmen Umweltauflagen 0–3 (Filter, Firmen- und Stadtkosten), Umweltzone, Bäume pflanzen; Ansichten Luft/Boden/
+   Grundwasser, Umweltfenster, Smog-Dunst, Gelände-Farben nach Jahreszeit; Spielstand ecology v1/goods v4 (im Editor noch nicht
+   visuell abgenommen). Später: Lärm aus Industrie/Verkehrsmenge, Hochwasser, Klimawandel/CO₂, Recycling, Fernwärme/Wärmepumpen
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
    - Vorbereitet (Spielstart): Spieler startet als Stadtstaat „Freie Stadt {Stadtname}“ in freiem Land; `PlayerRealm` hat
      `CityRegions`, `NationName`/`FlagColor` (null/Gold), `MinCitiesForNation` = 3, `CanFoundNation`; Regionsbesitz im Spielstand.

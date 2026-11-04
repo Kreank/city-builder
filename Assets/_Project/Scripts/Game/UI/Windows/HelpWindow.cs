@@ -74,7 +74,8 @@ namespace CityBuilder.Game.UI.Windows
                 ui.Field("C · F", "Stadtübersicht · Fahrzeug/Bürger verfolgen");
                 ui.Field("Y", "Ausgewählten Dienst/Versorger/Depot/gesetztes Gebäude verschieben (, . drehen, Klick setzt)");
                 ui.Field("T · V", "Verkehrsregeln · Stau-Ansicht");
-                ui.Field("N · P · O", "Lärm · Abgas · Strom/Wasser-Ansicht");
+                ui.Field("N · P · O", "Lärm · Luftqualität (Wind verschiebt Abgas) · Strom/Wasser-Ansicht");
+                ui.Field("Umwelt (Baum-Knopf links)", "Luft, Wind, Quellen, Boden/Grundwasser · Umweltauflagen (Filter, kosten Firmen und Stadt), Umweltzone, Bäume pflanzen (Kachel im Dienste-Werkzeug 4, LMB halten, [ ] Größe)"); // Umwelt (Etappe 6)
                 ui.Field("X", "Unterirdisch-Ansicht");
                 ui.Field("F2 · F3 · F4", "Bodenwert · Rohstoffe durchschalten · Weltkarte");
                 ui.Field("M", "Stadtkasse");

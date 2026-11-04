@@ -64,7 +64,9 @@ namespace CityBuilder.Simulation.Aviation
             roads = world.Roads;
             terrain = world.Terrain;
             Latitude = world.StartRegion?.Latitude ?? world.Climate?.Parameters.Latitude ?? 50f;
-            PrevailingWind = AviationRules.PrevailingWindFrom(Latitude, world.Settings.TerrainSeed + (world.StartRegion?.Id ?? 0) * 131);
+            PrevailingWind = world.Climate != null
+                ? AviationRules.PrevailingFromClimate(world.Climate)   // Windmodell aus Umwelt (Etappe 6)
+                : AviationRules.PrevailingWindFrom(Latitude, world.Settings.TerrainSeed + (world.StartRegion?.Id ?? 0) * 131);
             var env = world.Environment.Noise;
             NoiseLayer = new GridLayer("aircraft_noise", env.Origin, env.Width, env.Height, env.CellSize);
             BuildDestinations();

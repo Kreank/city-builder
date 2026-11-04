@@ -124,8 +124,6 @@ namespace CityBuilder.Simulation.Utilities
         public const float AlignReach = 16f;
         /// <summary>Umzugspreis als Anteil der Baukosten (Verschieben-Werkzeug).</summary>
         public const float MoveCostShare = 0.1f;
-        const float PollutionDecay = 0.08f;
-        const float PollutionDiffuse = 0.1f;
 
         readonly RoadNetwork roads;
         readonly TerrainMap terrain;
@@ -928,30 +926,18 @@ namespace CityBuilder.Simulation.Utilities
             }
         }
 
-        /// <summary>Lärm und Abgas der Bauwerke in die Umwelt-Raster (läuft nach dem NoiseSystem, das neu zeichnet).</summary>
+        /// <summary>Lärm der Bauwerke in das Umwelt-Raster (läuft nach dem NoiseSystem, das neu zeichnet).</summary>
         void Emit()
         {
             if (environment == null) return;
-            bool polluting = false;
             foreach (var f in facilities.Values)
-            {
                 if (f.Type.NoiseLevel > 0f) environment.Noise.StampRadialMax(f.Position, f.Type.NoiseRadius, f.Type.NoiseLevel);
-                if (f.Type.Pollution > 0f)
-                {
-                    environment.AirPollution.AddRadial(f.Position, f.Type.PollutionRadius, f.Type.Pollution);
-                    polluting = true;
-                }
-            }
-            // Abgas baut sich ab und verteilt sich (bisher einzige Quelle – später eigenes Umweltsystem)
-            if (polluting || pollutionActive)
-            {
-                environment.AirPollution.Diffuse(PollutionDiffuse);
-                environment.AirPollution.Decay(PollutionDecay);
-                pollutionActive = polluting || environment.AirPollution.MaxValue() > 0.001f;
-            }
+            // --- Umwelt (Etappe 6): Abgas (Ausstoß, Ausbreitung, Abbau) rechnet das EcologySystem (world.Ecology), ohne volles
+            // Modell genau wie früher hier (dieselbe Reihenfolge, Merker unten bleibt im Spielstand dieses Systems)
         }
 
-        bool pollutionActive;
+        /// <summary>Umwelt (Etappe 6): Merker der alten Luftrechnung („Abgas klingt noch ab“), gesetzt vom EcologySystem.</summary>
+        internal bool pollutionActive;
 
         // ------------------------------------------------------------ Straßenänderungen
 

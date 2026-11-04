@@ -144,7 +144,23 @@ namespace CityBuilder.Simulation.Aviation
             return new Vector2(MathF.Cos(r), MathF.Sin(r));
         }
 
-        /// <summary>Windrichtung des Tages (aus der Hauptwindrichtung, Schwankung und gelegentlicher Umkehr nach Hash).</summary>
+        /// <summary>
+        /// Hauptwindrichtung aus dem Windmodell des Klimas (Umwelt, Etappe 6): stärkegewichtetes Mittel der Tageswinde eines Jahres
+        /// (Einheitsvektor „aus“). Ersetzt die eigene Annahme <see cref="PrevailingWindFrom"/>, sobald das Klima Wind kennt.
+        /// </summary>
+        public static Vector2 PrevailingFromClimate(World.ClimateModel climate)
+        {
+            var sum = Vector2.Zero;
+            for (int d = 0; d < Core.SimulationClock.DaysPerYear; d++)
+            {
+                var w = climate.WindOn(d);
+                sum += w.Toward * w.Strength;
+            }
+            if (sum.LengthSquared() < 1e-8f) return -Vector2.UnitX;
+            return -Vector2.Normalize(sum);
+        }
+
+        /// <summary>Windrichtung des Tages (eigene Annahme ohne Klima: Hauptwindrichtung, Schwankung, gelegentliche Umkehr nach Hash).</summary>
         public static Vector2 WindOfDay(Vector2 prevailing, int seed, int day)
         {
             uint h = Citizens.SimRandom.Hash(seed * 31 + 7, day);

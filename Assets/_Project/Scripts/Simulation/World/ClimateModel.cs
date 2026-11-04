@@ -65,7 +65,7 @@ namespace CityBuilder.Simulation.World
     /// Tage, Niederschlag als nasse/trockene Tage (Tropen mit Regenzeit im Sommer). Alles deterministisch
     /// aus Seed und Tag – keine Zustände, beliebig abfragbar. Faktoren für Ernte und Heiz-/Kühlbedarf.
     /// </summary>
-    public sealed class ClimateModel
+    public sealed partial class ClimateModel // Umwelt (Etappe 6): Wind, Dürre, Hitze, Schnee in ClimateModel.Weather.cs
     {
         readonly int seed;
         readonly float annualHarvest;
