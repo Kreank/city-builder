@@ -22,6 +22,7 @@ namespace CityBuilder.Simulation.Environment
             w.Float(ZoneCenter.X); w.Float(ZoneCenter.Y); w.Float(ZoneRadius);
             w.Int(trafficSamples);
             w.Floats(trafficAccum);
+            w.Floats(shipAccum);
             w.Int(dayAirPasses);
             w.Floats(dayAirSum);
             Soil.WriteState(w);
@@ -47,6 +48,7 @@ namespace CityBuilder.Simulation.Environment
             ZoneRadius = r.Float();
             trafficSamples = r.Int();
             r.FloatsInto(trafficAccum);
+            r.FloatsInto(shipAccum);
             dayAirPasses = r.Int();
             r.FloatsInto(dayAirSum);
             Soil.ReadState(r);

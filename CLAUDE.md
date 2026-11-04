@@ -141,7 +141,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Verkehrsschritte (nicht nur Ticks) datiert werden.
 
 ## Struktur
-- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety)
+- `Assets/_Project/Scripts/Simulation` – Kern (Core, Roads, Traffic, Environment, Zoning, Citizens, Utilities, Services, Economy, LandValue, World, Goods, Trade, Transit, People, Gateways, Rail, Safety, Shipping)
 - `Assets/_Project/Scripts/Game` – Unity-Seite (Runner, Kamera, Straßen-Tool/-View, Verkehr-Views, Overlays, HUD)
   - `RoadTool` hängt beim Start seine Begleiter an (Guides, Toolbar, VehicleView, TrafficSignsView,
     TrafficOverlayView, TrafficPanel, InspectorPanel …) – neue Views dort ergänzen, dann muss die Szene nicht neu erzeugt werden.
@@ -225,7 +225,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Mit Weltkarte bekommt `Generate` `TerrainParams` der Startregion (Relief-Faktor, Fluss/Breite, Küste; s. „Welt (Etappe 5)“).
   `RoadNetwork.Ground` = Gelände. **Straßenhöhen sind absolut**, Brücke/Damm/Trog/Tunnel ergibt sich aus der
   Elevation (Höhe über Gelände). Bauhöhe im Werkzeug = Elevation. Ebenerdige Abschnitte (±4 m) formen das Gelände
-  (`ConformTo`), Wasser nur per Brücke (≥ 2,5 m über Wasserspiegel).
+  (`ConformTo`), Wasser nur per Brücke (≥ 2,5 m über Wasserspiegel) oder **Tunnel unter dem Gewässergrund** (≥ 7 m darunter, seit
+  Wasserstraße Stufe 3). Über einer **Fahrrinne** verlangt die automatische Trassierung die lichte Durchfahrtshöhe + Tragwerk
+  (`INavigableGround`/`Profiles.WaterFloor`, s. „Wasserstraße & Hafen“).
 - `GroundView` zeichnet das Gelände in Chunks inkl. Trog-Löchern und Wasserfläche.
 - **Automatische Trassierung** (Bauhöhe 0, `followTerrain`): Segment bekommt ein Höhenprofil (`Profiles`):
   geglättet dem Gelände folgend, Berg > 14 m über der direkten Linie → Tunnel, Tal/Wasser > 10 m darunter → Brücke,
@@ -249,7 +251,10 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
 - **Gelände-Farben** ohne Texturen: `GroundView` setzt Vertex-Farben (Gras/Wiese per Rauschen, Sand am Ufer, nasser
   Sand unter Wasser, Fels ab ~30° Steigung, Erde/Kies auf bearbeitetem Boden); Shader
   `Resources/Shaders/GroundVertexColor.shader` (eigener URP-Shader, da URP/Lit keine Vertex-Farben zeigt; Fallback
-  auf das alte Material, wenn er fehlt).
+  auf das alte Material, wenn er fehlt). **Seit Umwelt (Etappe 6) nach Klima/Jahreszeit:** trockenes gelbes Gras
+  (`ClimateModel.GrassDrynessOn`: Dürre, Sommerhitze, trockenes Grundklima) und Schneedecke (`SnowCoverOn`, Grad-Tag-Modell, in
+  Höhenlagen dichter, nicht auf Fels/Wasser); einmal je Spieltag, bei merklicher Änderung werden alle Kacheln nach und nach (3 je
+  Bild) neu eingefärbt (nur Vertex-Farben). Optisch ungeprüft.
 
 ## Zonen & Gebäude (G1)
 - `ZoneGrid`: 8-m-Zellen, 4 Reihen tief je Seite ebenerdiger Stadtstraßen, neu berechnet bei Netzänderung.
@@ -426,7 +431,7 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Fehlen Theme/USS, hängt das RoadTool die alte IMGUI-`RoadToolbar` als Rückfall an.
 - Inhalt: obere Leiste (Stadtname `GameHud.CityName` = `World.Realm.CityName`, Datum mit Anzeige-Kalender 12×30 Tage, Tempo,
   Einwohner, Arbeitslose, **Nachfrage W/L/B/I** mit Tooltip „warum“ (Setzen statt Zonen, `GameHud.Demand.cs`), Strom-/Wasser-Warnchip nur bei unterdecktem Netz, Info-Knopf = Stadtübersicht), linke Ansichtsleiste
-  (Stau, Lärm, Abgas, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Brandgefahr, Kriminalität, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
+  (Stau, Lärm, Luftqualität, Bodenbelastung, Grundwasser, Umwelt-Fenster, Bodenwert, Rohstoffe, Strom, Wasser, Dienste-Abdeckung, Abwasser, Wasserqualität, Medien, Brandgefahr, Kriminalität, Unterirdisch), Bauleiste („Auswählen“ ganz links, Kategorien – seit „Setzen statt Zonen“ Straßen, Autobahn, **Bauen** (6, Reiter Wohnen/Gewerbe/Industrie), **Lenken** (Z), Zonen nur bei alten Ständen, Versorgung … – → Werkzeugzeile + Kacheln + Infozeile;
   aktive Kategorie erneut = Auswählen, s. „Auswählen-Modus & Verschieben“),
   Hinweiszeile aus `RoadTool.Guide` (Fehler/Info/Länge/Kosten) + `RoadTool.ReturnHint`, Tooltips, Toasts.
 - Knöpfe rufen dieselben öffentlichen Methoden wie die Tasten (RoadTool, Werkzeuge, Views, `SimulationRunner.TogglePause`);
@@ -587,8 +592,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   `IsSatisfied(b)` (versorgt oder Art noch nicht verlangt), `NetworkOf(b, kind)`.
 - **Folge**: > 2 Spieltage ohne Strom oder Wasser → Gebäude wird verlassen (abgerissen, `BuildingAbandoned`). Erst wenn
   es mind. einen Versorger dieser Art gibt (Startphase folgenlos, Dauer zählt erst ab dann). `AbandonmentEnabled` schaltet ab.
-- Kraftwerke stempeln Lärm (nach dem `NoiseSystem`) und addieren Abgas; das `UtilitySystem` lässt Abgas vorerst auch
-  abklingen/sich verteilen (bisher einzige Quelle → später in ein eigenes Umweltsystem verschieben).
+- Kraftwerke stempeln Lärm (nach dem `NoiseSystem`). **Abgas rechnet seit Etappe 6 das `EcologySystem`** (s. „Umwelt (Etappe 6)“;
+  ohne volles Modell exakt die alte Rechnung, die Merker `pollutionActive` bleiben im Spielstand von Versorgung/Diensten).
 - Darstellung (`Game/Utilities`, Begleiter des `RoadTool`, Modus `RoadTool.Mode.Utility`): `UtilityTool` (J; Bauleiste
   „Versorgung“, , . drehen, Leitungen in Kette, RMB beendet; Rohre erzwingen die Unterirdisch-Ansicht), `UtilityView`
   (Platzhalter aus Grundkörpern, Masten an den Simulations-Standorten mit Fundament und Seilen, Anschlussseil zum
@@ -647,6 +652,86 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   geklärt/eingeleitet, Pumpen-Qualität, Akzeptanz/Betrieb am Bauwerk. Keine neuen Tasten.
 - Später: Kläranlage braucht Strom, Klärschlamm, Regenwasser/Überlauf, echtes Gefälle/Fließrichtung aus dem Gelände,
   Fischsterben/Tourismus, Grundwasser-Verschmutzung. (Wasser/Strom auf `ConnectionRules`: erledigt, s. G3.)
+
+## Umwelt (Etappe 6, agent/environment)
+- **Simulation** `Simulation/Environment/EcologySystem` (+ `.Ground.cs` Boden/Grundwasser/Bäume, `.Effects.cs` Hooks, `.Save.cs`;
+  Zahlen in `EcologyRules`; `world.Ecology`, direkt nach Versorgung und Diensten, `TickInterval` 1: Verkehr zählen je Tick, Luft alle
+  5 Ticks, Boden täglich). Wetter in `World/ClimateModel.Weather.cs` (Klima jetzt `partial`, zustandslos): `WindOn(day)` → `WindState`
+  (Richtung, in die die Luft zieht; Herkunft in Grad; Stärke 0..1 ≈ 0–12 m/s, Ø 0,46; Hauptwind nach Breite – Passat aus Ost, 30–60°
+  Westwind, polar Ost – Wetterlagen drehen ±100° über ~3 Tage), `InversionOn` (Winterhalbjahr, < 3 °C, windstill, trocken),
+  `DroughtOn` (Regen 20 Tage vs. Jahreszeit-Mittel × Wärme), `HeatStressOn` (Tageshöchstwert ≈ Mittel + 6 K, ab 30 °C),
+  `SnowCoverOn` (Grad-Tag-Modell 40 Tage), `GrassDrynessOn`.
+- **Standard aus** (`Enabled`): dann rechnet es die Luft **exakt wie früher** UtilitySystem/ServiceSystem (nur Kraftwerke und
+  Verbrennung, gleiche Reihenfolge und Werte; Test `Legacy_CoalPlantOnly_SameAsBefore`, alle 479 alten Tests unverändert grün).
+  `SimulationRunner.environmentModel` schaltet ein (auch nach dem Laden). Alle Hooks liefern ohne Modell die alten Werte.
+- **Luft** (weiter `world.Environment.AirPollution`, gleiche Einheit; Smog ab `SmogThreshold` 0,3) je Durchlauf (30 min):
+  **Verkehr** = echte Fahrzeuge je 16-m-Zelle, jeden Tick gezählt und gemittelt (Pkw 1, Lkw 3,5, Bus 2,2, Tram 0; unter 2 m/s × 1,6;
+  0,06 je Fahrzeug-Mittel), **Schiffe** (Wasserstraße & Hafen: Frachter 0,25 × Länge, Passagier 0,15 × Länge, am Kai × 0,4),
+  **Kraftwerke** = Katalogwert × Auslastung (`PlantLoad`: geliefert/Erzeugung des Netzes × Verfügbarkeit, Bereitschaft 15 %) × Filter,
+  **Industrie** = `AirPerJob(Rezept)` × Jobs × Produktivität (Eingänge fehlen/Lager voll × 0,3) × Filter, Radius 64 m + halbe Größe
+  (Stahlwerk 0,001 je Job ≈ Kohlekraftwerk bei 60 Jobs; Raffinerie, Zement, Glas, Zechen …; Büro/Laden 0), **Heizen** = bewohnte
+  Wohnungen × 0,0007 × Heizbedarf des Klimas × Bauart (EFH 1,3, MFH 1, Block 0,8, Mischgebiet 0,9; Stufe 2/3 × 0,9/0,8) + Beschäftigte
+  × 0,00015, **Müllverbrennung** = Katalogwert × (0,3 + 0,7 Auslastung) × Filter. Danach **Wind** (Upwind-Verschiebung bis 0,6 Zellen je
+  Durchlauf × Stärke, über den Rand verlässt die Luft die Karte), Diffusion 0,1, Abbau (0,05 + 0,05 × Wind + 0,05 × Regen/6 mm) ×
+  Inversion (Abbau × 0,4, Diffusion × 0,5, Wind × 0,3) + **Wald** 0,06 × Waldraster + **Parks** 0,04 auf der Fläche (+16 m).
+  Statistik: Ausstoß je Quelle (`EmissionOf`, `EmissionYesterday`, `ShareYesterday`), Luft an Wohnungen (`HomeAirAverage/Max`,
+  `SmogBuildings`), `SmogAlert` (≥ 5 Wohngebäude und ≥ 10 % im Smog, Hysterese) + Event `SmogAlertChanged`.
+- **Boden & Grundwasser** (eigene Raster `Soil`, `Groundwater`, täglich): Ablagerung 0,003 × Tagesmittel Luft; Industrie nach Rezept
+  (`GroundPerJob`: Raffinerie, Ölförderung, Stahl, Zechen/Erz – saure Grubenwässer –, Färberei, Elektronik, Dünger) × Filter;
+  **Müllhalde** Boden 0,006 und Sickerwasser 0,008/Tag (Radius + 60 m) × (0,3 + 0,7 Füllstand); Verbrennung Asche; Abwasser-Auslass
+  Uferboden. Auswaschung Boden → Grundwasser 0,1 %/Tag, Grundwasser breitet sich 3 %/Tag aus; Erholung Boden 0,4 %/Tag (mit Wald ×1,5),
+  Grundwasser 0,3 %/Tag. **Chronische Belastung** `Exposure` = Tagesmittel der Luft, geglättet (≈ 10 Tage).
+- **Wirkungen** (`Connect`, Hooks): Fruchtbarkeit = Vorkommen × (1 − 0,75 × Boden) × (1 − 0,3 × Luft) über `GoodsSystem.DepositAt`
+  (Standortwahl und Güte der Höfe; Mindestgüte 0,25 → belastete Äcker können ausfallen); **Ernte** × (1 − 0,5 × Hitze) × (1 − 0,45 ×
+  Dürre) über `GoodsSystem.HarvestFactor`; **Brunnen** = 1 − Grundwasser (schlechteste Zelle 3×3) über `WaterQualitySystem.WellQuality`
+  → Trinkwasser/Gesundheit; **Gesundheit** (`CitizenSystem.ChronicAirExposure`): Zielwert − 0,4 × Belastung × Empfindlichkeit (unter 6 J.
+  1,6, Kinder 1,25, ab 60 1,4, ab 75 1,8), Krankheitschance × (1 + 2 × …), Erinnerung „Smog“ ab 0,25; Ruhe/Zufriedenheit wie bisher über
+  die Luft an der Wohnung; **Bodenwert** Faktor „Altlasten (Boden)“ −0,12 × Belastung (`LandValueSystem.ContaminationAt`);
+  **Tourismus** `TourismFactor` (vorgemerkt); **Schlagzeilen** neue Themen `Smog`, `FishKill` (Wasserverschmutzung ≥ 0,6),
+  `EnvironmentRules` (Auflagen verschärft; hinten angefügt).
+- **Gegenmaßnahmen mit Kosten:** **Umweltauflagen** `SetRegulation(0–3)` – Emission von Kraftwerken, Industrie, Verbrennung × 1 / 0,65 /
+  0,4 / 0,22; Firmen zahlen je Job und Tag 0 / 5 / 12 / 22 € × Gewicht des Rezepts (Stahlwerk 1, Büro 0) → neue Ledger-Zeile
+  `FirmLedger.Environment` (mindert Gewinn und Gewerbesteuer, Hook `GoodsSystem.EnvironmentCostFor`), städtische Kraftwerke/Verbrennung
+  + 20 / 45 / 80 % Unterhalt (`IUpkeepSource` „Umweltschutz“). **Umweltzone** `SetLowEmissionZone(an, Mitte, Radius 200–1200 m)`:
+  Lkw × 0,4, Pkw × 0,85 in der Zone; Firmen in der Zone 1,5 €/Job/Tag, Stadt 400 €/Woche. **Bäume pflanzen** `PlanTrees(Mitte, Radius
+  ≤ 80 m)` → `TreePlan` (freie Zellen: nicht Wasser, Sperre `TerrainMap.LockQuery` = Straßen, Gebäude, Bauwerke, Gleise; noch nicht
+  dicht bewaldet; 6 Bäume je Feld × 30 €) → `PlantTrees` bucht „Umweltschutz (Bäume)“ (`BudgetCategory.Environment`, hinten angefügt),
+  Setzlinge 0,05 im Waldraster wachsen 0,012/Tag bis 0,8 (≈ 2 Monate) – die Landschaftsbäume (`ScenicPropsView`) zeigen sie, Forstbetriebe
+  können sie ernten; Straße/Gebäude darüber beendet die Aufforstung dort. Pflege 1 €/Feld/Woche. Lärmschutzwand gab es schon.
+- **Darstellung:** Ansicht „Luftqualität“ (P, gestreckt × 2,5, Legende mit Wind/Inversion), neue Ansichten **Bodenbelastung** und
+  **Grundwasser** (`EnvironmentOverlayView.Overlay.Soil/Groundwater`, Knöpfe in der Ansichtsleiste, keine neuen Tasten), **Umweltfenster**
+  (`UI/Windows/EnvironmentWindow`, rechts, Baum-Knopf links: Luft an Wohnungen, Wetter, Quellen gestern als Balken, Boden/Wasser,
+  Ernte-Stress, Tourismus, Auflagen-Stepper mit Kosten, Umweltzone einrichten/aufheben/Radius, Pflanz-Pinsel). **Bäume-Pinsel** im
+  Dienste-Werkzeug (`ServiceTool.ServiceAction.PlantTrees`, `ServiceTool.Trees.cs`, Kachel „Bäume pflanzen“, LMB halten = 4×/s, `[`/`]`
+  Radius, Ring + Hinweis). `EnvironmentAlerts` (Smog-Alarm/-Ende, Fischsterben → `HudMessages`), `SmogHazeView` (dezenter bräunlicher
+  Dunst über `RenderSettings.fog` ab Luft 0,15 um den Blickpunkt, stellt die alten Nebelwerte wieder her), Gelände-Farben nach Jahreszeit
+  (s. „Gelände“), Inspektor (`InspectorWindow.Ecology.cs`: Umfeld chronische Luft/Boden/Grundwasser/Umweltzone, Firma Ausstoß und
+  Umweltkosten + Ledger-Zeile, Kraftwerk Auslastung/Filter, Brunnenwasser), Icons `Tree`, `Groundwater`, Hilfe (F1).
+- **Spielstand** `ecology` v1 (Schalter, Auflagen, Umweltzone, Verkehrs-/Schiffszählung des laufenden Durchlaufs, Tagessumme der Luft,
+  Raster Boden/Grundwasser/Aufforstung/Belastung, Zähler, Statistik); `goods` v4 (Umweltkosten, v3 → 0). `SaveLoadTests.BuildCity` hat
+  Umwelt an, Auflagen 1 und eine Aufforstung.
+- **Tests** `EcologyTests` (20): aus = Verkehr/Heizen ohne Abgas, alte Rechnung bitgleich, Wind verschiebt die Fahne ins Lee (11 von 11
+  windigen Tagen), Wald (Abgas gesamt 56 %) und Park (12 % weniger an der Quelle) bauen ab, Klima (Wind Ø 0,46, Ostanteil 0,67, 4
+  Inversionstage/Jahr gemäßigt; Schnee kalt Januar 1,0 / Juli 0, gemäßigt Januar 0,3; Gras trocken arid 0,95 vs. 0,04), Filter (Industrie
+  397 → 159, Kraftwerk 86 → 34 je Tag; Stahlwerk 1 045 €/Tag Umweltkosten, Stadt +2 835 €/Woche), Umweltzone, Bäume (28 Felder 5 040 €,
+  Waldraster 0,05 → 0,41 nach 30 → 0,80 nach 80 Tagen, Straße beendet), Boden → Fruchtbarkeit 0,40 → 0,22 und Ernte 21 → 0, Hitze/Dürre
+  (gemäßigt schlechtester Tag × 0,80, heiß/trocken × 0,47), Deponie → Grundwasser am Brunnen 0,02/Brunnen 96 % nach 40 Tagen, direkt 0,5 →
+  50 %, Smog (Luft 0,29) → Gesundheit −0,20 Erwachsene, −0,25 Kinder, −0,37 Ältere, Zufriedenheit sinkt, Altlasten → Bodenwert,
+  Schlagzeilen Smog-Alarm/Fischsterben, Schiffe stoßen aus, Speichern mitten im Durchlauf bitgleich, Migration ohne Abschnitt,
+  Determinismus. **Info Industrie- vs. grüne Stadt** (≈ 1 340 Einwohner, 14 Tage Januar): Luft an Wohnungen 0,103 vs. 0,048, Quellen
+  Industrie/Kraftwerk 44/42 % vs. Heizen/Verkehr 57/43 %, Gesundheit 0,911 vs. 0,957, Boden max 0,024 vs. 0,001, Tourismus 0,88 vs. 0,96;
+  Rechenzeit ≈ 0,6 ms je Luft-Durchlauf inkl. Tagesteil (128 × 128 Zellen).
+- **Entscheidungen:** (1) Standard aus statt still neuer Werte – alte Tests/Welten bleiben bitgleich, das Spiel schaltet ein (wie
+  Sicherheit). (2) Luft bleibt im Raster `AirPollution` (alle Leser – Bürger, Bodenwert, Inspektor – wirken weiter ohne Änderung).
+  (3) Verkehr über echte Fahrzeugpositionen je Tick statt Segmentlisten (gleicher Effekt, ein Durchlauf; Platzhalterfahrten stoßen nicht
+  aus). (4) Chronische Belastung als Raster statt Feld am Bürger (kein Umbau des Bürger-Spielstands). (5) Wald = vorhandenes Waldraster
+  (Bäume pflanzen schreibt dort, die Landschaft zeigt es automatisch). (6) Kraftwerke stoßen nach Auslastung aus (kleine Stadt mit
+  großem Kohlekraftwerk raucht nicht mehr voll – realistischer, im alten Modus unverändert).
+- **Optisch ungeprüft** (Unity nicht gestartet): Ansichten/Legenden, Umweltfenster, Pflanz-Ring, Smog-Dunst (Nebel in URP), Schnee-/
+  Trockenfarben, Icons.
+- **Offen:** Lärm nach echter Verkehrsmenge/Industrie, Ozon im Sommer, Hochwasser/Starkregen, Klimawandel/CO₂ als Weltwert, Fernwärme/
+  Wärmepumpen (Heizen ohne Abgas), Landstrom im Hafen, Tourismus als Nachfrage, Umweltzone frei malen (heute Kreis), Bodensanierung als
+  Maßnahme, Grundwasser fließt nach Gelände (heute nur Ausbreitung), Bäume im Winter kahl, Firmen meiden strenge Auflagen bei der Standortwahl.
 
 ## Medien (G4 erweitert)
 - Dienstart `ServiceKinds.Media` („media“, auch in `ServiceKinds.All`/Overlay): **Zeitungsverlag** (Zustellung übers Straßennetz,
@@ -1318,7 +1403,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   Temperatur/Niederschlag/Boden/Wald/Erz/Kohle/Öl/Sand/Grundwasser, Startregion weiß umrandet, Hauptstädte (Spieler gelb),
   Zelleninfo unter der Karte, rechts Land unter der Maus bzw. Spieler-Land mit Stärken und Wirtschaftstabelle.
   (Im Editor noch nicht visuell abgenommen.)
-- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), Klima auf Gelände-Farben/Bewuchs (trocken → gelbes Gras, Schnee),
+- Später: ~~Startregion im Menü wählen~~ (✅ s. „Spielstart & Startregion“), ~~Klima auf Gelände-Farben (trocken → gelbes Gras, Schnee)~~ ✅
+  (s. „Umwelt (Etappe 6)“), Bewuchs (Bäume im Winter kahl),
   Wetter in Strom (Wind/Sonne)/Verkehr, Meeresströmungen, Flüsse auf der Weltkarte als Linien, Stadt-Wirtschaft (G5) speist ins
   Spieler-Land, Wechsel in andere Städte (LOD detailliert). Handel zwischen Ländern: s. „Handel (Etappe 8)“.
 
@@ -1457,7 +1543,8 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   mit {Land}“ bei jedem Vertrag/Abkommen des Spielers), `Embargo` (Beziehung zum Spieler fällt unter −50), `TariffRaise` (ein Land
   erhöht seinen Zoll gegen uns); neuer Platzhalter {Land}. Nur mit Medienhaus sichtbar, Sperrfristen wie üblich.
 - **Später (Stufe 2+):** Regierungen/Bündnisse (Zollunion, gemeinsame Außenzölle, Sanktionen, Abstimmungen), Diplomatie-Aktionen
-  (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße, Tourismus als
+  (Geschenke, Drohungen), Kredite zwischen Ländern, echte Häfen/Güterbahnhöfe der Stadt statt Grenzlager an der Straße (Güterbahnhof ✅ Bahn Stufe 2, Hafen ✅ Wasserstraße Stufe 3 – das
+  Grenzlager selbst bleibt als Buchungsort), Tourismus als
   Dienstleistungshandel, NPC-Länder kündigen unrentable Verträge, Preis-/Mengenverhandlung (Gegenangebote), Handel zwischen eigenen
   Städten (Etappe 7), Multiplayer über das Command-Protokoll, Speichern (alle Zustände in `TradeSystem`/`NationTrade`/`CityTradeDepot`).
 
@@ -1504,7 +1591,9 @@ Plattform: PC zuerst, Mobile später (deshalb URP mit PC- und Mobile-Pipeline-As
   an Kreuzungen, ≤ 5 m vor Zufahrten, ≤ 12 m an Haltestellen, ≤ 2,5 m an Laternen, nicht auf Brücken/in Tunneln, nur wenn der
   Gehweg breit genug ist) und in Parks (innerer Ring, Kiosk nur im großen Park), LOD 450 m. `Environment/NoiseBarrierView`:
   Lärmschutzwände als 16-m-Kacheln. BusStop: wie bisher über `OwnModelCatalog.Transport` („bus_stop“).
-  Noch ohne Verwendung: Airport/*, Coast/*, Transport/TaxiDepot/MetroEntrance, Rail/Tram (vorgemerkt), Infrastructure/Drawbridge, Vehicles/Taxi,
+  Noch ohne Verwendung: Airport/*, Coast/Beach/BeachChair/LifeguardTower/Lighthouse/Breakwater/Pier/FishingBoat/Tugboat, Transport/TaxiDepot/MetroEntrance,
+  Rail/Tram (vorgemerkt), Vehicles/Taxi, (Coast/CargoShip/Ferry/Sailboat/Quay/HarborCrane/ContainerCrane/HarborWarehouse/Buoy_* und
+  Infrastructure/Drawbridge: s. „Wasserstraße & Hafen“, Ids ship_*, harbor_*, buoy_*, drawbridge),
   Terrain/Cliff_Corner/Cliff_Waterfall/Hill/Pond/River_* (Begründung im Bericht). Energy/*, Vehicles/*, Terrain/Cliff_Straight+Rocks:
   s. „Energie erweitert & Dienstfahrzeuge“. Transport/TrainStation + Rail/Locomotive/PassengerCoach/ContainerWagon/TankWagon/
   LevelCrossing/Track_Straight: s. „Bahn (Stufe 2)“ (Ids train_station, rail_*; `Track_Straight` zugeordnet, Gleise zeichnet bisher das Mesh).
@@ -1568,9 +1657,11 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   ≤ 25 % Wasser), halbe Breite 16 m, zwei Rail-Gateways. Freigehalten über den verketteten `CitySystem.LotBlocker` (`InRailCorridor`).
   **Seit Stufe 2 liegt darauf die zweigleisige Fernbahn-Hauptstrecke** (s. „Bahn (Stufe 2)“); die Rail-Gateways sind „noch nicht
   befahrbar (Bahnhof an der Hauptstrecke fehlt)“ (`Gateway.RailBuilt`), bis ein Bahnhof in Betrieb ist → `Operational`.
-- **Wasser** (vorbereitet): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
+- **Wasser** (seit Stufe 3 befahren, s. „Wasserstraße & Hafen“): Wasserläufe an jeder Kartenkante (Fluss: breitester Lauf je Kante, ≥ 12 m; Meer: Lauf ≥ 300 m, der längste)
   → Water-Gateways mit Breite, Tiefe, schiffbar ab 40 m/2,5 m (Meer immer), Name „Fluss stromab-/stromaufwärts Richtung …“ bzw.
-  „Seeweg · Küste“. **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
+  „Seeweg · Küste“. Befahrbar (`Operational`), sobald ein Hafen in Betrieb ist, dessen Fahrrinne frei zu diesem Gateway führt
+  (`Gateway.ShippingNote` nennt sonst den Grund: „Hafen fehlt · Durchgangsschiffe fahren“, „Fahrrinne gesperrt (Brücke zu niedrig)“).
+  **Luft**: ein Gateway ohne Lage („Flughafen folgt“).
 - **Zuzug** (Hook `CitizenSystem.MoveInGateway`, nur mit `RequireGatewayForMoveIn`): `MoveInEntry(home, Netzteil)` = Einfahrt eines
   befahrbaren Straßen-Gateways im Netzteil (mehrere: wer gemessen an der Wichtigkeit am wenigsten Zuzügler brachte); gibt es gar
   keine Gateways, zählt jeder befahrbare Außenanschluss (Testwelten). Sonst null → kein Zuzug (`BlockedMoveInsToday`). Zuzug startet
@@ -1582,7 +1673,8 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - **Handel** (Hook `GoodsSystem.PreferredGateway`, `RequireGatewayForTrade`): `TradeNode(gut, import, vertrag, netzteil)` – Vertrag →
   Partner des laufenden Vertrags (`ContractPartner`), Weltmarkt → günstigstes Lieferland (Preis + Fracht) bzw. bester Abnehmer
   (`SpotPartner`, täglich); `GatewayToward(land)`: Landweg → Gateway Richtung Handelsort des Landes, Seeweg → Gateway Richtung Hafen
-  des Spielerlandes (`TradeRouteText`: „Seeweg: Lkw über … zum Hafen außerhalb (bis Wasserstraße/Hafen fertig)“). Import = Einfahrt,
+  des Spielerlandes (`TradeRouteText`: „Seeweg: Lkw über … zum Hafen außerhalb (bis Wasserstraße/Hafen fertig)“; **mit eigenem Hafen in
+  Betrieb** „Seeweg über Hafen … (Fracht x %)“ über den Hook `HarborRouteText`, die Firmen laden am Kai, s. „Wasserstraße & Hafen“). Import = Einfahrt,
   Export = Ausfahrt; Lkw fahren über die Autobahn. Ohne Welt/Treffer: nächster Außenanschluss wie bisher.
 - **Durchgangsverkehr** (Hook `TrafficSystem.ThroughTrafficWeight`, mit `PrebuiltConnections`): Autobahn-Einfahrt Gewicht
   1 + 0,4 × Wichtigkeit (≤ 5; Spielerstraßen am Rand 1), Ausfahrten sind kein Start, keine Wende am selben Gateway – läuft auch
@@ -1601,8 +1693,7 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   abreißbar, Unterhalt, Zuzug erst nach Anschluss + Zuzügler-Auto auf der Einfahrt, Durchgangsverkehr ohne Anschluss/ohne Wende,
   Bahnkorridor frei, Wasser-Gateways, Import über den Gateway Richtung Partnerland + Vertrag, kein Umland, Speichern/Laden ohne
   Neubau + bitgleich, Erzeugung deterministisch; volle Erde Seeds 2024/74/333/592).
-- Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über
-  den Wasser-Gateway, Klappbrücken), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
+- Später: (~~Stufe 2 Bahn~~ ✅ s. „Bahn (Stufe 2)“), (~~Stufe 3 Wasserstraße/Hafen~~ ✅ s. „Wasserstraße & Hafen (Stufe 3)“), Stufe 4 Flughafen; weitere Landstraßen-Gateways (zweite Fernstraße, Spielerstraßen am Rand als
   Gateway führen), Bahnkorridor auch fürs Gelände sperren/Bäume roden, Gateways nach Wichtigkeit „wachsen“ (Ausbau auf 3 Spuren),
   andere echte Städte als Ziel.
 
@@ -1769,6 +1860,115 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
   Bahnhof als Ziel im Bus-Netz (Zubringerlinien), Schlagzeilen (neuer Bahnhof, Verspätungen), Tram (`Models/Rail/Tram`, `RoadCatalog.CityTram`),
   Lärm nach echten Zugzahlen je Gleis, Bodenwert-Bonus Bahnhofsnähe, Oberleitung/Masten als Modell (`Track_Straight` liegt bereit).
 
+## Wasserstraße & Hafen (Stufe 3)
+Vision des Spielers: „Schifffahrt: schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder Klapp-/Zugbrücken (niedrig,
+öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel.“
+- `Simulation/Shipping` (Namespace `CityBuilder.Simulation.Shipping`): `ShippingTypes.cs` (`ShippingRules` = alle Zahlen, `ShipClass`/
+  `ShipCatalog`, `HarborType`/`HarborCatalog`, `Harbor`, `Waterway` + `WaterwayCrossing`, `Drawbridge`, `Ship`, `BridgeCheck`,
+  `DrawbridgePlan`), `NavGrid` (Navigationsraster), `ShippingSystem` (`world.Shipping`, `ISimulationSystem` + `ISubstepSystem` +
+  `IUpkeepSource` „Hafen & Klappbrücken“, partial: `.Waterways`, `.Drawbridges`, `.Harbors`, `.Ships`, `.Trade`, `.Save`). Erzeugt in
+  `CreateDefault` **nach der Bahn und vor `Gateways.Generate()`** (Fahrrinnen stehen fest, bevor die Autobahn trassiert wird). Ohne
+  `PrebuiltConnections` oder ohne Wasser ist alles aus (`Active` false, Tests/Standardwelt unverändert).
+- **Fahrrinne** (abgeleitet, nicht gespeichert): `NavGrid` (8-m-Zellen) aus dem **natürlichen** Gelände beim Erzeugen der Welt – Tiefe
+  (flachster Punkt der Zelle) und Chamfer-Abstand zum Ufer; beim Laden entsteht dasselbe Raster. Durchgangsrinnen = Dijkstra (eigener
+  Heap, deterministisch, 8 Nachbarn, Tiefe ≥ Binnenschiff-Tiefgang + 0,5 m, ≥ 10 m vom Ufer, Ufernähe < 40 m kostet bis 4×) zwischen allen
+  schiffbaren Wasserläufen am Kartenrand (`GatewayGenerator.WaterAtEdges`: Fluss ↔ Fluss, Fluss ↔ Meer), geglättet (±4 Zellen), alle
+  24 m neu abgetastet, 80 m über den Rand hinaus verlängert; Gateways werden über die Lage zugeordnet (`EnsureLinks`). Je Hafen eine Rinne
+  vom Wasser-Gateway zum Anfahrpunkt vor dem Kai. Je Punkt Tiefe und Breite; halbe Kanalbreite = 35 % der Gewässerbreite (10–45 m).
+  Bemessungshöhe: Binnenwasserstraße **7 m**, Seeweg **25 m** lichte Höhe. Standardgelände: Fluss 4 m tief, ~60 m Kernbreite, 2 300 m lang.
+- **Schiffsklassen** (`ShipCatalog`, Tiefgang/Masthöhe/Tempo/Laderaum): Binnenschiff 85 × 9,5 m, 2,8 m / 6,5 m (Steuerhaus abgesenkt),
+  14 km/h, 60 Ladungen (Platzhalter-Rumpf); Küstenfrachter (`Coast/CargoShip`, 80 × 13 m) 5,5 m / 24 m, 22 km/h, 160 Ladungen – nur Seeweg;
+  Fahrgastschiff (`Coast/Ferry`) 1,6 m / 11 m; Segelyacht (`Coast/Sailboat`) 1,6 m / 13 m. Braucht Wasser ≥ Tiefgang + 0,5 m und unter
+  festen Brücken ≥ Masthöhe + 0,5 m.
+- **Brücken über die Rinne** (`EnsureCrossings`, bei jeder Straßen-/Gleisänderung): Schnitt jeder Straße und jedes Gleises mit dem
+  Rinnen-Linienzug → `WaterwayCrossing` (Lage, Strecke, lichte Höhe = tiefster Fahrbahnpunkt über dem Kanal − Tragwerk 1,5 m Straße /
+  1,2 m Gleis; Tunnel unter dem Grund zählen nicht). Fest + zu niedrig für eine Klasse → Rinne für sie **gesperrt** (`Waterway.Passable`,
+  `FirstBlocking`). **Trassierung**: `TerrainMap` implementiert `Roads.INavigableGround` (Hook `NavigationClearance` = Raster der Rinnen
+  mit Bemessungshöhe + 1,5 m); `Profiles.WaterFloor` hebt automatisch trassierte Straßen/Gleise, die vorgebaute Autobahn
+  (`GatewayGenerator`) und die Hauptstrecke (`RailSystem.Mainline`) darüber (Standardwelt: Autobahnbrücke 13,4/14,2 m lichte Höhe).
+  Mit fester Bauhöhe (Bild↑/↓) darf man niedriger bauen – **Hinweis im Werkzeug** (`CheckBridge`, RoadTool/RailTool-Zeile): „Zu niedrig für
+  Schiffe: lichte Höhe 3,5 m < 7,0 m – höher bauen (Bild↑) oder Klappbrücke (Hafen-Werkzeug 8)“, bzw. „✓ · zu niedrig für Fahrgastschiff/
+  Segelyacht – die fahren dann nicht durch“, „Tunnel unter der Fahrrinne – Schiffe fahren frei darüber“. **Tunnel unter Wasser** sind neu
+  erlaubt (`RoadBuilder.Validate`: unter Wasser ok, wenn ≥ 7 m unter dem Gewässergrund). Gesperrte Rinne → `FairwayWarning` (HUD-Chip
+  „Fahrrinne gesperrt“, Fenster), Durchgangsschiffe der Klasse kommen nicht (je Klasse gezählt, `BlockedToday/Yesterday`), Schiffe, die
+  schon unterwegs sind, halten davor und kehren nach 120 s um; Hafen dahinter unerreichbar (`Harbor.BlockedReason`). Terraforming in der
+  Rinne ist gesperrt (verkettete `LockQuery`).
+- **Klappbrücke** (`RoadSegmentFlags.Drawbridge`, Bit 4, bleibt beim Zerteilen; `RoadSegment.IsDrawbridge`): `PlanDrawbridge(typ, a, b)` =
+  gerade Stadtstraße quer über die Rinne (genau eine Querung, ≥ 50° steil, sonst `RoadBuildError.DrawbridgeNoFairway`/`AngleTooSharp`;
+  Zufahrten ≥ 20 m) → drei Stücke: Zufahrt (geländefolgend), **Klappe** (flach, 4 m über Wasser bzw. so hoch, dass die Zufahrten mit
+  85 % der Höchststeigung herunterkommen; Länge = 2 × min(Kanal, 28 m)/sin + 16 m, 36–90 m), Zufahrt; die Fahrrinne verlangt dabei keine
+  Mindesthöhe (`suppressFloor`). `BuildDrawbridge` baut nacheinander (Einrasten an den gebauten Enden), Mechanik 180 000 € („Bau Hafen &
+  Klappbrücken“) + Fahrbahn (Straßenbau), 900 €/Woche. `DemolishDrawbridge` reißt die Klappe ab (Zufahrten bleiben). Prüfung des Flags
+  über den verketteten `RoadNetwork.ExternalCheck` (hinter der Bahn-Prüfung). `Drawbridge` (abgeleitet, Zustand über die Lage gespeichert):
+  RoadOpen → (Schiff angemeldet ≤ 450 m und Straße ≥ 75 s frei) **Warning** 10 s (Ampel rot, Schranken, Klappe wird geräumt – wartet bis
+  keine Fahrzeuge auf der Klappe, höchstens 45 s) → Raising 15 s → **Open** (bis kein Schiff mehr angemeldet ist bzw. nach 150 s, nie
+  solange ein Schiff unter/kurz vor der Klappe ist) → Lowering 15 + 4 s → RoadOpen. Schiffe halten 30 m vor dem Kanal, bis die Klappe offen
+  ist; Boote, die geschlossen durchpassen, lassen nicht öffnen. Verkehr: verketteter Hook `TrafficSystem.BarrierAhead` (hinter den
+  Bahnübergängen) = Haltelinie 3 m vor dem Ende jeder Zufahrt, Spuren Richtung Klappe; **neu** in `TrafficSystem.Rail.cs`: auch die Schlange
+  bis 160 m hinter der Haltelinie zählt als „wartet an der Schranke“ (kein Abbruch nach 90 s, gilt auch für Bahnübergänge). Statistik:
+  Öffnungen heute/gestern/gesamt, Sperrzeit, angemeldete/wartende Schiffe.
+- **Durchgangsschiffe** (Fahrplan in Spielstunden, je Durchgangsrinne mit beiden Gateways): Binnenschiff A→B zu geraden, B→A zu ungeraden
+  Stunden (rund um die Uhr, 24/Tag); Fahrgastschiff April–Oktober 10–18 Uhr stündlich abwechselnd; Segelyacht Mai–September 9–18 Uhr
+  (2 von 3 Stunden). Öffnen Klappbrücken **auch ohne Hafen**. Fahren (`StepShip`, Verkehrsschritt 0,25 s): Bug-Strecke `S` auf der gerichteten
+  Fahrt, Beschleunigung je Klasse, Bremskurve v ≤ √(2 · 0,08 m/s² · Abstand) bis zum nächsten Halt (Klappbrücke zu, feste Brücke zu niedrig,
+  Liegeplatz/Reede, Heck des Vordermanns + 60 m auf derselben Rinne und Richtung); Gegenverkehr weicht nach Steuerbord aus (bis 18 m,
+  zu den Enden zur Mitte zurück). Einfahrt, sobald der erste Abschnitt frei ist (≤ 900 s, sonst Ausfall). Kollisionen zwischen
+  verschiedenen Rinnen (Durchgang ↔ Hafenrinne) werden nicht geprüft.
+- **Güterhafen** (`HarborCatalog.Cargo` 112 × 56 m, 2 Liegeplätze, 260 000 € / 4 200 €/Woche): `PlanHarbor` = Richtung zum Wasser aus dem
+  Umkreis (90 m), Uferlinie, **Kaikante** so weit hinaus, bis vor dem Liegeplatz das Wasser tief genug ist – erst für Küstenfrachter (bis
+  80 m, → Seehafen), sonst für Binnenschiffe (bis 60 m), solange die Vorderkante an Land bleibt –, Hafengelände dahinter (Vorderkante an Land, dazwischen **Aufschüttung**:
+  `TerrainMap.FillArea` ändert nur das aktuelle Gelände, das natürliche bleibt für Rinne/Tiefen), Kaihöhe 2,5 m über Wasser, bis 20 m
+  Höhenunterschied wird abgetragen; Sperren wie Bahnhöfe (Straßen/Gleise nicht durch, Grundstücke/Terraforming/Versorger/Dienste über die
+  verketteten Hooks). Rinnen je Wasserlauf (Seehafen nur über See). **In Betrieb** = Stadtstraße vor der Landseite (`RoadFront.FindAccess`
+  ≤ 8 m) **und** eine Rinne für die Hafenklasse frei → Wasser-Gateway `Operational`. Anläufe alle 3 h je Hafen (versetzt nach Id) über die
+  freien Rinnen im Wechsel, zusätzlich, wenn mehr Fracht wartet als ein Schiff fasst; höchstens Liegeplätze + 1 Schiffe gleichzeitig. Ohne
+  freien Liegeplatz wartet das Schiff auf Reede (160 m vor dem Anfahrpunkt). Am Kai: Umschlag = min(wartende Ladungen, Laderaum), Liegezeit
+  900 s + 4 s je Ladung (≈ 2–3 Spielstunden), Hafengeld 220 € (Binnenschiff) / 600 € (Küstenfrachter) + 4 € je Ladung („Hafen: Hafengeld &
+  Umschlag“, alle 5 Ticks gebucht); dann legt es ab (Fahrt vom Liegeplatz zurück zum Gateway). `DemolishHarbor` 25 % zurück, Schiffe drehen um.
+- **Güter/Handel** (Hook-Kette um `GoodsSystem.PreferredGateway`/`FreightShareFor`, vor Bahn und Autobahn): Hafen in Betrieb im Netzteil der
+  Firma → Import/Export über seinen Zufahrtsknoten, wenn der Handelspartner (Vertrag bzw. Weltmarkt-Partner) über den **Seeweg** erreicht wird
+  (Landweg bleibt bei Güterbahnhof/Autobahn; ohne Weltkarte nimmt der Hafen alles). Fernfracht **2,5 %** (Seehafen) bzw. **3,5 %**
+  (Binnenhafen) des Warenwerts statt 8 % per Lkw bzw. 4,5 % per Bahn (Seeweg 0,004 €/t·km gegen 0,03 €/t·km über Land, Etappe 8);
+  Kapazität = 8 Anläufe × Laderaum je Tag, darüber wieder Bahn/Lkw. Ladungen werden gezählt (`LoadsToday`, `PendingLoads` → Umschlag beim
+  nächsten Schiff). `GatewaySystem.OfNode` kennt die Hafenzufahrt (Hook `WaterGatewayOfNode` → Zählung am Wasser-Gateway),
+  `TradeRouteText` „Seeweg über Hafen … (Küstenfrachter, Fracht 2,5 % des Warenwerts)“ (Hook `HarborRouteText`). Test Seed 2024: alle 19
+  Weltmarkt-Güter kommen über See → über den Hafen.
+- **Kasse:** neue Kategorien (hinten angefügt) `HarborConstruction` „Bau Hafen & Klappbrücken“, `HarborFees` „Hafen: Hafengeld & Umschlag“
+  (Einnahme). Unterhalt Häfen + Klappbrücken als `IUpkeepSource`.
+- **Spielstand** „shipping“ v1 (automatisch hinten in der `SaveRegistry`, `IAfterLoad`): Häfen + Statistik, Schiffe vollständig (Rinne über
+  Art/Hafen/Gateways, Richtung, Bug, Tempo, Zustand, Liegeplatz, Liegezeit, Ladung, Wartezeit), Zustand der Klappbrücken (über die Lage),
+  Zähler, gesperrte Schiffe je Klasse, offene Gebühren. Abgeleitet: Raster, Rinnen, Querungen, Klappbrücken, Zufahrten, Gateway-Status.
+  Test: Speichern bei offener Klappe mit Schiffen unterwegs → 3 000 Verkehrsschritte bitgleich. Grenze: Schiffe einer abgerissenen
+  Hafenrinne fallen beim Laden weg (im laufenden Spiel fahren sie noch hinaus).
+- **Unity** (`Game/Shipping`, Begleiter am RoadTool): `ShippingTool` (**Taste 8** – 8 war frei; Modus `RoadTool.Mode.Harbor`): Güterhafen
+  (Geist rastet am Ufer ein, Hinweis Klasse/Tiefe/Straße), Klappbrücke (zwei Klicks, Vorschau: Linie + gelbe Klappe, Kosten/Fehler), Abriss
+  (Hafen/Klappe). `ShippingView`: Fahrrinne als Overlay (sichtbar beim Straßen-/Gleis-/Hafenbau und Terraforming oder per Knopf „Fahrrinne“;
+  Querungen rot = zu niedrig, gelb = Klappbrücke, grün = hoch genug), Tonnen rot/grün am Kanalrand alle 160 m (`Coast/Buoy_*`), Häfen (Pflaster,
+  Kai-Kacheln `Coast/Quay`, Kräne `HarborCrane` bzw. `ContainerCrane` am Seehafen, Speicher `HarborWarehouse`, Container-Stapel), Klappbrücke
+  (`Infrastructure/Drawbridge`, Klappen `LeafA/LeafB` drehen um die Querachse nach dem `Lift` der Simulation; feste Deckstücke bis zu den
+  Enden der Klappe, Ampeln/Schranken rot bei gesperrter Straße; Platzhalter ohne Modell), Schiffe (Modelle bzw. Platzhalter-Rumpf mit
+  Luken und Steuerhaus, interpoliert zwischen zwei Verkehrsschritten, am Kai parallel zur Kaikante), `PickShip`/`TryGetShipPosition`.
+  `RoadNetworkView` blendet die Fahrbahn der Klappe aus (Modell statt Mesh), `InfrastructureDecoView` setzt dort keine Pfeiler.
+  Bauleiste: Kategorie **„Hafen“** (`GameHud.Harbor.cs`, neues Icon `HudIconKind.Ship`, Abriss-Kachel „Hafen/Klappe“), HUD-Warnchip „Fahrrinne
+  gesperrt“. `HarborWindow` (rechts, **F8** bzw. im Werkzeug): Wasser-Gateways, Rinnen mit allen Brücken (lichte Höhe), gesperrte Klassen,
+  Häfen, Klappbrücken, Schiffe. Inspektor: `SelectionKind.Ship` (Folgen), `Harbor`, `Drawbridge`. Hilfe (F1): „8 · F8“ und Abschnitt Start.
+  Modellzuordnung `OwnModelDescriptions.TransportFiles` (ship_cargo/ferry/sailboat, harbor_quay/crane/container_crane/warehouse, buoy_red/
+  green, drawbridge). **Optik ungeprüft** (Unity nicht gestartet): Ausrichtung der Coast-Modelle (Wasserseite +Z) und der Klappbrücke
+  (Straßenachse, Drehsinn der Klappen, Höhe 3 m Deck im Modell), Schiffshöhe auf dem Wasser, Lage der Kai-Kacheln/Kräne, Overlay-Material,
+  Tonnen, Platzhalter.
+- **Tests** `ShippingTests` (12): Rinne zwischen den Fluss-Gateways (tief/breit, im Wasser, deterministisch, Küstenfrachter zu tief),
+  vorgebaute Autobahnbrücke hoch genug + 1 Tag Durchgangsschiffe (22 durch, 0 Ausfall), zu niedrige feste Brücke (Hinweis, Rinne gesperrt,
+  Warnung, Schiffe bleiben weg, fahrendes Schiff kehrt um), automatische Trassierung hoch genug + Tunnel frei, Klappbrücke (öffnet, Schiff
+  durch, Autos warten an der Schranke, keins auf der offenen Klappe, wieder zu), Segelyacht vs. Autobahnbrücke, Binnenhafen (Einrasten,
+  Liegeplätze tief, Aufschüttung, Straßenfront → Betrieb → Wasser-Gateway befahrbar, Straße nicht durch den Hafen, Anlauf/Liegeplatz/Umschlag/
+  Abfahrt/Gebühren), Handel über den Hafen (Hook, Fracht, Gateway-Zählung, Kapazität), niedrige Brücken schneiden den Hafen ab, Seehafen auf
+  Seed 2024 (Küstenfrachter, Seehandel über den Hafen, Routentext), Speichern/Laden bitgleich, ohne Außenanbindung aus.
+- **Nächste Teilstufe (offen):** Umwege (Wegfindung meidet oft offene Klappbrücken, Hinweis Stau), Gleis-Klappbrücken/Hubbrücken, Schleusen und
+  Kanäle (Terraforming-Wasser als Rinne), Fährterminal + Fährlinien (Coast/Pier, Ferry), Fischereihafen (FishingBoat), Schlepper beim Anlegen
+  (Tugboat), Mole/Leuchtturm am Seehafen, echte Ladung je Schiff (Lieferzeit per Schiff statt Zähler, Umschlag Bahn ↔ Schiff am Kai mit
+  Hafenbahn), Kollisionen/Begegnungsverbot zwischen Rinnen, Liegeplätze nach Schiffslänge, Hafengröße/Ausbau, Schlagzeilen (neuer Hafen,
+  Klappbrücke stört), Lärm der Häfen, Bodenwert am Wasser, Kreuzfahrt/Tourismus.
+
 ## Speichern & Laden
 - **Regel: Jedes neue System implementiert `ISaveable` und erscheint im Determinismus-Test.** Am besten als
   `partial class XyzSystem` in `XyzSystem.Save.cs` (konfliktarm), Anmeldung in `Persistence/SaveRegistry.Collect`
@@ -1789,7 +1989,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
 - **Migrationen:** `SaveVersion` erhöhen und in `Read` alte Versionen weiter lesen (Beispiel `rules` v1 ohne Grünzeit → 20 s;
   `citizens` v2 = Umfeld-Cache mit Freizeit/Sport/Stolz, v1 → 0; neuer Abschnitt `noisebarriers` fehlt in alten Ständen → keine Wände;
   `utilities` v3 = Energie erweitert, v2 → Katalogleistung/leere Speicher; `servicevehicles` v1 fehlt → keine Dienstfahrzeuge;
-  `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein).
+  `safety` v1 fehlt → Sicherheit aus, keine Brände/Ruinen – das Spiel schaltet nach dem Laden ein; `shipping` v1 fehlt → keine Häfen,
+  Schiffe/Klappbrücken – Fahrrinnen und Durchgangsschiffe entstehen aus dem Gelände neu; `ecology` v1 fehlt → Umwelt aus (alte
+  Luftrechnung), Boden/Grundwasser sauber, keine Aufforstung – das Spiel schaltet ein; `goods` v4 = Umweltkosten im Firmen-Ledger, v3 → 0).
 - Laden = `SimulationWorld.CreateDefault(gespeicherte WorldSettings, Seed)` (Planet/Gelände entstehen deterministisch neu,
   alle Hooks verdrahtet; Seed steht in `SimulationWorld.Seed`), dann alle Abschnitte. Abgeleitet und neu aufgebaut:
   Spurgraph (`RoadNetwork.Reloaded`), Kreuzungs-Cache, Außenanschlüsse, Netzteile, Gebäude-/Zonen-Index, Dienst-Reichweiten,
@@ -1883,7 +2085,13 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
        befahrbar), Import/Export über den Güterbahnhof billiger, Kasse, Spielstand, Werkzeug 7/F7/Inspektor (im Editor noch nicht
        visuell abgenommen). Nächste Teilstufe: eigene Regional-/S-Bahn-Linien mit Zugdepot, Kopfbahnhöfe/Wenden, echte Ladung je Wagen,
        Fahrstraßen über eingleisige Abschnitte, Rückstau am Bahnübergang, Tram
-     - Stufe 3 Wasserstraße/Hafen (Schiffe, Seehandel über den Wasser-Gateway), Stufe 4 Flughafen
+     - ✅ Stufe 3 Wasserstraße/Hafen (s. „Wasserstraße & Hafen (Stufe 3)“): Fahrrinnen aus den Wasser-Gateways (Tiefe/Breite aus dem
+       natürlichen Gelände), Schiffsklassen mit Tiefgang und Masthöhe, lichte Höhe von Straßen-/Gleisbrücken (Trassierung hoch genug,
+       Hinweis „zu niedrig für Schiffe“, gesperrte Rinne + Warnung), Tunnel unter dem Fluss, Klappbrücke (Schranke/Ampel, Verkehr staut),
+       Durchgangsschiffe (Binnenschiff, Fahrgastschiff, Segelyacht), Güterhafen (Binnen-/Seehafen, Liegeplätze, Reede, Umschlag,
+       Wasser-Gateway befahrbar), Seehandel und Import/Export per Schiff billiger, Kasse, Spielstand, Werkzeug 8/F8/Inspektor/Warnchip
+       (im Editor noch nicht visuell abgenommen). Nächste Teilstufe s. dort
+     - Stufe 4 Flughafen
    - ÖPNV & Fernverkehr: Taxi-, Bus-, Zug-Depot, Buslinien ✅, Fernbahn ✅ (Stufe 2), Tram, U-Bahn, S-Bahn, Flughafen
      - ✅ Stufe 1 Buslinien: Haltestellen, Rund-/Pendellinien, Busdepot, echte Busse im Verkehr, Fahrgäste mit Verkehrsmittelwahl
        und Kapazität, Fahrgeld/Unterhalt, Linienfenster (F6), Werkzeug (5) (im Editor noch nicht visuell abgenommen).
@@ -1891,8 +2099,9 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
    - Energie erweitern: ✅ Atomkraftwerk; ✅ Biogas (Rohstoff aus Bauernhöfen), Laufwasserkraftwerk (Abfluss/Fallhöhe), Offshore-Windpark
      (Seekabel), Batteriespeicher (puffert im Netz), Spielstand utilities v3 (im Editor noch nicht visuell abgenommen). Offen: Biomasse als Gut,
      Talsperre, schwankende Onshore-Wind/Solar
-   - Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
-     **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau, Umwege) oder Tunnel
+   - ✅ Schifffahrt (mit Häfen/Handel): schiffbare Gewässer mit Durchfahrtshöhe; feste Brücken hoch genug oder
+     **Klapp-/Zugbrücken** (niedrig, öffnen für Schiffe → Rot/Stau) oder Tunnel (Stufe 3, s. „Wasserstraße & Hafen“). Offen: Umwege
+     (Wegfindung meidet häufig offene Klappbrücken), Gleis-Klappbrücken, Hubbrücken, Schleusen
    - ✅ G6 Bodenwert (Raster aus Lage, Diensten, Umwelt, Nachbarschaft), Ausbaustufen 1–3, Gebäudezustand/Verfall,
      Grundsteuer nach Bodenwert, Standortwahl der Bauherren, Overlay (F2), Anzeige in Inspektor/HUD und Meldungen
      bei Aufstieg/Verfall (Spiel-UI Phase 2). Offen: Stufen nach Einkommen (G5)
@@ -1912,13 +2121,21 @@ anschließen, damit Leute kommen und gehandelt wird. (Echte Städte anderer Spie
    - ✅ Eigene Assets eingebaut: Freizeitanlagen + Wahrzeichen (Rathaus einmalig, Bodenwert/Stolz/Attraktivität), Lärmschutzwand
      (dämpft Lärm), Bauernhöfe je Jahreszeit, Brückenpfeiler/Tunnelportale/Schilderbrücken/Baustellen/Hochspannungsmast, Büsche/
      Felsen, Straßen-/Parkausstattung; Beschreibungsdatei `Name.json` + Bericht `_Unused.txt` (im Editor noch nicht visuell
-     abgenommen). Wartet auf Funktion: Flughafen, Hafen/Küste, Taxi, U-Bahn, Bahn, Klappbrücke
+     abgenommen). Wartet auf Funktion: Flughafen, Strand/Leuchtturm/Mole/Fähranleger/Fischerei, Taxi, U-Bahn
+     (Bahn ✅ Stufe 2; Hafen, Schiffe, Tonnen, Klappbrücke ✅ Stufe 3)
 5. ✅ Welt: fiktive Erde, Klimazonen, Fruchtbarkeit, Bodenschätze (Kartengenerator), Länder mit eigenen Stärken
    (Regionen, Länder mit Profil/komparativen Vorteilen, LOD-Volkswirtschaft je Land, Stadtkarte als Ausschnitt der
    Startregion, `world.Climate`, `world.Resources` mit `DepositAt`/`Extract`, Weltkarte F4, Ressourcen-Ansicht F3;
    im Editor noch nicht visuell abgenommen). ✅ Startregion nach Vorlieben wählen (Spielstart, freies Land, Stadtstaat).
-   Später: Klima auf Gelände-Optik, Handel (8)
-6. Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte
+   Später: ~~Klima auf Gelände-Optik~~ ✅ (Etappe 6), Handel (8)
+6. ✅ Umwelt: Abgas, Wasser, Auswirkungen auf Gesundheit/Zufriedenheit/Ernte (s. „Umwelt (Etappe 6)“): eigenes `EcologySystem` –
+   Luft aus Verkehr (echte Fahrzeuge, Lkw stärker), Kraftwerken nach Auslastung, Industrie nach Rezept, Heizen nach Klima/Bauart,
+   Müllverbrennung, Schiffen; Wind je Tag, Inversion, Regen, Abbau durch Wald/Parks; Boden & Grundwasser (Industrie, Deponie,
+   Auslass, Ablagerung) → Fruchtbarkeit/Ernte, Brunnen; Hitze/Dürre → Ernte; chronische Belastung → Gesundheit (Kinder/Ältere
+   stärker), Altlasten → Bodenwert, Tourismus-Faktor vorgemerkt; Smog-Alarm/Fischsterben/Auflagen als Schlagzeilen + HUD;
+   Gegenmaßnahmen Umweltauflagen 0–3 (Filter, Firmen- und Stadtkosten), Umweltzone, Bäume pflanzen; Ansichten Luft/Boden/
+   Grundwasser, Umweltfenster, Smog-Dunst, Gelände-Farben nach Jahreszeit; Spielstand ecology v1/goods v4 (im Editor noch nicht
+   visuell abgenommen). Später: Lärm aus Industrie/Verkehrsmenge, Hochwasser, Klimawandel/CO₂, Recycling, Fernwärme/Wärmepumpen
 7. Reich: mehrere Städte (eigene oder NPC), Transport dazwischen, interner Handel
    - Vorbereitet (Spielstart): Spieler startet als Stadtstaat „Freie Stadt {Stadtname}“ in freiem Land; `PlayerRealm` hat
      `CityRegions`, `NationName`/`FlagColor` (null/Gold), `MinCitiesForNation` = 3, `CanFoundNation`; Regionsbesitz im Spielstand.

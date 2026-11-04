@@ -210,6 +210,20 @@ namespace CityBuilder.Simulation.Tests
             Assert.True(dryArid > dryTemp + 0.2f);
         }
 
+        [Fact]
+        public void Ships_EmitAlongTheFairway()
+        {
+            var w = SimulationWorld.CreateDefault(new WorldSettings
+            {
+                PrebuiltConnections = true, RequireGatewayForMoveIn = true, RequireGatewayForTrade = true, GenerateTerrain = true,
+            });
+            w.Ecology.Enabled = true;
+            Run(w, SimulationClock.TicksPerDay * 2 + 1);
+            float ships = w.Ecology.EmissionYesterday(EmissionSource.Shipping);
+            output.WriteLine($"Schiffe gestern: Ausstoß {ships:0.0} (Verkehr {w.Ecology.EmissionYesterday(EmissionSource.Traffic):0.0}), auf der Karte {w.Shipping.Ships.Count(s => s.IsOnMap)}");
+            Assert.True(ships > 0f, "Durchgangsschiffe stoßen aus");
+        }
+
         // ------------------------------------------------------------ Gegenmaßnahmen
 
         [Fact]

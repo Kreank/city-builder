@@ -5,7 +5,7 @@ using CityBuilder.Simulation.Zoning;
 namespace CityBuilder.Simulation.Environment
 {
     /// <summary>Emissionsquellen der Luft (Statistik/Inspektor).</summary>
-    public enum EmissionSource { Traffic, Power, Industry, Heating, Waste }
+    public enum EmissionSource { Traffic, Power, Industry, Heating, Waste, Shipping }
 
     /// <summary>
     /// Umwelt (Etappe 6): alle Zahlen des <see cref="EcologySystem"/> an einem Ort (Spielmaßstab, Platzhalter fürs Balancing).
@@ -31,6 +31,21 @@ namespace CityBuilder.Simulation.Environment
                 default: return 0f;                    // Tram elektrisch
             }
         }
+
+        /// <summary>
+        /// Schiffe (Wasserstraße &amp; Hafen) in Pkw-Gleichwerten: Frachter mit Schweröl ≈ 0,25 je Meter Länge (100 m ≈ 25 Pkw),
+        /// Passagierschiffe 0,15 je Meter, Sportboote 1. Am Liegeplatz (Hilfsdiesel, kein Landstrom) × <see cref="BerthedShipFactor"/>.
+        /// </summary>
+        public static float ShipWeight(Shipping.ShipRole role, float length)
+        {
+            switch (role)
+            {
+                case Shipping.ShipRole.Cargo: return 0.25f * length;
+                case Shipping.ShipRole.Passenger: return 0.15f * length;
+                default: return 1f;
+            }
+        }
+        public const float BerthedShipFactor = 0.4f;
 
         /// <summary>Umweltzone: nur saubere Fahrzeuge – Lkw stoßen dort so viel aus, Pkw so viel.</summary>
         public const float ZoneTruckFactor = 0.4f, ZoneCarFactor = 0.85f;

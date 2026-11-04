@@ -84,6 +84,7 @@ namespace CityBuilder.Game.Roads
             if (pillarParts != null || portalParts != null)
                 foreach (var s in roads.Segments)
                 {
+                    if (s.IsDrawbridge) continue; // --- Wasserstraße: Klappbrücke hat eigene Pfeiler (ShippingView)
                     bool elevated = pillarParts != null && s.IsElevated;
                     bool under = portalParts != null && s.IsUnderground;
                     if (!elevated && !under) continue;

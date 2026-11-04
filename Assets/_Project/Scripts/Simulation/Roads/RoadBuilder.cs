@@ -68,6 +68,10 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Gleis ist gerade von einem Zug belegt/reserviert – erst bauen, wenn er vorbei ist.</summary>
         TrackOccupied,
         // --- Ende Bahn
+        // --- Wasserstraße & Hafen (Stufe 3, hinten angefügt)
+        /// <summary>Klappbrücke muss die Fahrrinne genau einmal queren (Stadtstraße, nicht zu schräg).</summary>
+        DrawbridgeNoFairway,
+        // --- Ende Wasserstraße
     }
 
     public sealed class RoadPlan
@@ -246,7 +250,9 @@ namespace CityBuilder.Simulation.Roads
             {
                 float t = i / 16f;
                 var p = Bezier.Evaluate(plan.Start, plan.Control, plan.End, t);
-                if (ground.IsWater(p) && plan.HeightAt(t) < ground.WaterLevel + 2.5f) return RoadBuildError.OverWater;
+                if (ground.IsWater(p) && plan.HeightAt(t) < ground.WaterLevel + 2.5f
+                    && plan.HeightAt(t) > ground.HeightAt(p) - TunnelDepth) // --- Wasserstraße: Tunnel unter dem Gewässergrund ist erlaubt
+                    return RoadBuildError.OverWater;
             }
 
             var sa = plan.StartAnchor;

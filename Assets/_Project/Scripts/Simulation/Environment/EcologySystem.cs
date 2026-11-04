@@ -34,7 +34,7 @@ namespace CityBuilder.Simulation.Environment
         readonly SimulationWorld world;
         readonly GridLayer air;
         readonly int width, height;
-        readonly float[] trafficAccum;
+        readonly float[] trafficAccum, shipAccum;
         int trafficSamples;
         readonly float[] dayAirSum;
         int dayAirPasses;
@@ -65,13 +65,15 @@ namespace CityBuilder.Simulation.Environment
         public float ZoneRadius { get; private set; } = 500f;
 
         // --- Statistik
-        readonly float[] emission = new float[5], emissionToday = new float[5], emissionYesterday = new float[5];
+        const int Sources = (int)EmissionSource.Shipping + 1;
+        readonly float[] emission = new float[Sources], emissionToday = new float[Sources], emissionYesterday = new float[Sources];
+        static float SumOf(float[] a) { float s = 0f; for (int i = 0; i < a.Length; i++) s += a[i]; return s; }
         /// <summary>Ausstoß je Quelle im letzten Durchlauf (Summe über alle Zellen).</summary>
         public float EmissionOf(EmissionSource s) => emission[(int)s];
-        public float TotalEmission => emission[0] + emission[1] + emission[2] + emission[3] + emission[4];
+        public float TotalEmission => SumOf(emission);
         /// <summary>Ausstoß je Quelle am Vortag (Summe aller Durchläufe).</summary>
         public float EmissionYesterday(EmissionSource s) => emissionYesterday[(int)s];
-        public float TotalEmissionYesterday => emissionYesterday[0] + emissionYesterday[1] + emissionYesterday[2] + emissionYesterday[3] + emissionYesterday[4];
+        public float TotalEmissionYesterday => SumOf(emissionYesterday);
         /// <summary>Anteil einer Quelle am Ausstoß des Vortags 0..1.</summary>
         public float ShareYesterday(EmissionSource s) => TotalEmissionYesterday > 0f ? emissionYesterday[(int)s] / TotalEmissionYesterday : 0f;
         /// <summary>Mittel der Luft an bewohnten Gebäuden (nach Einwohnern gewichtet) und höchster Wert dort.</summary>
@@ -99,6 +101,7 @@ namespace CityBuilder.Simulation.Environment
             Planted = new GridLayer("Aufforstung", air.Origin, width, height, air.CellSize);
             Exposure = new GridLayer("Chronische Luftbelastung", air.Origin, width, height, air.CellSize);
             trafficAccum = new float[width * height];
+            shipAccum = new float[width * height];
             dayAirSum = new float[width * height];
             ZoneCenter = Vector2.Zero;
         }
@@ -309,6 +312,21 @@ namespace CityBuilder.Simulation.Environment
                     wgt *= v.Class == Traffic.VehicleClass.Truck ? EcologyRules.ZoneTruckFactor : EcologyRules.ZoneCarFactor;
                 trafficAccum[i] += wgt;
             }
+            // Schiffe (Wasserstraße & Hafen): Schweröl-Diesel, nach Größe; am Liegeplatz laufen die Hilfsdiesel (kein Landstrom)
+            var shipping = world.Shipping;
+            if (shipping == null) return;
+            var ships = shipping.Ships;
+            for (int k = 0; k < ships.Count; k++)
+            {
+                var s = ships[k];
+                if (!s.IsOnMap || s.Class == null) continue;
+                shipping.Sample(s, s.S, out var pos, out _);
+                int i = CellIndex(pos);
+                if (i < 0) continue;
+                float wgt = EcologyRules.ShipWeight(s.Class.Role, s.Class.Length);
+                if (s.Speed < 0.3f) wgt *= EcologyRules.BerthedShipFactor;
+                shipAccum[i] += wgt;
+            }
         }
 
         void AirPass()
@@ -364,8 +382,19 @@ namespace CityBuilder.Simulation.Environment
                 sum += e;
                 trafficAccum[i] = 0f;
             }
-            trafficSamples = 0;
             emission[(int)EmissionSource.Traffic] = sum;
+            float ships = 0f;
+            for (int i = 0; i < shipAccum.Length; i++)
+            {
+                float a = shipAccum[i];
+                if (a <= 0f) continue;
+                float e = a * k;
+                cells[i] += e;
+                ships += e;
+                shipAccum[i] = 0f;
+            }
+            emission[(int)EmissionSource.Shipping] = ships;
+            trafficSamples = 0;
         }
 
         readonly List<UtilityFacility> plantBuffer = new List<UtilityFacility>();

@@ -23,6 +23,8 @@ namespace CityBuilder.Game.UI.Hud
         Train,
         /// <summary>Sicherheit: Flamme (Brände/Brandgefahr), Schild mit Stern (Kriminalität/Polizei).</summary>
         Flame, Shield,
+        /// <summary>Wasserstraße &amp; Hafen: Frachtschiff von der Seite auf Wellen.</summary>
+        Ship,
         /// <summary>Umwelt (Etappe 6): Laubbaum (Bäume pflanzen, Umweltfenster), Tropfen über Boden (Grundwasser).</summary>
         Tree, Groundwater,
     }
@@ -136,6 +138,12 @@ namespace CityBuilder.Game.UI.Hud
                     Poly(true, 6, 17, 6, 5, 18, 5, 18, 17);
                     Line(6, 11, 18, 11); Circle(9, 14, 1.2f); Circle(15, 14, 1.2f);
                     Line(8, 17, 5, 21); Line(16, 17, 19, 21); Line(4, 21, 20, 21);
+                    break;
+                case HudIconKind.Ship: // Wasserstraße
+                    Poly(true, 3, 13, 21, 13, 18, 18, 6, 18);
+                    Poly(true, 13, 13, 13, 8, 17, 8, 17, 13);
+                    Line(15, 8, 15, 5); Line(6, 13, 6, 10); Line(9, 13, 9, 10); Line(6, 10, 11, 10); Line(11, 10, 11, 13);
+                    Line(3, 21, 7, 20); Line(9, 21, 13, 20); Line(15, 21, 19, 20);
                     break;
                 case HudIconKind.Car:
                     Poly(true, 5, 17, 6.5f, 10.5f, 8.4f, 9, 15.6f, 9, 17.5f, 10.5f, 19, 17);

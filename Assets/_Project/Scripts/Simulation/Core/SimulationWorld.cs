@@ -259,6 +259,13 @@ namespace CityBuilder.Simulation.Core
             world.Rail.Connect();
             // --- Ende Bahn
 
+            // --- Wasserstraße & Hafen (Stufe 3): Fahrrinnen aus dem frischen Gelände (vor dem Bau der Autobahn: Brücken über die
+            // Rinne werden hoch genug trassiert), Klappbrücken, Häfen, Schiffe (nach der Bahn: verkettet Schranken/Handel/Prüfungen)
+            world.Shipping = new Shipping.ShippingSystem(world);
+            world.AddSystem(world.Shipping);
+            world.Shipping.Connect();
+            // --- Ende Wasserstraße
+
             if (newGame && world.Settings.PrebuiltConnections)
             {
                 world.Gateways.Generate();
@@ -328,6 +335,9 @@ namespace CityBuilder.Simulation.Core
 
         /// <summary>Bahn (Stufe 2): Gleisnetz, Hauptstrecke, Bahnhöfe, Züge, Bahnübergänge. Gesetzt von <see cref="CreateDefault"/>.</summary>
         public Rail.RailSystem Rail { get; private set; }
+
+        /// <summary>Wasserstraße &amp; Hafen (Stufe 3): Fahrrinnen, Klappbrücken, Häfen, Schiffe. Gesetzt von <see cref="CreateDefault"/>.</summary>
+        public Shipping.ShippingSystem Shipping { get; private set; }
 
         /// <summary>Eigene Assets 2: Dienstfahrzeuge (Müllwagen, Streife, Feuerwehr, Rettung). Gesetzt von <see cref="CreateDefault"/>.</summary>
         public ServiceVehicleSystem ServiceVehicles { get; private set; }

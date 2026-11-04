@@ -73,6 +73,7 @@ namespace CityBuilder.Game.UI.Windows
                 Source(ui, e, EmissionSource.Industry, "Industrie (nach Rezept)", new Color(0.6f, 0.4f, 0.25f));
                 Source(ui, e, EmissionSource.Heating, "Heizen (Klima, Bauart)", new Color(0.85f, 0.55f, 0.3f));
                 Source(ui, e, EmissionSource.Waste, "Müllverbrennung", new Color(0.5f, 0.45f, 0.35f));
+                Source(ui, e, EmissionSource.Shipping, "Schiffe (Schweröl, Hilfsdiesel am Kai)", new Color(0.3f, 0.45f, 0.6f));
             }
 
             // --- Boden & Wasser

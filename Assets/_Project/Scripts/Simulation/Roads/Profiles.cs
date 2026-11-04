@@ -45,6 +45,18 @@ namespace CityBuilder.Simulation.Roads
         /// <summary>Über Wasser so hoch bleiben (lichte Höhe für Boote/Hochwasser).</summary>
         public const float WaterClearance = 3f;
 
+        // --- Wasserstraße (Stufe 3): über einer Fahrrinne verlangt das Gelände (INavigableGround) mehr Höhe
+        /// <summary>
+        /// Mindesthöhe der Fahrbahn über Wasser an <paramref name="p"/>: Wasserspiegel + max(<paramref name="minimum"/>,
+        /// lichte Durchfahrtshöhe der Fahrrinne + Tragwerk). Ohne Fahrrinne = Wasserspiegel + <paramref name="minimum"/>.
+        /// </summary>
+        public static float WaterFloor(IGround ground, Vector2 p, float minimum = WaterClearance)
+        {
+            float extra = ground is INavigableGround nav ? nav.NavigationFloor(p) : 0f;
+            return ground.WaterLevel + MathF.Max(minimum, extra);
+        }
+        // --- Ende Wasserstraße
+
         /// <summary>
         /// Automatische Trassierung für ebenerdig gebaute Straßen (wie im echten Straßenbau):
         /// geringe Höhenunterschiede → Straße folgt geglättet dem Gelände (wird eingeebnet),
@@ -65,7 +77,7 @@ namespace CityBuilder.Simulation.Roads
                 var p = Bezier.Evaluate(p0, c, p2, k / (float)(n - 1));
                 terrain[k] = ground.HeightAt(p);
                 water[k] = ground.IsWater(p);
-                raw[k] = MathF.Max(terrain[k], ground.WaterLevel + WaterClearance);
+                raw[k] = water[k] ? MathF.Max(terrain[k], WaterFloor(ground, p)) : MathF.Max(terrain[k], ground.WaterLevel + WaterClearance); // Wasserstraße
             }
 
             // Geländefolgende Linie: glätten (gleitender Mittelwert über ~24 m, zweimal)
@@ -107,7 +119,7 @@ namespace CityBuilder.Simulation.Roads
 
             // Mindesthöhe über Wasser, steigungsgerecht in beide Richtungen ausgebreitet (Brückenrampen)
             var floor = new float[n];
-            for (int k = 0; k < n; k++) floor[k] = water[k] ? ground.WaterLevel + WaterClearance : float.MinValue;
+            for (int k = 0; k < n; k++) floor[k] = water[k] ? WaterFloor(ground, Bezier.Evaluate(p0, c, p2, k / (float)(n - 1))) : float.MinValue; // Wasserstraße: Fahrrinne
             for (int k = 1; k < n; k++) floor[k] = MathF.Max(floor[k], floor[k - 1] - g);
             for (int k = n - 2; k >= 0; k--) floor[k] = MathF.Max(floor[k], floor[k + 1] - g);
             if (startHeight < floor[0] - 0.01f || endHeight < floor[n - 1] - 0.01f) return null; // Ufer zu niedrig für die Rampe
